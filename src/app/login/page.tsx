@@ -55,7 +55,12 @@ export default function LoginPage() {
                 router.refresh();
             }
         } catch (err: any) {
-            setError(err.message);
+            console.error("Login error:", err);
+            let msg = err.message;
+            if (msg === "Failed to fetch" || !msg) {
+                msg = "Connection failed. Please check your internet or database configuration.";
+            }
+            setError(msg);
         } finally {
             setLoading(false);
         }
