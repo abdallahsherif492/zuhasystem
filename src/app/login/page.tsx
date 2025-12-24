@@ -125,7 +125,8 @@ export default function LoginPage() {
                             onClick={() => setIsSignUp(!isSignUp)}
                         >
                             {isSignUp
-                                ? "Already have an account? Sign In"
+                                : "Don't have an account? Sign Up"}
+                        </Button>
                     </CardFooter>
                 </form>
             </Card>
