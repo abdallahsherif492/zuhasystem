@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { LayoutDashboard, Package, ShoppingCart, Settings, Users, Truck, Banknote, LineChart } from "lucide-react";
+import { LayoutDashboard, Package, ShoppingCart, Settings, Users, Truck, Banknote, LineChart, ShoppingBag } from "lucide-react";
 
 import Image from "next/image";
 
