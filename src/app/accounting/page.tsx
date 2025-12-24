@@ -32,7 +32,7 @@ import {
     AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 
-export default function AccountingPage() {
+function AccountingContent() {
     const searchParams = useSearchParams();
     const [transactions, setTransactions] = useState<any[]>([]);
     const [allTransactions, setAllTransactions] = useState<any[]>([]); // For balance calc if we want total history, but usually query
@@ -220,6 +220,16 @@ export default function AccountingPage() {
                 ))}
             </Tabs>
         </div>
+    );
+}
+
+import { Suspense } from "react";
+
+export default function AccountingPage() {
+    return (
+        <Suspense fallback={<div className="flex justify-center p-8"><Loader2 className="h-8 w-8 animate-spin" /></div>}>
+            <AccountingContent />
+        </Suspense>
     );
 }
 

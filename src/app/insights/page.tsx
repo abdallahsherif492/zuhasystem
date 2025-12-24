@@ -13,7 +13,7 @@ import {
 } from "recharts";
 import { format, parseISO, startOfDay, isWithinInterval, endOfDay } from "date-fns";
 
-export default function InsightsPage() {
+function InsightsContent() {
     const searchParams = useSearchParams();
     const fromDate = searchParams.get("from");
     const toDate = searchParams.get("to");
@@ -372,6 +372,16 @@ export default function InsightsPage() {
                 </>
             )}
         </div>
+    );
+}
+
+import { Suspense } from "react";
+
+export default function InsightsPage() {
+    return (
+        <Suspense fallback={<div className="flex justify-center p-8"><Loader2 className="h-8 w-8 animate-spin" /></div>}>
+            <InsightsContent />
+        </Suspense>
     );
 }
 

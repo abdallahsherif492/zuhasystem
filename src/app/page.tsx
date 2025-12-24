@@ -29,7 +29,9 @@ import { DateRangePicker } from "@/components/date-range-picker";
 import { AdvancedSearch } from "@/components/dashboard/advanced-search";
 import { format } from "date-fns";
 
-export default function DashboardPage() {
+import { Suspense } from "react";
+
+function DashboardContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const [loading, setLoading] = useState(true);
@@ -270,5 +272,13 @@ export default function DashboardPage() {
         </Card>
       </div>
     </div>
+  );
+}
+
+export default function DashboardPage() {
+  return (
+    <Suspense fallback={<div className="flex justify-center items-center h-screen"><Loader2 className="h-10 w-10 animate-spin" /></div>}>
+      <DashboardContent />
+    </Suspense>
   );
 }

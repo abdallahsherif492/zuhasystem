@@ -30,7 +30,7 @@ interface Order {
     tags?: string[];
 }
 
-export default function OrdersPage() {
+function OrdersContent() {
     const searchParams = useSearchParams();
     const [orders, setOrders] = useState<Order[]>([]);
     const [loading, setLoading] = useState(true);
@@ -149,5 +149,15 @@ export default function OrdersPage() {
                 </Table>
             </div>
         </div>
+    );
+}
+
+import { Suspense } from "react";
+
+export default function OrdersPage() {
+    return (
+        <Suspense fallback={<div className="flex justify-center p-8"><Loader2 className="h-8 w-8 animate-spin" /></div>}>
+            <OrdersContent />
+        </Suspense>
     );
 }
