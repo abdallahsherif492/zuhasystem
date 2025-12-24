@@ -128,8 +128,6 @@ export default function LoginPage() {
                                 ? "Already have an account? Sign In"
                                 : "Don't have an account? Sign Up"}
                         </Button>
-                    </CardFooter>
-                </form>
                 </form>
             </Card>
             <div className="absolute bottom-4 text-xs text-muted-foreground">
