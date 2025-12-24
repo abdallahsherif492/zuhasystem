@@ -12,18 +12,19 @@ export async function middleware(request: NextRequest) {
         const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
         const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
+        // Validation: If essential envs are missing, we cannot verify security.
+        // We should redirect to an error page or Login, but Login also needs these.
+        // We'll proceed to Login which might show a client-side error, better than open access.
         if (!supabaseUrl || !supabaseKey) {
-            console.warn("Middleware: Missing Supabase Env Vars");
-            // If envs are missing, we can't check auth. Allow request or block? 
-            // Better to allow to avoid blocking everything on misconfig, but usually this is fatal.
-            // Let's return response to avoid 500 loop.
-            return response;
+            console.error("Middleware: Missing Env Vars");
+            // Fall through to redirect logic below as 'user' will be null
         }
 
         // 1. Create Supabase Client to check Auth
+        // Pass empty strings if missing to avoid immediate crash, but logic will fail gracefully (no user)
         const supabase = createServerClient(
-            supabaseUrl,
-            supabaseKey,
+            supabaseUrl || "",
+            supabaseKey || "",
             {
                 cookies: {
                     getAll() {
@@ -52,12 +53,13 @@ export async function middleware(request: NextRequest) {
         const isLoginPage = request.nextUrl.pathname.startsWith('/login')
         const isAuthCallback = request.nextUrl.pathname.startsWith('/auth')
         const isStatic = request.nextUrl.pathname.startsWith('/_next') ||
-            request.nextUrl.pathname.includes('.') || // images, logo.png etc
+            request.nextUrl.pathname.includes('.') ||
             request.nextUrl.pathname.startsWith('/api')
 
         // 4. Redirect Rules
 
         // If user is NOT logged in AND trying to access a protected page
+        // "Fail Closed": If we have no user (due to no session OR missing envs), BLOCK access.
         if (!user && !isLoginPage && !isAuthCallback && !request.nextUrl.pathname.includes('.')) {
             const loginUrl = request.nextUrl.clone()
             loginUrl.pathname = '/login'
@@ -73,16 +75,18 @@ export async function middleware(request: NextRequest) {
 
         return response
     } catch (e) {
-        // If something breaks in middleware, we don't want to 500 the whole site if possible, 
-        // but typically middleware errors are fatal. 
-        // However, returning NextResponse.next() allows the request to proceed to the page 
-        // which might handle it or show a better error.
         console.error("Middleware Error:", e);
-        return NextResponse.next({
-            request: {
-                headers: request.headers,
-            },
-        });
+        // Fail Safe: If error occurs, assume Not Authenticated and Redirect to Login
+        // But safeguard against infinite loop if Login itself causes error?
+        // Login page should be excluded from logic or handled above.
+        // If we are already on Login page, return response (to allow rendering error)
+        if (request.nextUrl.pathname.startsWith('/login')) {
+            return NextResponse.next();
+        }
+
+        const loginUrl = request.nextUrl.clone()
+        loginUrl.pathname = '/login'
+        return NextResponse.redirect(loginUrl)
     }
 }
 
