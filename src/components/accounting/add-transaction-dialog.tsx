@@ -62,7 +62,7 @@ export function AddTransactionDialog({ type, onSuccess }: AddTransactionDialogPr
     const [open, setOpen] = useState(false);
     const [submitting, setSubmitting] = useState(false);
 
-    const form = useForm<TransactionFormValues>({
+    const form = useForm({
         resolver: zodResolver(transactionSchema),
         defaultValues: {
             type: type,
@@ -189,7 +189,7 @@ export function AddTransactionDialog({ type, onSuccess }: AddTransactionDialogPr
                                 <FormItem>
                                     <FormLabel>Amount (EGP)</FormLabel>
                                     <FormControl>
-                                        <Input type="number" step="0.01" {...field} />
+                                        <Input type="number" step="0.01" {...field} value={field.value as number} />
                                     </FormControl>
                                     <FormMessage />
                                 </FormItem>
