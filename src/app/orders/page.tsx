@@ -15,7 +15,7 @@ import {
     TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Loader2 } from "lucide-react";
+import { Plus, Loader2, MoreHorizontal } from "lucide-react";
 import { DateRangePicker } from "@/components/date-range-picker";
 
 interface Order {
@@ -141,6 +141,26 @@ function OrdersContent() {
                                     <TableCell>{formatCurrency(order.total_amount)}</TableCell>
                                     <TableCell className="text-green-600 font-medium">
                                         +{formatCurrency(order.profit)}
+                                    </TableCell>
+                                    <TableCell>
+                                        <div className="flex items-center gap-1">
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                onClick={() => window.open(`/orders/${order.id}/invoice`, '_blank')}
+                                                className="h-8 px-2"
+                                            >
+                                                Print
+                                            </Button>
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                className="h-8 w-8 p-0 opacity-50 cursor-not-allowed"
+                                                title="Edit (Coming Soon)"
+                                            >
+                                                <MoreHorizontal className="h-4 w-4" />
+                                            </Button>
+                                        </div>
                                     </TableCell>
                                 </TableRow>
                             ))
