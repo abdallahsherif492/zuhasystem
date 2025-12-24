@@ -56,6 +56,15 @@ export function Sidebar({ className }: SidebarProps) {
                                 Orders
                             </Button>
                         </Link>
+                        <Link href="/purchases">
+                            <Button
+                                variant={pathname.startsWith("/purchases") ? "secondary" : "ghost"}
+                                className="w-full justify-start"
+                            >
+                                <ShoppingBag className="mr-2 h-4 w-4" />
+                                Purchases
+                            </Button>
+                        </Link>
                         <Link href="/customers">
                             <Button
                                 variant={pathname.startsWith("/customers") ? "secondary" : "ghost"}
