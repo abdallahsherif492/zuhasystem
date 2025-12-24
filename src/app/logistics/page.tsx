@@ -35,7 +35,7 @@ const STATUSES = [
     "Returned",
 ];
 
-export default function LogisticsPage() {
+function LogisticsContent() {
     const searchParams = useSearchParams();
     const [orders, setOrders] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
@@ -195,5 +195,15 @@ export default function LogisticsPage() {
                 </Table>
             </div>
         </div>
+    );
+}
+
+import { Suspense } from "react";
+
+export default function LogisticsPage() {
+    return (
+        <Suspense fallback={<div className="flex justify-center p-8"><Loader2 className="h-8 w-8 animate-spin" /></div>}>
+            <LogisticsContent />
+        </Suspense>
     );
 }
