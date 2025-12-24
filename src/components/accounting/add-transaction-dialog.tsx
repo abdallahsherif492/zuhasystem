@@ -62,6 +62,8 @@ export function AddTransactionDialog({ type, onSuccess }: AddTransactionDialogPr
     const [open, setOpen] = useState(false);
     const [submitting, setSubmitting] = useState(false);
 
+    // Initializing form with relaxed types to avoid build errors
+
     const form = useForm({
         resolver: zodResolver(transactionSchema),
         defaultValues: {
