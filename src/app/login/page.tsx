@@ -130,7 +130,11 @@ export default function LoginPage() {
                         </Button>
                     </CardFooter>
                 </form>
+                </form>
             </Card>
-        </div>
+            <div className="absolute bottom-4 text-xs text-muted-foreground">
+                Debug: connecting to {process.env.NEXT_PUBLIC_SUPABASE_URL?.slice(0, 20) || "undefined"}...
+            </div>
+        </div >
     );
 }
