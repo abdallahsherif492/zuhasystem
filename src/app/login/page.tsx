@@ -33,8 +33,11 @@ export default function LoginPage() {
         setError(null);
         setMessage(null);
 
-        // Append dummy domain to satisfy Supabase Email requirement
-        const email = `${username}@zuhasystem.local`;
+        // Check if input is already an email, otherwise append dummy domain
+        let email = username;
+        if (!email.includes("@")) {
+            email = `${username}@zuhasystem.local`;
+        }
 
         try {
             if (isSignUp) {
@@ -58,7 +61,7 @@ export default function LoginPage() {
             console.error("Login error:", err);
             let msg = err.message;
             if (msg === "Failed to fetch" || !msg) {
-                msg = "Connection failed. Please check your internet or database configuration.";
+                msg = "Connection failed. Please check internet or Vercel Env Vars.";
             }
             setError(msg);
         } finally {
@@ -80,7 +83,7 @@ export default function LoginPage() {
                     </div>
                     <CardTitle className="text-2xl">{isSignUp ? "Sign Up" : "Login"}</CardTitle>
                     <CardDescription>
-                        Enter your username and password to access the system.
+                        Enter your username (or email) and password.
                     </CardDescription>
                 </CardHeader>
                 <form onSubmit={handleAuth}>
@@ -92,7 +95,7 @@ export default function LoginPage() {
                             </Alert>
                         )}
                         <div className="grid gap-2">
-                            <Label htmlFor="username">Username</Label>
+                            <Label htmlFor="username">Username or Email</Label>
                             <Input
                                 id="username"
                                 type="text"
@@ -131,9 +134,11 @@ export default function LoginPage() {
                     </CardFooter>
                 </form>
             </Card>
-            <div className="absolute bottom-4 text-xs text-muted-foreground">
-                Debug: connecting to {process.env.NEXT_PUBLIC_SUPABASE_URL?.slice(0, 20) || "undefined"}...
+            <div className="absolute bottom-4 text-xs text-muted-foreground text-center px-4">
+                Debug: URL: {process.env.NEXT_PUBLIC_SUPABASE_URL ? "Set" : "Missing"} | Key: {process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ? "Set" : "Missing"}
+                <br />
+                Host: {process.env.NEXT_PUBLIC_SUPABASE_URL?.slice(8, 28) || "N/A"}
             </div>
-        </div >
+        </div>
     );
 }
