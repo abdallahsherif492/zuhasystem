@@ -46,16 +46,15 @@ export default function LoginPage() {
                     password,
                 });
                 if (error) throw error;
-                router.push("/");
-                router.refresh();
+                // Force hard redirect to ensure cookies are sent and middleware verifies session
+                window.location.href = "/";
             } else {
                 const { error } = await supabase.auth.signInWithPassword({
                     email,
                     password,
                 });
                 if (error) throw error;
-                router.push("/");
-                router.refresh();
+                window.location.href = "/";
             }
         } catch (err: any) {
             console.error("Login error:", err);
