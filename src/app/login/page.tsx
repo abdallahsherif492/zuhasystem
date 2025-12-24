@@ -137,7 +137,7 @@ export default function LoginPage() {
             <div className="absolute bottom-4 text-xs text-muted-foreground text-center px-4">
                 Debug: URL: {process.env.NEXT_PUBLIC_SUPABASE_URL ? "Set" : "Missing"} | Key: {process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ? "Set" : "Missing"}
                 <br />
-                Host: {process.env.NEXT_PUBLIC_SUPABASE_URL?.slice(8, 28) || "N/A"}
+                Build: v2.1 (Check Vercel Env Vars!)
             </div>
         </div>
     );
