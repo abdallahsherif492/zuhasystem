@@ -126,8 +126,7 @@ export default function LoginPage() {
                         >
                             {isSignUp
                                 ? "Already have an account? Sign In"
-                                : "Don't have an account? Sign Up"}
-                        </Button>
+                    </CardFooter>
                 </form>
             </Card>
             <div className="absolute bottom-4 text-xs text-muted-foreground">
