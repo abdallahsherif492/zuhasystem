@@ -135,9 +135,9 @@ export default function LoginPage() {
                 </form>
             </Card>
             <div className="absolute bottom-4 text-xs text-muted-foreground text-center px-4">
-                Debug: URL: {process.env.NEXT_PUBLIC_SUPABASE_URL ? "Set" : "Missing"} | Key: {process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ? "Set" : "Missing"}
+                Debug Mode: Using Fallback Keys.
                 <br />
-                Build: v2.1 (Check Vercel Env Vars!)
+                Build: v3.0 (Bypassing Vercel Envs)
             </div>
         </div>
     );
