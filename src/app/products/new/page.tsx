@@ -165,7 +165,7 @@ export default function NewProductPage() {
                                 onClick={() =>
                                     append({
                                         title: "",
-                                        sku: "",
+                                        sku: generateSKU(), // Auto-generate for new variants
                                         sale_price: 0,
                                         cost_price: 0,
                                         track_inventory: false,
