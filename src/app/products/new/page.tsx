@@ -22,7 +22,10 @@ import { Switch } from "@/components/ui/switch";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Trash2, Plus, Loader2 } from "lucide-react";
 
-
+// Helper to generate random SKU
+const generateSKU = () => {
+    return 'ZUHA-' + Math.random().toString(36).substring(2, 8).toUpperCase();
+};
 const variantSchema = z.object({
     title: z.string().min(1, "Title is required (e.g. Red/XL)"),
     sku: z.string().optional(),
@@ -50,7 +53,7 @@ export default function NewProductPage() {
             variants: [
                 {
                     title: "Default",
-                    sku: "",
+                    sku: generateSKU(),
                     sale_price: 0,
                     cost_price: 0,
                     track_inventory: false,
@@ -199,9 +202,22 @@ export default function NewProductPage() {
                                             name={`variants.${index}.sku`}
                                             render={({ field }) => (
                                                 <FormItem>
-                                                    <FormLabel>SKU</FormLabel>
+                                                    <FormLabel>SKU (Auto)</FormLabel>
                                                     <FormControl>
-                                                        <Input placeholder="SKU-123" {...field} />
+                                                        <div className="flex gap-2">
+                                                            <Input placeholder="ZUHA-XXXXXX" {...field} />
+                                                            <Button
+                                                                type="button"
+                                                                variant="ghost"
+                                                                size="icon"
+                                                                onClick={() => {
+                                                                    form.setValue(`variants.${index}.sku`, generateSKU());
+                                                                }}
+                                                                title="Regenerate SKU"
+                                                            >
+                                                                <Loader2 className="h-4 w-4" />
+                                                            </Button>
+                                                        </div>
                                                     </FormControl>
                                                     <FormMessage />
                                                 </FormItem>
