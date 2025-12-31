@@ -221,7 +221,7 @@ function DashboardContent() {
                   tickFormatter={(value) => formatCurrency(value)}
                 />
                 <Tooltip
-                  formatter={(value: number) => formatCurrency(value)}
+                  formatter={(value: any) => formatCurrency(value)}
                   labelStyle={{ color: "black" }}
                 />
                 <Bar dataKey="sales" fill="#10b981" radius={[4, 4, 0, 0]} className="fill-primary" />
