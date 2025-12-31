@@ -152,14 +152,16 @@ function OrdersContent() {
                                             >
                                                 Print
                                             </Button>
-                                            <Button
-                                                variant="outline"
-                                                size="sm"
-                                                className="h-8 w-8 p-0 opacity-50 cursor-not-allowed"
-                                                title="Edit (Coming Soon)"
-                                            >
-                                                <MoreHorizontal className="h-4 w-4" />
-                                            </Button>
+                                            <Link href={`/orders/${order.id}`}>
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    className="h-8 w-8 p-0"
+                                                    title="View Details"
+                                                >
+                                                    <MoreHorizontal className="h-4 w-4" />
+                                                </Button>
+                                            </Link>
                                         </div>
                                     </TableCell>
                                 </TableRow>
