@@ -15,7 +15,8 @@ import {
     TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Loader2, MoreHorizontal } from "lucide-react";
+import { Plus, Loader2, MoreHorizontal, Download } from "lucide-react";
+import * as XLSX from "xlsx";
 import { DateRangePicker } from "@/components/date-range-picker";
 
 interface Order {
@@ -67,12 +68,84 @@ function OrdersContent() {
         }
     }
 
+    async function handleExport() {
+        try {
+            // 1. Fetch full data with items
+            let query = supabase
+                .from("orders")
+                .select(`
+                    *,
+                    items:order_items (
+                        quantity,
+                        variant:variants (
+                            title,
+                            product:products (name)
+                        )
+                    )
+                `)
+                .order("created_at", { ascending: false });
+
+            if (fromDate) query = query.gte("created_at", fromDate);
+            if (toDate) {
+                const end = new Date(toDate);
+                end.setHours(23, 59, 59, 999);
+                query = query.lte("created_at", end.toISOString());
+            }
+
+            const { data, error } = await query;
+            if (error) throw error;
+            if (!data || data.length === 0) {
+                alert("No orders to export");
+                return;
+            }
+
+            // 2. Format Data
+            const exportData = data.map(order => {
+                // Format Items: "Product (Variant) xQty"
+                const content = order.items?.map((item: any) =>
+                    `${item.variant?.product?.name} (${item.variant?.title}) x${item.quantity}`
+                ).join(" + ") || "No Items";
+
+                return {
+                    "كـــود الــتــاجــر": "",
+                    "اسم الراسل علي البوليصة": "Zuha Home",
+                    "الـــــمــــــســـــتــــــــلـــــــــم": order.customer_info?.name || "",
+                    "مــوبــايــل الــمــســتــلــم": order.customer_info?.phone || "",
+                    "مـــلاحــظــات": "قابل للكسر",
+                    "الـــمــــنـــطــقــــة": order.customer_info?.governorate || "",
+                    "الـــــعــــنــــوان": order.customer_info?.address || "",
+                    "مــحــتــوى الــشــحــنــة": content,
+                    "الــكــمــيــة": 1, // Default 1 package
+                    "قــيــمــة الــشــحــنــة": order.total_amount,
+                    "شــحــن عــلــى": "المستلم",
+                    "شـــحــنــة اســتــبدال": "لا",
+                    "مسموح بفتح الشحنة": "نعم"
+                };
+            });
+
+            // 3. Generate Excel
+            const worksheet = XLSX.utils.json_to_sheet(exportData);
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, "Orders");
+
+            // 4. Download
+            XLSX.writeFile(workbook, `orders_export_${new Date().toISOString().split('T')[0]}.xlsx`);
+
+        } catch (error) {
+            console.error("Export failed:", error);
+            alert("Export failed");
+        }
+    }
+
     return (
         <div className="space-y-6">
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                 <h1 className="text-3xl font-bold tracking-tight">Orders</h1>
                 <div className="flex items-center gap-2">
                     <DateRangePicker />
+                    <Button variant="outline" onClick={handleExport}>
+                        <Download className="mr-2 h-4 w-4" /> Export Excel
+                    </Button>
                     <Link href="/orders/new">
                         <Button>
                             <Plus className="mr-2 h-4 w-4" /> New Order
