@@ -31,17 +31,28 @@ import { format } from "date-fns";
 
 import { Suspense } from "react";
 
+import { RecentSales } from "@/components/dashboard/recent-sales";
+import { TopProducts } from "@/components/dashboard/top-products";
+
 function DashboardContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const [loading, setLoading] = useState(true);
+
+  // Stats
   const [stats, setStats] = useState({
     totalSales: 0,
     totalOrders: 0,
     stockValue: 0,
     lowStockCount: 0,
   });
+
+  // Lists
+  const [recentOrders, setRecentOrders] = useState<any[]>([]);
+  const [topProducts, setTopProducts] = useState<any[]>([]);
   const [lowStockItems, setLowStockItems] = useState<Variant[]>([]);
+
+  // Charts
   const [chartData, setChartData] = useState<any[]>([]);
 
   const fromDate = searchParams.get("from");
@@ -65,30 +76,39 @@ function DashboardContent() {
     try {
       setLoading(true);
 
-      // Prepare timestamps
-      // Ensure specific end time for toDate
       const start = fromDate ? `${fromDate}T00:00:00` : new Date().toISOString();
       const end = toDate ? `${toDate}T23:59:59` : new Date().toISOString();
 
-      // 1. Call RPC for Stats (Fast server-side calc)
+      // 1. Dashboard Stats (RPC)
       const { data: statsData, error: statsError } = await supabase
-        .rpc('get_dashboard_stats', {
-          from_date: start,
-          to_date: end
-        });
-
+        .rpc('get_dashboard_stats', { from_date: start, to_date: end });
       if (statsError) throw statsError;
 
-      // 2. Call RPC for Chart Data (Fast server-side grouping)
+      // 2. Daily Sales Chart (RPC)
       const { data: dailyData, error: chartError } = await supabase
-        .rpc('get_daily_sales', {
-          from_date: start,
-          to_date: end
-        });
-
+        .rpc('get_daily_sales', { from_date: start, to_date: end });
       if (chartError) throw chartError;
 
-      // 3. Fetch Low Stock Items (Top 5 only) - Lightweight query
+      // 3. Top Products (RPC)
+      const { data: topProds, error: topError } = await supabase
+        .rpc('get_top_products', { from_date: start, to_date: end, limit_count: 5 });
+      if (topError) throw topError;
+
+      // 4. Recent Sales (Raw Query)
+      const { data: recent, error: recentError } = await supabase
+        .from("orders")
+        .select("*, customer_info") // Need customer names
+        .gte("created_at", start)
+        .lte("created_at", end)
+        .order("created_at", { ascending: false })
+        .limit(5);
+      // Note: Recent sales usually implies "Latest global sales", but here conforming to date filter is safer for "Dashboard specific to date".
+      // HOWEVER, "Recent Sales" usually means "Just Happened". 
+      // If I filter by "Yesterday", seeing "Recent Sales" as "Sales from Yesterday" is correct contextually.
+      if (recentError) throw recentError;
+
+
+      // 5. Low Stock (Raw Query)
       const { data: lowStock, error: lowStockError } = await supabase
         .from("variants")
         .select("*")
@@ -96,7 +116,6 @@ function DashboardContent() {
         .lt("stock_qty", 5)
         .order("stock_qty", { ascending: true })
         .limit(5);
-
       if (lowStockError) throw lowStockError;
 
       // Update State
@@ -110,11 +129,13 @@ function DashboardContent() {
         });
       }
 
+      setRecentOrders(recent || []);
+      setTopProducts(topProds || []);
       setLowStockItems(lowStock || []);
 
       // Format Chart Data
       const formattedChart = (dailyData || []).map((d: any) => ({
-        name: format(new Date(d.day_date), "MMM dd"), // Short format for chart
+        name: format(new Date(d.day_date), "MMM dd"),
         sales: d.total_sales,
         orders: d.order_count
       }));
@@ -136,19 +157,22 @@ function DashboardContent() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col space-y-6">
 
-      {/* Search Bar - Global for Dashboard */}
+      {/* Extended Search */}
       <div className="w-full">
         <AdvancedSearch />
       </div>
 
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
-        <DateRangePicker />
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row items-center justify-between space-y-2">
+        <h2 className="text-3xl font-bold tracking-tight">Dashboard</h2>
+        <div className="flex items-center space-x-2">
+          <DateRangePicker />
+        </div>
       </div>
 
-      {/* Stats Cards */}
+      {/* KPI Cards */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -157,24 +181,23 @@ function DashboardContent() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{formatCurrency(stats.totalSales)}</div>
-            <p className="text-xs text-muted-foreground">Sales in this period</p>
+            <p className="text-xs text-muted-foreground">
+              in selected period
+            </p>
           </CardContent>
         </Card>
-
-        {/* Total Orders */}
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Orders</CardTitle>
+            <CardTitle className="text-sm font-medium">Orders</CardTitle>
             <ShoppingBag className="h-4 w-4 text-blue-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-blue-600">
-              {stats.totalOrders}
-            </div>
-            <p className="text-xs text-muted-foreground">Orders in this period</p>
+            <div className="text-2xl font-bold">{stats.totalOrders}</div>
+            <p className="text-xs text-muted-foreground">
+              processed orders
+            </p>
           </CardContent>
         </Card>
-
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Stock Value</CardTitle>
@@ -182,26 +205,32 @@ function DashboardContent() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{formatCurrency(stats.stockValue)}</div>
-            <p className="text-xs text-muted-foreground">Total asset value</p>
+            <p className="text-xs text-muted-foreground">
+              total asset value
+            </p>
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Low Stock Items</CardTitle>
+            <CardTitle className="text-sm font-medium">Low Stock</CardTitle>
             <AlertTriangle className="h-4 w-4 text-orange-500" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{stats.lowStockCount}</div>
-            <p className="text-xs text-muted-foreground">Variants needing restock</p>
+            <p className="text-xs text-muted-foreground">
+              variants to restock
+            </p>
           </CardContent>
         </Card>
       </div>
 
+      {/* Main Content Grid */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
-        {/* Chart */}
+
+        {/* Main Chart */}
         <Card className="col-span-4">
           <CardHeader>
-            <CardTitle>Sales Overview</CardTitle>
+            <CardTitle>Overview</CardTitle>
           </CardHeader>
           <CardContent className="pl-2">
             <ResponsiveContainer width="100%" height={350}>
@@ -223,45 +252,70 @@ function DashboardContent() {
                 <Tooltip
                   formatter={(value: any) => formatCurrency(value)}
                   labelStyle={{ color: "black" }}
+                  contentStyle={{ borderRadius: '8px' }}
                 />
-                <Bar dataKey="sales" fill="#10b981" radius={[4, 4, 0, 0]} className="fill-primary" />
+                <Bar dataKey="sales" fill="#10b981" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </CardContent>
         </Card>
 
-        {/* Recent Sales / Low Stock */}
+        {/* Recent Sales */}
         <Card className="col-span-3">
           <CardHeader>
-            <CardTitle>Low Stock Alerts</CardTitle>
+            <CardTitle>Recent Sales</CardTitle>
+            <div className="text-sm text-muted-foreground">
+              Latest transactions from this period
+            </div>
           </CardHeader>
           <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Variant</TableHead>
-                  <TableHead className="text-right">Qty</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {lowStockItems.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={2} className="text-center text-muted-foreground">
-                      All good!
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  lowStockItems.map(v => (
-                    <TableRow key={v.id}>
-                      <TableCell>{v.title}</TableCell>
-                      <TableCell className="text-right font-bold text-orange-500">
-                        {v.stock_qty}
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
+            <RecentSales orders={recentOrders} />
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Secondary Grid (Top Products & Low Stock) */}
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
+
+        {/* Top Selling Products */}
+        <Card className="col-span-4">
+          <CardHeader>
+            <CardTitle>Top Selling Products</CardTitle>
+            <div className="text-sm text-muted-foreground">
+              Best performing variants by units sold
+            </div>
+          </CardHeader>
+          <CardContent>
+            <TopProducts products={topProducts} />
+          </CardContent>
+        </Card>
+
+        {/* Low Stock Alerts */}
+        <Card className="col-span-3">
+          <CardHeader>
+            <CardTitle>Inventory Alerts</CardTitle>
+            <div className="text-sm text-muted-foreground">
+              Items below 5 units
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {lowStockItems.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No critical stock levels.</p>
+              ) : (
+                lowStockItems.map(v => (
+                  <div key={v.id} className="flex items-center justify-between border-b pb-2 last:border-0 last:pb-0">
+                    <div className="flex flex-col">
+                      <span className="font-medium text-sm">{v.title}</span>
+                      <span className="text-xs text-muted-foreground">SKU: {v.sku || 'N/A'}</span>
+                    </div>
+                    <Badge variant="destructive" className="h-6">
+                      {v.stock_qty} left
+                    </Badge>
+                  </div>
+                ))
+              )}
+            </div>
           </CardContent>
         </Card>
       </div>
