@@ -9,6 +9,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { toast } from "sonner";
+import { ItemsSummary } from "@/components/purchases/items-summary";
 
 // Type definitions
 type OrderItem = {
@@ -164,92 +165,97 @@ export default function PurchasesPage() {
                 <Badge variant="secondary" className="text-lg px-4 py-1">
                     {orders.length} Pending
                 </Badge>
+                </Badge>
             </div>
 
-            {orders.length === 0 ? (
-                <div className="text-center py-12 border rounded-lg bg-muted/10">
-                    <CheckCircle2 className="h-12 w-12 mx-auto text-green-500 mb-4" />
-                    <h3 className="text-xl font-semibold">All Caught Up!</h3>
-                    <p className="text-muted-foreground">No pending orders to fulfill.</p>
-                </div>
-            ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-                    {orders.map((order) => {
-                        const checked = checkedState[order.id] || new Set();
-                        const isCompleting = processingIds.has(order.id);
+            <ItemsSummary orders={orders} />
 
-                        return (
-                            <Card
-                                key={order.id}
-                                className={`flex flex-col h-full transition-all duration-500 ${isCompleting ? 'opacity-50 scale-95 bg-green-50' : 'hover:shadow-md'}`}
-                            >
-                                <CardHeader className="pb-3 bg-muted/30">
-                                    <div className="flex justify-between items-start">
-                                        <div>
-                                            <CardTitle className="font-mono text-lg">#{order.id.slice(0, 8)}</CardTitle>
-                                            <p className="text-xs text-muted-foreground">
-                                                {format(new Date(order.created_at), "MMM d, h:mm a")}
-                                            </p>
-                                        </div>
-                                        <Badge variant="outline" className="bg-yellow-100 text-yellow-800 border-yellow-200">
-                                            Warning: Pending
-                                        </Badge>
-                                    </div>
-                                </CardHeader>
-                                <CardContent className="flex-1 pt-4">
-                                    <div className="mb-4 space-y-1 text-sm">
-                                        <div className="flex items-center gap-2 text-gray-700">
-                                            <User className="h-4 w-4" />
-                                            <span className="font-semibold">{order.customer_info?.name || "Unknown"}</span>
-                                        </div>
-                                        <div className="flex items-center gap-2 text-gray-500">
-                                            <MapPin className="h-4 w-4" />
-                                            <span>{order.customer_info?.governorate || "No Location"}</span>
-                                        </div>
-                                    </div>
+            {
+        orders.length === 0 ? (
+            <div className="text-center py-12 border rounded-lg bg-muted/10">
+                <CheckCircle2 className="h-12 w-12 mx-auto text-green-500 mb-4" />
+                <h3 className="text-xl font-semibold">All Caught Up!</h3>
+                <p className="text-muted-foreground">No pending orders to fulfill.</p>
+            </div>
+        ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+            {orders.map((order) => {
+                const checked = checkedState[order.id] || new Set();
+                const isCompleting = processingIds.has(order.id);
 
-                                    <div className="space-y-3">
-                                        <div className="text-xs font-semibold uppercase text-muted-foreground tracking-wider mb-2">
-                                            Items to Pick ({checked.size}/{order.items.length})
-                                        </div>
-                                        <div className="space-y-2">
-                                            {order.items.map((item, idx) => (
-                                                <div
-                                                    key={idx}
-                                                    className={`flex items-start space-x-3 p-2 rounded-md border transition-colors ${checked.has(idx) ? 'bg-green-50 border-green-200' : 'bg-white'}`}
-                                                >
-                                                    <Checkbox
-                                                        id={`item-${order.id}-${idx}`}
-                                                        checked={checked.has(idx)}
-                                                        onCheckedChange={() => handleCheckItem(order.id, idx, order.items.length)}
-                                                        disabled={isCompleting}
-                                                    />
-                                                    <label
-                                                        htmlFor={`item-${order.id}-${idx}`}
-                                                        className={`text-sm leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 flex-1 cursor-pointer ${checked.has(idx) ? 'line-through text-gray-400' : 'font-medium'}`}
-                                                    >
-                                                        <div className="flex justify-between w-full">
-                                                            <span>{item.variant.product.name}</span>
-                                                            <Badge variant="secondary" className="h-5 px-1.5 text-xs">x{item.quantity}</Badge>
-                                                        </div>
-                                                        <span className="text-xs text-muted-foreground mt-1 block">{item.variant.title}</span>
-                                                    </label>
+                return (
+                    <Card
+                        key={order.id}
+                        className={`flex flex-col h-full transition-all duration-500 ${isCompleting ? 'opacity-50 scale-95 bg-green-50' : 'hover:shadow-md'}`}
+                    >
+                        <CardHeader className="pb-3 bg-muted/30">
+                            <div className="flex justify-between items-start">
+                                <div>
+                                    <CardTitle className="font-mono text-lg">#{order.id.slice(0, 8)}</CardTitle>
+                                    <p className="text-xs text-muted-foreground">
+                                        {format(new Date(order.created_at), "MMM d, h:mm a")}
+                                    </p>
+                                </div>
+                                <Badge variant="outline" className="bg-yellow-100 text-yellow-800 border-yellow-200">
+                                    Warning: Pending
+                                </Badge>
+                            </div>
+                        </CardHeader>
+                        <CardContent className="flex-1 pt-4">
+                            <div className="mb-4 space-y-1 text-sm">
+                                <div className="flex items-center gap-2 text-gray-700">
+                                    <User className="h-4 w-4" />
+                                    <span className="font-semibold">{order.customer_info?.name || "Unknown"}</span>
+                                </div>
+                                <div className="flex items-center gap-2 text-gray-500">
+                                    <MapPin className="h-4 w-4" />
+                                    <span>{order.customer_info?.governorate || "No Location"}</span>
+                                </div>
+                            </div>
+
+                            <div className="space-y-3">
+                                <div className="text-xs font-semibold uppercase text-muted-foreground tracking-wider mb-2">
+                                    Items to Pick ({checked.size}/{order.items.length})
+                                </div>
+                                <div className="space-y-2">
+                                    {order.items.map((item, idx) => (
+                                        <div
+                                            key={idx}
+                                            className={`flex items-start space-x-3 p-2 rounded-md border transition-colors ${checked.has(idx) ? 'bg-green-50 border-green-200' : 'bg-white'}`}
+                                        >
+                                            <Checkbox
+                                                id={`item-${order.id}-${idx}`}
+                                                checked={checked.has(idx)}
+                                                onCheckedChange={() => handleCheckItem(order.id, idx, order.items.length)}
+                                                disabled={isCompleting}
+                                            />
+                                            <label
+                                                htmlFor={`item-${order.id}-${idx}`}
+                                                className={`text-sm leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 flex-1 cursor-pointer ${checked.has(idx) ? 'line-through text-gray-400' : 'font-medium'}`}
+                                            >
+                                                <div className="flex justify-between w-full">
+                                                    <span>{item.variant.product.name}</span>
+                                                    <Badge variant="secondary" className="h-5 px-1.5 text-xs">x{item.quantity}</Badge>
                                                 </div>
-                                            ))}
+                                                <span className="text-xs text-muted-foreground mt-1 block">{item.variant.title}</span>
+                                            </label>
                                         </div>
-                                    </div>
-                                </CardContent>
-                                <CardFooter className="bg-muted/10 py-3 text-xs text-muted-foreground flex justify-center border-t">
-                                    {checked.size === order.items.length && isCompleting
-                                        ? "Completing..."
-                                        : "Check all items to finish"
-                                    }
-                                </CardFooter>
-                            </Card>
-                        );
-                    })}
-                </div>
-            )}
+                                    ))}
+                                </div>
+                            </div>
+                        </CardContent>
+                        <CardFooter className="bg-muted/10 py-3 text-xs text-muted-foreground flex justify-center border-t">
+                            {checked.size === order.items.length && isCompleting
+                                ? "Completing..."
+                                : "Check all items to finish"
+                            }
+                        </CardFooter>
+                    </Card>
+                );
+            })}
         </div>
+    )
+    }
+        </div >
     );
 }
