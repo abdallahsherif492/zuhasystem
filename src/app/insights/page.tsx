@@ -11,11 +11,13 @@ import {
     LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
     PieChart, Pie, Cell, Legend, BarChart, Bar
 } from "recharts";
-import { format, parseISO, startOfDay, isWithinInterval, endOfDay } from "date-fns";
+import { format, parseISO, startOfDay, isWithinInterval, endOfDay, startOfMonth } from "date-fns";
+import { useRouter } from "next/navigation";
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d'];
 
 function InsightsContent() {
+    const router = useRouter();
     const searchParams = useSearchParams();
     const fromDate = searchParams.get("from");
     const toDate = searchParams.get("to");
@@ -59,15 +61,23 @@ function InsightsContent() {
     });
 
     useEffect(() => {
-        if (fromDate) fetchData();
+        // Default to "This Month" if no params
+        if (!fromDate || !toDate) {
+            const start = format(startOfMonth(new Date()), "yyyy-MM-dd");
+            const end = format(new Date(), "yyyy-MM-dd");
+            router.replace(`?from=${start}&to=${end}`);
+            return;
+        }
+        fetchData();
     }, [fromDate, toDate]);
 
     async function fetchData() {
         setLoading(true);
         try {
-            const start = fromDate ? `${fromDate}T00:00:00` : format(new Date(), "yyyy-MM-dd'T'00:00:00");
+            // Safe defaults (though useEffect handles redirect)
+            const start = fromDate ? `${fromDate}T00:00:00` : format(startOfMonth(new Date()), "yyyy-MM-dd'T'00:00:00");
             const end = toDate ? `${toDate}T23:59:59` : format(new Date(), "yyyy-MM-dd'T'23:59:59");
-            const dateOnlyStart = fromDate || format(new Date(), "yyyy-MM-dd");
+            const dateOnlyStart = fromDate || format(startOfMonth(new Date()), "yyyy-MM-dd");
             const dateOnlyEnd = toDate || format(new Date(), "yyyy-MM-dd");
 
             // --- 1. ADS INSIGHTS ---
