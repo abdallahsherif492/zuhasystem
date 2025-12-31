@@ -30,14 +30,21 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select";
-import { Loader2, Trash2, ShoppingCart, Search, PlusCircle, UserPlus, Calculator } from "lucide-react";
+import {
+    Command,
+    CommandEmpty,
+    CommandGroup,
+    CommandInput,
+    CommandItem,
+    CommandList,
+} from "@/components/ui/command";
+import { Check, ChevronsUpDown, Loader2, Trash2, ShoppingCart, Search, PlusCircle, UserPlus, Calculator, Calendar as CalendarIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import {
     Popover,
     PopoverContent,
     PopoverTrigger,
 } from "@/components/ui/popover";
-import { Calendar as CalendarIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { Calendar } from "@/components/ui/calendar";
@@ -333,25 +340,61 @@ export default function NewOrderPage() {
                     </CardHeader>
                     <CardContent className="space-y-4">
                         <div className="flex gap-4 items-end">
-                            <div className="flex-1">
+                            <div className="flex-1 flex flex-col space-y-2">
                                 <Label>Search Existing Customer</Label>
-                                <Select onValueChange={handleCustomerSelect}>
-                                    <SelectTrigger>
-                                        <SelectValue placeholder="Select or Create New" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="new">
-                                            <span className="flex items-center gap-2 font-bold text-primary">
-                                                <PlusCircle className="h-4 w-4" /> Create New Customer
-                                            </span>
-                                        </SelectItem>
-                                        {existingCustomers.map(c => (
-                                            <SelectItem key={c.id} value={c.id}>
-                                                {c.name} - {c.phone}
-                                            </SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
+                                <Popover>
+                                    <PopoverTrigger asChild>
+                                        <Button
+                                            variant="outline"
+                                            role="combobox"
+                                            className={cn(
+                                                "w-full justify-between",
+                                                !selectedCustomerId && !isNewCustomer ? "text-muted-foreground" : ""
+                                            )}
+                                        >
+                                            {isNewCustomer
+                                                ? "Create New Customer"
+                                                : selectedCustomerId
+                                                    ? existingCustomers.find((c) => c.id === selectedCustomerId)?.name
+                                                    : "Search customer..."}
+                                            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                        </Button>
+                                    </PopoverTrigger>
+                                    <PopoverContent className="w-[400px] p-0">
+                                        <Command>
+                                            <CommandInput placeholder="Search customer name..." onValueChange={searchCustomers} />
+                                            <CommandList>
+                                                <CommandEmpty>No customer found.</CommandEmpty>
+                                                <CommandGroup>
+                                                    <CommandItem
+                                                        onSelect={() => handleCustomerSelect("new")}
+                                                        className="text-primary font-bold"
+                                                    >
+                                                        <PlusCircle className="mr-2 h-4 w-4" />
+                                                        Create New Customer
+                                                    </CommandItem>
+                                                    {existingCustomers.map((customer) => (
+                                                        <CommandItem
+                                                            key={customer.id}
+                                                            value={customer.name}
+                                                            onSelect={() => handleCustomerSelect(customer.id)}
+                                                        >
+                                                            <Check
+                                                                className={cn(
+                                                                    "mr-2 h-4 w-4",
+                                                                    selectedCustomerId === customer.id
+                                                                        ? "opacity-100"
+                                                                        : "opacity-0"
+                                                                )}
+                                                            />
+                                                            {customer.name} - {customer.phone}
+                                                        </CommandItem>
+                                                    ))}
+                                                </CommandGroup>
+                                            </CommandList>
+                                        </Command>
+                                    </PopoverContent>
+                                </Popover>
                             </div>
                         </div>
 
@@ -407,36 +450,76 @@ export default function NewOrderPage() {
                     </CardHeader>
                     <CardContent className="space-y-4">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <Select onValueChange={setSelectedProduct} value={selectedProduct}>
-                                <SelectTrigger>
-                                    <SelectValue placeholder="Select Product" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {products.map((p) => (
-                                        <SelectItem key={p.id} value={p.id}>
-                                            {p.name}
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
+                            <div className="flex flex-col space-y-2">
+                                <Label>Product</Label>
+                                <Popover>
+                                    <PopoverTrigger asChild>
+                                        <Button
+                                            variant="outline"
+                                            role="combobox"
+                                            className={cn(
+                                                "w-full justify-between",
+                                                !selectedProduct ? "text-muted-foreground" : ""
+                                            )}
+                                        >
+                                            {selectedProduct
+                                                ? products.find((p) => p.id === selectedProduct)?.name
+                                                : "Select product..."}
+                                            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                        </Button>
+                                    </PopoverTrigger>
+                                    <PopoverContent className="w-[300px] p-0">
+                                        <Command>
+                                            <CommandInput placeholder="Search product..." />
+                                            <CommandList>
+                                                <CommandEmpty>No product found.</CommandEmpty>
+                                                <CommandGroup>
+                                                    {products.map((product) => (
+                                                        <CommandItem
+                                                            key={product.id}
+                                                            value={product.name}
+                                                            onSelect={(currentValue) => {
+                                                                setSelectedProduct(product.id === selectedProduct ? "" : product.id)
+                                                            }}
+                                                        >
+                                                            <Check
+                                                                className={cn(
+                                                                    "mr-2 h-4 w-4",
+                                                                    selectedProduct === product.id
+                                                                        ? "opacity-100"
+                                                                        : "opacity-0"
+                                                                )}
+                                                            />
+                                                            {product.name}
+                                                        </CommandItem>
+                                                    ))}
+                                                </CommandGroup>
+                                            </CommandList>
+                                        </Command>
+                                    </PopoverContent>
+                                </Popover>
+                            </div>
 
-                            <Select
-                                onValueChange={setSelectedVariant}
-                                value={selectedVariant}
-                                disabled={!selectedProduct}
-                            >
-                                <SelectTrigger>
-                                    <SelectValue placeholder="Select Variant" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {activeProduct?.variants.map((v) => (
-                                        <SelectItem key={v.id} value={v.id}>
-                                            {v.title} - {formatCurrency(v.sale_price)}
-                                            {v.track_inventory ? ` (${v.stock_qty})` : ''}
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
+                            <div className="flex flex-col space-y-2">
+                                <Label>Variant</Label>
+                                <Select
+                                    onValueChange={setSelectedVariant}
+                                    value={selectedVariant}
+                                    disabled={!selectedProduct}
+                                >
+                                    <SelectTrigger>
+                                        <SelectValue placeholder="Select Variant" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {activeProduct?.variants.map((v) => (
+                                            <SelectItem key={v.id} value={v.id}>
+                                                {v.title} - {formatCurrency(v.sale_price)}
+                                                {v.track_inventory ? ` (${v.stock_qty})` : ''}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
                         </div>
                         <div className="flex items-end gap-4">
                             <div className="w-32">
@@ -552,7 +635,14 @@ export default function NewOrderPage() {
                                     <Calendar
                                         mode="single"
                                         selected={orderDate}
-                                        onSelect={(d) => d && setOrderDate(d)}
+                                        onSelect={(d) => {
+                                            if (d) {
+                                                // Set to noon to avoid timezone issues shifting it to previous day
+                                                const newDate = new Date(d);
+                                                newDate.setHours(12, 0, 0, 0);
+                                                setOrderDate(newDate);
+                                            }
+                                        }}
                                         initialFocus
                                     />
                                 </PopoverContent>

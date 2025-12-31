@@ -14,12 +14,19 @@ import {
     TableHeader,
     TableRow,
 } from "@/components/ui/table";
-import { Plus, Edit, Loader2 } from "lucide-react";
+import { Plus, Edit, Loader2, Search } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 
 export default function ProductsPage() {
     const [products, setProducts] = useState<ProductWithVariants[]>([]);
     const [loading, setLoading] = useState(true);
+    const [searchQuery, setSearchQuery] = useState("");
+
+    const filteredProducts = products.filter(p =>
+        p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        p.variants.some(v => v.sku?.toLowerCase().includes(searchQuery.toLowerCase()))
+    );
 
     useEffect(() => {
         fetchProducts();
@@ -48,8 +55,16 @@ export default function ProductsPage() {
 
     return (
         <div className="space-y-6">
-            <div className="flex items-center justify-between">
-                <h1 className="text-3xl font-bold tracking-tight">Products</h1>
+            <div className="flex items-center justify-between gap-4">
+                <div className="relative w-full max-w-sm">
+                    <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                    <Input
+                        placeholder="Search products..."
+                        className="pl-8"
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                    />
+                </div>
                 <Link href="/products/new">
                     <Button>
                         <Plus className="mr-2 h-4 w-4" /> Add Product
@@ -77,14 +92,14 @@ export default function ProductsPage() {
                                     </div>
                                 </TableCell>
                             </TableRow>
-                        ) : products.length === 0 ? (
+                        ) : filteredProducts.length === 0 ? (
                             <TableRow>
                                 <TableCell colSpan={4} className="h-24 text-center">
                                     No products found.
                                 </TableCell>
                             </TableRow>
                         ) : (
-                            products.map((product) => {
+                            filteredProducts.map((product) => {
                                 const totalStock = product.variants.reduce(
                                     (acc, v) => acc + (v.stock_qty || 0),
                                     0
