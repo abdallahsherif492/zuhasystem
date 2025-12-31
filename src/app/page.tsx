@@ -111,7 +111,7 @@ function DashboardContent() {
       // 5. Low Stock (Raw Query)
       const { data: lowStock, error: lowStockError } = await supabase
         .from("variants")
-        .select("*")
+        .select("*, products(name)")
         .eq("track_inventory", true)
         .lt("stock_qty", 5)
         .order("stock_qty", { ascending: true })
@@ -131,6 +131,7 @@ function DashboardContent() {
 
       setRecentOrders(recent || []);
       setTopProducts(topProds || []);
+      // @ts-ignore
       setLowStockItems(lowStock || []);
 
       // Format Chart Data
@@ -306,7 +307,8 @@ function DashboardContent() {
                 lowStockItems.map(v => (
                   <div key={v.id} className="flex items-center justify-between border-b pb-2 last:border-0 last:pb-0">
                     <div className="flex flex-col">
-                      <span className="font-medium text-sm">{v.title}</span>
+                      {/* @ts-ignore */}
+                      <span className="font-medium text-sm">{v.products?.name} ({v.title})</span>
                       <span className="text-xs text-muted-foreground">SKU: {v.sku || 'N/A'}</span>
                     </div>
                     <Badge variant="destructive" className="h-6">
