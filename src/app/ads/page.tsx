@@ -109,7 +109,7 @@ export default function AdsPage() {
                             const isoDate = `${year}-${month}-${day}`;
                             return {
                                 ad_date: isoDate,
-                                amount: parseFloat(row["Amount spent"]),
+                                amount: parseFloat(row["Amount spent"]) * 1.14, // Add 14% VAT
                                 currency: row["Currency"] || "EGP",
                                 platform: "Facebook"
                             };
