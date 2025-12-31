@@ -7,6 +7,7 @@ import { formatCurrency } from "@/lib/utils";
 import { format } from "date-fns";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { AddTransactionDialog } from "@/components/accounting/add-transaction-dialog";
+import { TransferDialog } from "@/components/accounting/transfer-dialog";
 import {
     Table,
     TableBody,
@@ -133,6 +134,7 @@ function AccountingContent() {
                 <AddTransactionDialog type="investment" onSuccess={refresh} />
                 <AddTransactionDialog type="revenue" onSuccess={refresh} />
                 <AddTransactionDialog type="expense" onSuccess={refresh} />
+                <TransferDialog onSuccess={refresh} />
             </div>
 
             {/* Lists */}
@@ -156,24 +158,33 @@ function AccountingContent() {
                                         <TableHead>Description</TableHead>
                                         <TableHead>Account</TableHead>
                                         <TableHead className="text-right">Amount</TableHead>
+                                        <TableHead className="text-right">Actions</TableHead>
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
                                     {loading ? (
                                         <TableRow>
-                                            <TableCell colSpan={6} className="h-24 text-center">
+                                            <TableCell colSpan={7} className="h-24 text-center">
                                                 <Loader2 className="h-6 w-6 animate-spin mx-auto" />
                                             </TableCell>
                                         </TableRow>
                                     ) : (
                                         transactions
-                                            .filter(t => tab === 'all' || t.type === tab)
+                                            .filter(t => {
+                                                if (tab === 'all') return true;
+                                                return t.type === tab;
+                                            })
                                             .map((t) => (
                                                 <TableRow key={t.id}>
                                                     <TableCell>{format(new Date(t.transaction_date), "PPP")}</TableCell>
                                                     <TableCell>
-                                                        <Badge variant={t.type === 'expense' ? 'destructive' : t.type === 'revenue' ? 'default' : 'secondary'}>
-                                                            {t.type}
+                                                        <Badge variant={
+                                                            t.type === 'expense' ? 'destructive' :
+                                                                t.type === 'revenue' ? 'default' :
+                                                                    t.type.includes('transfer') ? 'outline' :
+                                                                        'secondary'
+                                                        }>
+                                                            {t.type.replace('_', ' ')}
                                                         </Badge>
                                                     </TableCell>
                                                     <TableCell>{t.category}</TableCell>
