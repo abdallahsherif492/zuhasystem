@@ -41,7 +41,6 @@ function DashboardContent() {
     stockValue: 0,
     lowStockCount: 0,
   });
-  const [recentOrders, setRecentOrders] = useState<any[]>([]);
   const [lowStockItems, setLowStockItems] = useState<Variant[]>([]);
   const [chartData, setChartData] = useState<any[]>([]);
 
@@ -57,9 +56,6 @@ function DashboardContent() {
   }, [fromDate, toDate, router]);
 
   useEffect(() => {
-    // Only fetch if we have dates (or if we decide to fetch anyway, but efficient to wait for internal redirect)
-    // However, the router.replace might take a tick. Let's fetch if we have dates OR if it's the initial empty state (will render once before redirect)
-    // Actually, to avoid double fetch, let's wait for params if we force them.
     if (fromDate) {
       fetchDashboardData();
     }
@@ -69,64 +65,60 @@ function DashboardContent() {
     try {
       setLoading(true);
 
-      // 1. Fetch Orders with Date Filter
-      let ordersQuery = supabase
-        .from("orders")
-        .select("*")
-        .order("created_at", { ascending: true });
+      // Prepare timestamps
+      // Ensure specific end time for toDate
+      const start = fromDate ? `${fromDate}T00:00:00` : new Date().toISOString();
+      const end = toDate ? `${toDate}T23:59:59` : new Date().toISOString();
 
-      if (fromDate) ordersQuery = ordersQuery.gte("created_at", fromDate);
-      if (toDate) {
-        // Handle end of day
-        ordersQuery = ordersQuery.lte("created_at", `${toDate}T23:59:59`);
+      // 1. Call RPC for Stats (Fast server-side calc)
+      const { data: statsData, error: statsError } = await supabase
+        .rpc('get_dashboard_stats', {
+          from_date: start,
+          to_date: end
+        });
+
+      if (statsError) throw statsError;
+
+      // 2. Call RPC for Chart Data (Fast server-side grouping)
+      const { data: dailyData, error: chartError } = await supabase
+        .rpc('get_daily_sales', {
+          from_date: start,
+          to_date: end
+        });
+
+      if (chartError) throw chartError;
+
+      // 3. Fetch Low Stock Items (Top 5 only) - Lightweight query
+      const { data: lowStock, error: lowStockError } = await supabase
+        .from("variants")
+        .select("*")
+        .eq("track_inventory", true)
+        .lt("stock_qty", 5)
+        .order("stock_qty", { ascending: true })
+        .limit(5);
+
+      if (lowStockError) throw lowStockError;
+
+      // Update State
+      if (statsData && statsData.length > 0) {
+        const s = statsData[0];
+        setStats({
+          totalSales: s.total_sales || 0,
+          totalOrders: s.total_orders || 0,
+          stockValue: s.stock_value || 0,
+          lowStockCount: s.low_stock_count || 0,
+        });
       }
 
-      const { data: orders, error: ordersError } = await ordersQuery;
-      if (ordersError) throw ordersError;
+      setLowStockItems(lowStock || []);
 
-      // 2. Fetch Variants (Stock)
-      const { data: variants, error: variantsError } = await supabase
-        .from("variants")
-        .select("*");
-
-      if (variantsError) throw variantsError;
-
-      // Calculate Stats
-      const totalSales = orders?.reduce((acc, order) => acc + order.total_amount, 0) || 0;
-      const totalOrders = orders?.length || 0; // Replaces Net Profit
-
-      const stockValue = variants?.reduce(
-        (acc, v) => acc + (v.stock_qty || 0) * v.cost_price,
-        0
-      ) || 0;
-
-      const lowStock = variants?.filter(
-        (v) => v.track_inventory && v.stock_qty < 5
-      ) || [];
-
-      setStats({
-        totalSales,
-        totalOrders,
-        stockValue,
-        lowStockCount: lowStock.length,
-      });
-
-      setLowStockItems(lowStock.slice(0, 5));
-      setRecentOrders((orders || []).slice(-5).reverse());
-
-      // Prepare Chart Data (Sales by Date)
-      const salesByDate: Record<string, number> = {};
-      orders?.forEach((order) => {
-        const date = new Date(order.created_at).toLocaleDateString();
-        salesByDate[date] = (salesByDate[date] || 0) + order.total_amount;
-      });
-
-      const chart = Object.keys(salesByDate).map((date) => ({
-        name: date,
-        sales: salesByDate[date],
+      // Format Chart Data
+      const formattedChart = (dailyData || []).map((d: any) => ({
+        name: format(new Date(d.day_date), "MMM dd"), // Short format for chart
+        sales: d.total_sales,
+        orders: d.order_count
       }));
-
-      setChartData(chart);
+      setChartData(formattedChart);
 
     } catch (error) {
       console.error("Error fetching dashboard data:", error);
@@ -136,7 +128,6 @@ function DashboardContent() {
   }
 
   if (loading && !fromDate) {
-    // Initial Load waiting for redirect
     return (
       <div className="flex justify-center items-center h-96">
         <Loader2 className="h-8 w-8 animate-spin" />
@@ -162,7 +153,7 @@ function DashboardContent() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
-            <DollarSign className="h-4 w-4 text-muted-foreground" />
+            <DollarSign className="h-4 w-4 text-emerald-600" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{formatCurrency(stats.totalSales)}</div>
@@ -170,7 +161,7 @@ function DashboardContent() {
           </CardContent>
         </Card>
 
-        {/* Total Orders (Replaced Net Profit) */}
+        {/* Total Orders */}
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total Orders</CardTitle>
@@ -229,8 +220,11 @@ function DashboardContent() {
                   axisLine={false}
                   tickFormatter={(value) => formatCurrency(value)}
                 />
-                <Tooltip />
-                <Bar dataKey="sales" fill="#adfa1d" radius={[4, 4, 0, 0]} className="fill-primary" />
+                <Tooltip
+                  formatter={(value: number) => formatCurrency(value)}
+                  labelStyle={{ color: "black" }}
+                />
+                <Bar dataKey="sales" fill="#10b981" radius={[4, 4, 0, 0]} className="fill-primary" />
               </BarChart>
             </ResponsiveContainer>
           </CardContent>
