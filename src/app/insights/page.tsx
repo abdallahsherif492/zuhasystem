@@ -149,7 +149,10 @@ function InsightsContent() {
             const busRow = busData[0] || { total_revenue: 0, total_expenses: 0, ads_expenses: 0, purchases_expenses: 0, other_expenses: 0 };
             const busRev = Number(busRow.total_revenue);
             const busExp = Number(busRow.total_expenses);
-            const busNet = busRev - busExp;
+
+            // Fix: Net Profit = Revenue + Expenses (since expenses are negative)
+            // Example: 1000 + (-300) = 700
+            const busNet = busRev + busExp;
 
             setBusinessMetrics({
                 revenue: busRev,
@@ -158,7 +161,7 @@ function InsightsContent() {
                 purchasesExpenses: Number(busRow.purchases_expenses),
                 otherExpenses: Number(busRow.other_expenses),
                 netProfit: busNet,
-                roi: busExp ? (busNet / busExp) * 100 : 0
+                roi: busExp ? (busNet / Math.abs(busExp)) * 100 : 0
             });
 
         } catch (error) {
