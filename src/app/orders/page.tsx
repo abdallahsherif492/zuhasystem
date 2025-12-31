@@ -83,6 +83,7 @@ function OrdersContent() {
                         )
                     )
                 `)
+                .eq("status", "Pending")
                 .order("created_at", { ascending: false });
 
             if (fromDate) query = query.gte("created_at", fromDate);
