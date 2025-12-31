@@ -105,8 +105,23 @@ export default function AdsPage() {
                     const recordsToInsert = parsedData
                         .filter(row => row["Day"] && row["Amount spent"])
                         .map(row => {
-                            const [day, month, year] = row["Day"].split("/");
-                            const isoDate = `${year}-${month}-${day}`;
+                            let isoDate;
+                            const dateStr = row["Day"];
+
+                            // Handle DD/MM/YYYY
+                            if (dateStr.includes("/")) {
+                                const [day, month, year] = dateStr.split("/");
+                                isoDate = `${year}-${month}-${day}`;
+                            }
+                            // Handle YYYY-MM-DD
+                            else if (dateStr.includes("-")) {
+                                isoDate = dateStr;
+                            }
+                            // Fallback
+                            else {
+                                isoDate = new Date().toISOString().split('T')[0];
+                            }
+
                             return {
                                 ad_date: isoDate,
                                 amount: parseFloat(row["Amount spent"]) * 1.14, // Add 14% VAT
