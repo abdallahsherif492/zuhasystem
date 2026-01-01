@@ -28,6 +28,7 @@ interface Order {
     profit: number;
     customer_info: any;
     channel?: string;
+    shipping_cost?: number;
     tags?: string[];
 }
 
@@ -214,7 +215,7 @@ function OrdersContent() {
                                     </TableCell>
                                     <TableCell>{formatCurrency(order.total_amount)}</TableCell>
                                     <TableCell className="text-green-600 font-medium">
-                                        +{formatCurrency(order.profit)}
+                                        +{formatCurrency(order.profit - (order.shipping_cost || 0) - 10)}
                                     </TableCell>
                                     <TableCell>
                                         <div className="flex items-center gap-1">
