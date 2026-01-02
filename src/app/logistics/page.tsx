@@ -21,7 +21,8 @@ import {
     TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, ArrowRight, TrendingUp, TrendingDown, Package, CheckCircle, AlertCircle } from "lucide-react";
+import { Loader2, ArrowRight, TrendingUp, TrendingDown, Package, CheckCircle, AlertCircle, Search } from "lucide-react";
+import { Input } from "@/components/ui/input";
 import { DateRangePicker } from "@/components/date-range-picker";
 import { startOfDay, endOfDay, subDays, format } from "date-fns";
 import {
@@ -54,13 +55,7 @@ export default function LogisticsPage() {
 
 function LogisticsDashboard() {
     return (
-        <div className="space-y-6">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                <h1 className="text-3xl font-bold tracking-tight">Logistics</h1>
-                <DateRangePicker />
-            </div>
-            <LogisticsContent />
-        </div>
+        <LogisticsContent />
     );
 }
 
@@ -117,27 +112,44 @@ function LogisticsContent() {
         }
     };
 
+    const [searchQuery, setSearchQuery] = useState("");
+
     // --- Calculations ---
 
-    // 1. Net Value (Total - Shipping - 10)
+    // 1. Filter by Search Query
+    const filteredOrders = orders.filter(order => {
+        if (!searchQuery) return true;
+        const q = searchQuery.toLowerCase();
+        return (
+            order.id.toLowerCase().includes(q) ||
+            order.customer_info?.name?.toLowerCase().includes(q) ||
+            order.customer_info?.phone?.includes(q)
+        );
+    });
+
+    // 2. Net Value (Total - Shipping - 10)
     const calculateNetValue = (order: any) => {
         return Math.max(0, (order.total_amount || 0) - (order.shipping_cost || 0) - 10);
     };
 
-    // 2. Metrics Breakdown
+    // 3. Metrics Breakdown (use filteredOrders)
     const metrics = STATUSES.map(status => {
-        const filtered = orders.filter(o => o.status === status);
-        const count = filtered.length;
+        const statusOrders = filteredOrders.filter(o => o.status === status);
+        const count = statusOrders.length;
         // Summing the Net Value instead of Gross Total
-        const netValue = filtered.reduce((acc, o) => acc + calculateNetValue(o), 0);
+        const netValue = statusOrders.reduce((acc, o) => acc + calculateNetValue(o), 0);
         return { status, count, netValue };
     });
 
-    // 3. Overall Stats
-    const totalOrders = orders.length;
-    const deliveredCount = orders.filter(o => o.status === 'Delivered').length;
-    const returnedCount = orders.filter(o => o.status === 'Returned').length;
-    const deliveryRate = totalOrders > 0 ? (deliveredCount / totalOrders) * 100 : 0;
+    // 4. Overall Stats
+    const totalOrders = filteredOrders.length;
+    const deliveredCount = filteredOrders.filter(o => o.status === 'Delivered').length;
+    const collectedCount = filteredOrders.filter(o => o.status === 'Collected').length;
+    const returnedCount = filteredOrders.filter(o => o.status === 'Returned').length;
+
+    // Won Rate = (Delivered + Collected) / Total
+    const wonCount = deliveredCount + collectedCount;
+    const wonRate = totalOrders > 0 ? (wonCount / totalOrders) * 100 : 0;
     const returnRate = totalOrders > 0 ? (returnedCount / totalOrders) * 100 : 0;
 
     // 4. Chart Data: Status Distribution (Pie)
@@ -149,7 +161,7 @@ function LogisticsContent() {
     // 5. Chart Data: Daily Trends (Bar)
     // Group by Date
     const dailyDataMap = new Map();
-    orders.forEach(order => {
+    filteredOrders.forEach(order => {
         const date = format(new Date(order.created_at), 'MM/dd');
         if (!dailyDataMap.has(date)) {
             dailyDataMap.set(date, { date, orders: 0, returns: 0, delivered: 0 });
@@ -164,7 +176,7 @@ function LogisticsContent() {
 
     // 6. Top Governorates
     const govMap = new Map();
-    orders.forEach(order => {
+    filteredOrders.forEach(order => {
         const gov = order.customer_info?.governorate || 'Unknown';
         if (!govMap.has(gov)) govMap.set(gov, 0);
         govMap.set(gov, govMap.get(gov) + 1);
@@ -181,6 +193,23 @@ function LogisticsContent() {
 
     return (
         <div className="space-y-6">
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+                <div className="flex items-center gap-2">
+                    <h1 className="text-3xl font-bold tracking-tight">Logistics</h1>
+                </div>
+                <div className="flex items-center gap-2 bg-background">
+                    <div className="relative">
+                        <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                        <Input
+                            placeholder="Search orders..."
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            className="pl-8 w-[250px]"
+                        />
+                    </div>
+                    <DateRangePicker />
+                </div>
+            </div>
 
             {/* Top KPIs */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -193,14 +222,15 @@ function LogisticsContent() {
                         <div className="text-2xl font-bold">{totalOrders}</div>
                     </CardContent>
                 </Card>
+
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Delivery Rate</CardTitle>
+                        <CardTitle className="text-sm font-medium">Won Rate</CardTitle>
                         <CheckCircle className="h-4 w-4 text-green-500" />
                     </CardHeader>
                     <CardContent>
-                        <div className="text-2xl font-bold">{deliveryRate.toFixed(1)}%</div>
-                        <p className="text-xs text-muted-foreground">{deliveredCount} Orders</p>
+                        <div className="text-2xl font-bold">{wonRate.toFixed(1)}%</div>
+                        <p className="text-xs text-muted-foreground">{wonCount} Orders</p>
                     </CardContent>
                 </Card>
                 <Card>
@@ -357,7 +387,7 @@ function LogisticsContent() {
                             </TableRow>
                         </TableHeader>
                         <TableBody>
-                            {orders.map((order) => (
+                            {filteredOrders.map((order) => (
                                 <TableRow key={order.id}>
                                     <TableCell className="font-mono text-xs">{order.id.slice(0, 8)}</TableCell>
                                     <TableCell>{new Date(order.created_at).toLocaleDateString()}</TableCell>
