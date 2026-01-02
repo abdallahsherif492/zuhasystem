@@ -15,9 +15,17 @@ import {
     TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Loader2, MoreHorizontal, Download } from "lucide-react";
+import { Plus, Loader2, MoreHorizontal, Download, Search, Printer } from "lucide-react";
 import * as XLSX from "xlsx";
 import { DateRangePicker } from "@/components/date-range-picker";
+import { Input } from "@/components/ui/input";
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select";
 
 interface Order {
     id: string;
@@ -139,20 +147,73 @@ function OrdersContent() {
         }
     }
 
+    // Search & Filter State
+    const [searchQuery, setSearchQuery] = useState("");
+    const [statusFilter, setStatusFilter] = useState("All");
+
+    const STATUSES = ["All", "Pending", "Processing", "Prepared", "Shipped", "Delivered", "Cancelled", "Returned"];
+
+    // Filter Logic
+    const filteredOrders = orders.filter(order => {
+        // 1. Status Filter
+        if (statusFilter !== "All" && order.status !== statusFilter) return false;
+
+        // 2. Search Query
+        if (!searchQuery) return true;
+        const q = searchQuery.toLowerCase();
+
+        return (
+            order.id.toLowerCase().includes(q) ||
+            order.customer_info?.name?.toLowerCase().includes(q) ||
+            order.customer_info?.phone?.includes(q) ||
+            order.channel?.toLowerCase().includes(q)
+        );
+    });
+
     return (
         <div className="space-y-6">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                <h1 className="text-3xl font-bold tracking-tight">Orders</h1>
-                <div className="flex items-center gap-2">
-                    <DateRangePicker />
-                    <Button variant="outline" onClick={handleExport}>
+            <div className="flex flex-col gap-4">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                    <h1 className="text-3xl font-bold tracking-tight">Orders</h1>
+                    <div className="flex items-center gap-2">
+                        <DateRangePicker />
+                        <Link href="/orders/new">
+                            <Button>
+                                <Plus className="mr-2 h-4 w-4" /> New Order
+                            </Button>
+                        </Link>
+                    </div>
+                </div>
+
+                {/* Search & Actions Bar */}
+                <div className="flex flex-col sm:flex-row gap-4 items-center justify-between bg-muted/40 p-4 rounded-lg">
+                    <div className="flex flex-1 items-center gap-2 w-full sm:w-auto">
+                        <div className="relative flex-1 sm:max-w-sm">
+                            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                            <Input
+                                placeholder="Search orders..."
+                                className="pl-8 bg-white"
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                            />
+                        </div>
+                        <Select value={statusFilter} onValueChange={setStatusFilter}>
+                            <SelectTrigger className="w-[180px] bg-white">
+                                <SelectValue placeholder="Filter by Status" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {STATUSES.map(status => (
+                                    <SelectItem key={status} value={status}>
+                                        {status === "All" ? "All Statuses" : status}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </div>
+
+                    <Button variant="outline" onClick={handleExport} className="bg-white">
                         <Download className="mr-2 h-4 w-4" /> Export Excel
                     </Button>
-                    <Link href="/orders/new">
-                        <Button>
-                            <Plus className="mr-2 h-4 w-4" /> New Order
-                        </Button>
-                    </Link>
                 </div>
             </div>
 
@@ -168,33 +229,35 @@ function OrdersContent() {
                             <TableHead>Tags</TableHead>
                             <TableHead>Total</TableHead>
                             <TableHead>Profit</TableHead>
+                            <TableHead>Actions</TableHead>
                         </TableRow>
                     </TableHeader>
                     <TableBody>
                         {loading ? (
                             <TableRow>
-                                <TableCell colSpan={8} className="h-24 text-center">
+                                <TableCell colSpan={9} className="h-24 text-center">
                                     <div className="flex justify-center items-center">
                                         <Loader2 className="h-6 w-6 animate-spin mr-2" />
                                         Loading...
                                     </div>
                                 </TableCell>
                             </TableRow>
-                        ) : orders.length === 0 ? (
+                        ) : filteredOrders.length === 0 ? (
                             <TableRow>
-                                <TableCell colSpan={8} className="h-24 text-center">
+                                <TableCell colSpan={9} className="h-24 text-center">
                                     No orders found.
                                 </TableCell>
                             </TableRow>
                         ) : (
-                            orders.map((order) => (
+                            filteredOrders.map((order) => (
                                 <TableRow key={order.id}>
                                     <TableCell className="font-mono text-xs">{order.id.slice(0, 8)}</TableCell>
                                     <TableCell>
                                         {new Date(order.created_at).toLocaleDateString()}
                                     </TableCell>
                                     <TableCell>
-                                        {order.customer_info?.name || "N/A"}
+                                        <div className="font-medium">{order.customer_info?.name || "N/A"}</div>
+                                        <div className="text-xs text-muted-foreground">{order.customer_info?.phone}</div>
                                     </TableCell>
                                     <TableCell>
                                         <Badge variant="outline">{order.channel || "N/A"}</Badge>
@@ -225,7 +288,7 @@ function OrdersContent() {
                                                 onClick={() => window.open(`/orders/${order.id}/invoice`, '_blank')}
                                                 className="h-8 px-2"
                                             >
-                                                Print
+                                                <Printer className="h-3 w-3" />
                                             </Button>
                                             <Link href={`/orders/${order.id}`}>
                                                 <Button
