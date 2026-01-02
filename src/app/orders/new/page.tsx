@@ -267,9 +267,23 @@ export default function NewOrderPage() {
                 await validateStock(inventoryItems);
             }
 
-            let custId = selectedCustomerId;
+            // 0.5. Determine Initial Status
+            // If all items are in stock (current_stock >= qty), auto-set to "Prepared".
+            // Otherwise, keep as "Pending" (so it goes to Purchases).
+            let initialStatus = "Pending";
+            if (latestVariants) {
+                const allInStock = cart.every(item => {
+                    const v = latestVariants.find(lv => lv.id === item.variantId);
+                    return (v?.stock_qty || 0) >= item.quantity;
+                });
+
+                if (allInStock && cart.length > 0) {
+                    initialStatus = "Prepared";
+                }
+            }
 
             // 1. Create or Update Customer
+            let custId = selectedCustomerId;
             if (isNewCustomer || !custId) {
                 const { data: newCust, error: custError } = await supabase
                     .from("customers")
@@ -305,7 +319,7 @@ export default function NewOrderPage() {
                     subtotal: subtotal,
                     discount: discount,
                     shipping_cost: shippingCost,
-                    status: "Pending",
+                    status: initialStatus,
                     channel: channel,
                     tags: tags.split(",").map(t => t.trim()).filter(Boolean),
                     created_at: orderDate.toISOString()
