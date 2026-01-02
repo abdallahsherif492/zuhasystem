@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { formatCurrency } from "@/lib/utils";
+import { restockItems, deductStock } from "@/lib/inventory";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -132,6 +133,29 @@ export default function OrderDetailsPage() {
                 .eq("id", orderId);
 
             if (orderError) throw orderError;
+
+            // --- Inventory Logic ---
+            const oldStatus = order.status;
+            const newStatus = editForm.status;
+
+            if (oldStatus !== newStatus) {
+                const itemsToUpdate = order.items.map((i: any) => ({
+                    variant_id: i.variant_id,
+                    qty: i.quantity
+                }));
+
+                // 1. If Changed TO Returned -> Restock
+                if (newStatus === 'Returned' && oldStatus !== 'Returned') {
+                    await restockItems(itemsToUpdate, orderId, "Order Returned: " + orderId);
+                    toast.success("Items returned to stock");
+                }
+                // 2. If Changed FROM Returned -> Deduct (Un-return)
+                else if (oldStatus === 'Returned' && newStatus !== 'Returned') {
+                    await deductStock(itemsToUpdate, orderId, "Status Change (Un-returned)", "adjustment");
+                    toast.info("Items deducted from stock");
+                }
+            }
+            // -----------------------
 
             // 2. Update Customer Record (Optional but good for consistency)
             if (order.customer_id) {

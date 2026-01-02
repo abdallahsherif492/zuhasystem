@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { formatCurrency } from "@/lib/utils";
+import { deductStock, validateStock } from "@/lib/inventory";
 import { ProductWithVariants, Variant } from "@/types";
 import { Button } from "@/components/ui/button";
 import {
@@ -234,6 +235,10 @@ export default function NewOrderPage() {
         return Math.max(0, calculateSubtotal() + shippingCost - discount);
     };
 
+    // ... existing imports
+
+    // ... existing imports
+
     const handleSubmitOrder = async () => {
         if (cart.length === 0) return;
         if (!customerName || !customerPhone) {
@@ -244,6 +249,24 @@ export default function NewOrderPage() {
         setSubmitting(true);
 
         try {
+            // 0. Validate Stock Server-Side (Safety Check)
+            // Fetch latest variant info to ensure we aren't using stale UI data
+            const variantIds = cart.map(c => c.variantId);
+            const { data: latestVariants } = await supabase.from('variants').select('id, stock_qty, track_inventory').in('id', variantIds);
+
+            if (latestVariants) {
+                const inventoryItems = cart.map(item => {
+                    const v = latestVariants.find(lv => lv.id === item.variantId);
+                    return {
+                        variant_id: item.variantId,
+                        qty: item.quantity,
+                        track_inventory: v?.track_inventory ?? false,
+                        current_stock: v?.stock_qty ?? 0
+                    };
+                });
+                await validateStock(inventoryItems);
+            }
+
             let custId = selectedCustomerId;
 
             // 1. Create or Update Customer
@@ -262,9 +285,6 @@ export default function NewOrderPage() {
                 if (custError) throw custError;
                 custId = newCust.id;
             } else {
-                // Optional: Update existing customer info if changed?
-                // For now, let's just use the ID. 
-                // Ideally, a mini ERP might want to update the address on file.
                 await supabase.from("customers").update({
                     address: customerAddress,
                     governorate: customerGov
@@ -273,7 +293,7 @@ export default function NewOrderPage() {
 
             // 2. Create Order
             const subtotal = calculateSubtotal();
-            const totalCost = calculateTotalCost(); // Simple cost of goods
+            const totalCost = calculateTotalCost();
 
             const { data: orderData, error: orderError } = await supabase
                 .from("orders")
@@ -281,7 +301,7 @@ export default function NewOrderPage() {
                     customer_id: custId,
                     customer_info: { name: customerName, phone: customerPhone, address: customerAddress, governorate: customerGov },
                     total_amount: calculateTotal(),
-                    total_cost: totalCost, // Note: this doesn't include shipping cost to us, but that's complex.
+                    total_cost: totalCost,
                     subtotal: subtotal,
                     discount: discount,
                     shipping_cost: shippingCost,
@@ -295,26 +315,21 @@ export default function NewOrderPage() {
 
             if (orderError) throw orderError;
 
-            // 3. Create Order Items and Update Stock
-            for (const item of cart) {
-                const { error: itemError } = await supabase.from("order_items").insert({
-                    order_id: orderData.id,
-                    variant_id: item.variantId,
-                    quantity: item.quantity,
-                    price_at_sale: item.sale_price,
-                    cost_at_sale: item.cost_price, // Track COGS at time of sale
-                });
+            // 3. Create Order Items
+            const itemsData = cart.map(item => ({
+                order_id: orderData.id,
+                variant_id: item.variantId,
+                quantity: item.quantity,
+                price_at_sale: item.sale_price,
+                cost_at_sale: item.cost_price,
+            }));
 
-                if (itemError) throw itemError;
+            const { error: itemsError } = await supabase.from("order_items").insert(itemsData);
+            if (itemsError) throw itemsError;
 
-                // De-stock
-                if (item.trackInventory) {
-                    const { data: freshVariant } = await supabase.from('variants').select('stock_qty').eq('id', item.variantId).single();
-                    if (freshVariant) {
-                        await supabase.from('variants').update({ stock_qty: freshVariant.stock_qty - item.quantity }).eq('id', item.variantId);
-                    }
-                }
-            }
+            // 4. Deduct Stock (Always deduct, regardless of track_inventory setting, as per user request)
+            // The validation step above ensures we don't violate track_inventory=true constraints.
+            await deductStock(cart.map(c => ({ variant_id: c.variantId, qty: c.quantity })), orderData.id);
 
             router.push("/orders");
             router.refresh();

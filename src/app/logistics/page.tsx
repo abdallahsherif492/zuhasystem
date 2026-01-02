@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { formatCurrency } from "@/lib/utils";
+import { restockItems, deductStock } from "@/lib/inventory";
 import { Button } from "@/components/ui/button";
 import {
     Card,
@@ -99,12 +100,39 @@ function LogisticsContent() {
     }
 
     const updateStatus = async (orderId: string, newStatus: string) => {
+        const order = orders.find(o => o.id === orderId);
+        if (!order) return;
+        const oldStatus = order.status;
+
         try {
             const { error } = await supabase
                 .from("orders")
                 .update({ status: newStatus })
                 .eq("id", orderId);
             if (error) throw error;
+
+            // Inventory Logic (Restock on Return)
+            if (newStatus === 'Returned' && oldStatus !== 'Returned') {
+                const { data: items } = await supabase.from('order_items').select('variant_id, quantity').eq('order_id', orderId);
+                if (items) {
+                    await restockItems(
+                        items.map(i => ({ variant_id: i.variant_id, qty: i.quantity })),
+                        orderId,
+                        "Logistics: Order Returned"
+                    );
+                }
+            } else if (oldStatus === 'Returned' && newStatus !== 'Returned') {
+                const { data: items } = await supabase.from('order_items').select('variant_id, quantity').eq('order_id', orderId);
+                if (items) {
+                    await deductStock(
+                        items.map(i => ({ variant_id: i.variant_id, qty: i.quantity })),
+                        orderId,
+                        "Logistics: Status Change (Un-returned)",
+                        "adjustment"
+                    );
+                }
+            }
+
             setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: newStatus } : o));
         } catch (error) {
             console.error("Failed to update status", error);

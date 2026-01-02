@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { LayoutDashboard, Package, ShoppingCart, Settings, Users, Truck, Banknote, LineChart, ShoppingBag, Megaphone } from "lucide-react";
+import { LayoutDashboard, Package, ShoppingCart, Settings, Users, Truck, Banknote, LineChart, ShoppingBag, Megaphone, Box } from "lucide-react";
 
 import Image from "next/image";
 
@@ -54,6 +54,15 @@ export function SidebarContent() {
                 >
                     <Package className="mr-2 h-4 w-4" />
                     Products
+                </Button>
+            </Link>
+            <Link href="/inventory">
+                <Button
+                    variant={pathname.startsWith("/inventory") ? "secondary" : "ghost"}
+                    className="w-full justify-start"
+                >
+                    <Box className="mr-2 h-4 w-4" />
+                    Inventory
                 </Button>
             </Link>
             <Link href="/orders">
