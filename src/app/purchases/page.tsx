@@ -61,6 +61,8 @@ export default function PurchasesPage() {
                     variant:variants (
                         title,
                         cost_price,
+                        stock_qty,
+                        product:products (
                         product:products (
                             name
                         )

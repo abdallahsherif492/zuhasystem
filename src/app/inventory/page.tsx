@@ -21,8 +21,21 @@ import {
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Loader2, Search, ArrowUpRight, ArrowDownRight, Package, Box } from "lucide-react";
+import { Loader2, Search, ArrowUpRight, ArrowDownRight, Package, Box, Plus } from "lucide-react";
 import { format } from "date-fns";
+import { toast } from "sonner";
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+    DialogTrigger,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import { Button } from "@/components/ui/button";
 
 export default function InventoryPage() {
     const [loading, setLoading] = useState(true);
@@ -74,6 +87,88 @@ export default function InventoryPage() {
             setLoading(false);
         }
     }
+
+    // --- Handlers ---
+
+    const [isRestockOpen, setIsRestockOpen] = useState(false);
+    const [selectedVariant, setSelectedVariant] = useState<any>(null);
+    const [restockForm, setRestockForm] = useState({
+        qty: 0,
+        costPrice: 0,
+        supplier: "",
+    });
+
+    const openRestock = (item: any) => {
+        setSelectedVariant(item);
+        setRestockForm({
+            qty: 0,
+            costPrice: item.cost_price || 0,
+            supplier: "",
+        });
+        setIsRestockOpen(true);
+    };
+
+    const handleRestockSubmit = async () => {
+        if (!selectedVariant) return;
+        if (restockForm.qty <= 0) {
+            toast.error("Quantity must be greater than 0");
+            return;
+        }
+
+        try {
+            setLoading(true);
+
+            // 1. Increment Stock
+            const { error: rpcError } = await supabase.rpc('increment_stock', {
+                row_id: selectedVariant.id,
+                amount: restockForm.qty
+            });
+            if (rpcError) throw rpcError;
+
+            // 2. Update Cost Price (if changed)
+            if (restockForm.costPrice !== selectedVariant.cost_price) {
+                await supabase.from('variants')
+                    .update({ cost_price: restockForm.costPrice })
+                    .eq('id', selectedVariant.id);
+            }
+
+            // 3. Log Transaction
+            await supabase.from('inventory_transactions').insert({
+                variant_id: selectedVariant.id,
+                quantity_change: restockForm.qty,
+                transaction_type: 'restock',
+                reference_id: null,
+                note: `Supplier: ${restockForm.supplier || 'Unknown'}`
+            });
+
+            toast.success("Stock added successfully");
+            setIsRestockOpen(false);
+            fetchData(); // Refresh list
+        } catch (error: any) {
+            console.error(error);
+            toast.error("Failed to add stock");
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const toggleTracking = async (item: any) => {
+        try {
+            const newValue = !item.track_inventory;
+            const { error } = await supabase
+                .from('variants')
+                .update({ track_inventory: newValue })
+                .eq('id', item.id);
+
+            if (error) throw error;
+
+            // Optimistic update
+            setStockItems(prev => prev.map(i => i.id === item.id ? { ...i, track_inventory: newValue } : i));
+            toast.success(`Inventory tracking ${newValue ? 'enabled' : 'disabled'}`);
+        } catch (error) {
+            toast.error("Failed to update tracking");
+        }
+    };
 
     // Calculations
     const filteredStock = stockItems.filter(item =>
@@ -155,6 +250,7 @@ export default function InventoryPage() {
                                         <TableHead className="text-right">Quantity</TableHead>
                                         <TableHead className="text-right">Unit Cost</TableHead>
                                         <TableHead className="text-right">Total Value</TableHead>
+                                        <TableHead className="text-right">Actions</TableHead>
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
@@ -163,11 +259,15 @@ export default function InventoryPage() {
                                             <TableCell className="font-medium">{item.product?.name}</TableCell>
                                             <TableCell>{item.title}</TableCell>
                                             <TableCell>
-                                                {item.track_inventory ? (
-                                                    <Badge variant="outline" className="border-green-500 text-green-600">On</Badge>
-                                                ) : (
-                                                    <Badge variant="outline" className="text-muted-foreground">Off</Badge>
-                                                )}
+                                                <div className="flex items-center gap-2">
+                                                    <Switch
+                                                        checked={item.track_inventory}
+                                                        onCheckedChange={() => toggleTracking(item)}
+                                                    />
+                                                    <span className="text-xs text-muted-foreground">
+                                                        {item.track_inventory ? 'On' : 'Off'}
+                                                    </span>
+                                                </div>
                                             </TableCell>
                                             <TableCell className="text-right">
                                                 <span className={item.stock_qty <= 0 ? "text-red-500 font-bold" : ""}>
@@ -176,12 +276,60 @@ export default function InventoryPage() {
                                             </TableCell>
                                             <TableCell className="text-right">{formatCurrency(item.cost_price)}</TableCell>
                                             <TableCell className="text-right font-bold">{formatCurrency(item.stock_qty * item.cost_price)}</TableCell>
+                                            <TableCell className="text-right">
+                                                <Button size="sm" variant="outline" onClick={() => openRestock(item)}>
+                                                    <Plus className="h-4 w-4 mr-1" /> Add Stock
+                                                </Button>
+                                            </TableCell>
                                         </TableRow>
                                     ))}
                                 </TableBody>
                             </Table>
                         </CardContent>
                     </Card>
+
+                    <Dialog open={isRestockOpen} onOpenChange={setIsRestockOpen}>
+                        <DialogContent>
+                            <DialogHeader>
+                                <DialogTitle>Add Stock: {selectedVariant?.product?.name} - {selectedVariant?.title}</DialogTitle>
+                                <DialogDescription>
+                                    Enter quantity received and supplier details.
+                                </DialogDescription>
+                            </DialogHeader>
+                            <div className="grid gap-4 py-4">
+                                <div className="grid grid-cols-4 items-center gap-4">
+                                    <Label className="text-right">Quantity</Label>
+                                    <Input
+                                        type="number"
+                                        className="col-span-3"
+                                        value={restockForm.qty}
+                                        onChange={(e) => setRestockForm({ ...restockForm, qty: parseInt(e.target.value) || 0 })}
+                                    />
+                                </div>
+                                <div className="grid grid-cols-4 items-center gap-4">
+                                    <Label className="text-right">Unit Cost</Label>
+                                    <Input
+                                        type="number"
+                                        className="col-span-3"
+                                        value={restockForm.costPrice}
+                                        onChange={(e) => setRestockForm({ ...restockForm, costPrice: parseFloat(e.target.value) || 0 })}
+                                    />
+                                </div>
+                                <div className="grid grid-cols-4 items-center gap-4">
+                                    <Label className="text-right">Supplier</Label>
+                                    <Input
+                                        className="col-span-3"
+                                        placeholder="e.g. Ali Baba, Local Market"
+                                        value={restockForm.supplier}
+                                        onChange={(e) => setRestockForm({ ...restockForm, supplier: e.target.value })}
+                                    />
+                                </div>
+                            </div>
+                            <DialogFooter>
+                                <Button onClick={handleRestockSubmit}>Confirm Add Stock</Button>
+                            </DialogFooter>
+                        </DialogContent>
+                    </Dialog>
                 </TabsContent>
 
                 <TabsContent value="transactions">
