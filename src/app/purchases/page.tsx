@@ -3,8 +3,9 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { format } from "date-fns";
-import { Loader2, CheckCircle2, Package, User, MapPin } from "lucide-react";
+import { Loader2, CheckCircle2, Package, User, MapPin, RefreshCw } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -65,9 +66,10 @@ export default function PurchasesPage() {
                         product:products (
                             name
                         )
+                    )
                 )
             `)
-            .eq("status", "Pending")
+            .in("status", ["Pending", "Processing"])
             .order("created_at", { ascending: true }); // Oldest first (FIFO)
 
         if (error) {
@@ -80,6 +82,10 @@ export default function PurchasesPage() {
                 items: o.items || []
             }));
             setOrders(mappedOrders);
+            if (mappedOrders.length === 0) {
+                // Debugging help for user
+                console.log("No orders found with status Pending or Processing");
+            }
         }
         setLoading(false);
     };

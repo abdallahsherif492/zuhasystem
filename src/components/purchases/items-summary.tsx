@@ -74,8 +74,8 @@ export function ItemsSummary({ orders }: SummaryProps) {
                                                     <CheckCircle2 className="h-4 w-4" /> Covered
                                                 </span>
                                             ) : (
-                                                <span className="text-red-600 font-bold">
-                                                    {netNeeded}
+                                                <span className="text-red-600 font-bold bg-red-50 px-2 py-1 rounded">
+                                                    Buy {netNeeded}
                                                 </span>
                                             )}
                                         </TableCell>
