@@ -63,10 +63,8 @@ export default function PurchasesPage() {
                         cost_price,
                         stock_qty,
                         product:products (
-                        product:products (
                             name
                         )
-                    )
                 )
             `)
             .eq("status", "Pending")
