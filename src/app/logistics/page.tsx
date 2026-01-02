@@ -42,7 +42,17 @@ const STATUSES = [
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d', '#ffc658', '#d0ed57'];
 
+import { Suspense } from "react";
+
 export default function LogisticsPage() {
+    return (
+        <Suspense fallback={<div className="flex justify-center p-20"><Loader2 className="h-8 w-8 animate-spin" /></div>}>
+            <LogisticsDashboard />
+        </Suspense>
+    );
+}
+
+function LogisticsDashboard() {
     return (
         <div className="space-y-6">
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
