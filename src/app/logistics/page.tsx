@@ -141,16 +141,28 @@ function LogisticsContent() {
         return { status, count, netValue };
     });
 
-    // 4. Overall Stats
-    const totalOrders = filteredOrders.length;
-    const deliveredCount = filteredOrders.filter(o => o.status === 'Delivered').length;
-    const collectedCount = filteredOrders.filter(o => o.status === 'Collected').length;
-    const returnedCount = filteredOrders.filter(o => o.status === 'Returned').length;
+    // 4. Grouped Stats
+    const wonStatuses = ['Delivered', 'Collected'];
+    const lostStatuses = ['Cancelled', 'Unavailable', 'Returned'];
+    const remainingStatuses = ['Pending', 'Prepared', 'Shipped'];
 
-    // Won Rate = (Delivered + Collected) / Total
-    const wonCount = deliveredCount + collectedCount;
-    const wonRate = totalOrders > 0 ? (wonCount / totalOrders) * 100 : 0;
-    const returnRate = totalOrders > 0 ? (returnedCount / totalOrders) * 100 : 0;
+    const getGroupStats = (statuses: string[]) => {
+        const groupOrders = filteredOrders.filter(o => statuses.includes(o.status));
+        return {
+            count: groupOrders.length,
+            value: groupOrders.reduce((acc, o) => acc + calculateNetValue(o), 0)
+        };
+    };
+
+    const wonStats = getGroupStats(wonStatuses);
+    const lostStats = getGroupStats(lostStatuses);
+    const remainingStats = getGroupStats(remainingStatuses);
+
+    // Overall Stats
+    const totalOrders = filteredOrders.length;
+    // Won Rate (Delivered + Collected) / Total
+    const wonRate = totalOrders > 0 ? (wonStats.count / totalOrders) * 100 : 0;
+    const returnRate = totalOrders > 0 ? (lostStats.count / totalOrders) * 100 : 0; // Assuming lostStats includes returned
 
     // 4. Chart Data: Status Distribution (Pie)
     const pieData = metrics.filter(m => m.count > 0).map(m => ({
@@ -159,22 +171,23 @@ function LogisticsContent() {
     }));
 
     // 5. Chart Data: Daily Trends (Bar)
-    // Group by Date
     const dailyDataMap = new Map();
     filteredOrders.forEach(order => {
         const date = format(new Date(order.created_at), 'MM/dd');
         if (!dailyDataMap.has(date)) {
-            dailyDataMap.set(date, { date, orders: 0, returns: 0, delivered: 0 });
+            dailyDataMap.set(date, { date, orders: 0, delivered: 0, collected: 0, lost: 0 });
         }
         const data = dailyDataMap.get(date);
         data.orders += 1;
-        if (order.status === 'Returned') data.returns += 1;
-        if (order.status === 'Delivered') data.delivered += 1;
-    });
-    // Sort by date (simple approach, assumes close range)
-    const barData = Array.from(dailyDataMap.values()).reverse(); // Reverse if DESC order
 
-    // 6. Top Governorates
+        if (order.status === 'Delivered') data.delivered += 1;
+        if (order.status === 'Collected') data.collected += 1;
+        if (lostStatuses.includes(order.status)) data.lost += 1;
+    });
+    // Sort by date
+    const barData = Array.from(dailyDataMap.values()).reverse();
+
+    // 6. Top Governorates (Keep as is)
     const govMap = new Map();
     filteredOrders.forEach(order => {
         const gov = order.customer_info?.governorate || 'Unknown';
@@ -222,37 +235,36 @@ function LogisticsContent() {
                         <div className="text-2xl font-bold">{totalOrders}</div>
                     </CardContent>
                 </Card>
-
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Won Rate</CardTitle>
+                        <CardTitle className="text-sm font-medium">Won Value (Rate)</CardTitle>
                         <CheckCircle className="h-4 w-4 text-green-500" />
                     </CardHeader>
                     <CardContent>
-                        <div className="text-2xl font-bold">{wonRate.toFixed(1)}%</div>
-                        <p className="text-xs text-muted-foreground">{wonCount} Orders</p>
+                        <div className="text-2xl font-bold text-green-600">{formatCurrency(wonStats.value)}</div>
+                        <p className="text-xs text-muted-foreground">
+                            {wonStats.count} Orders ({wonRate.toFixed(1)}%)
+                        </p>
                     </CardContent>
                 </Card>
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Return Rate</CardTitle>
+                        <CardTitle className="text-sm font-medium">Lost Value</CardTitle>
                         <AlertCircle className="h-4 w-4 text-red-500" />
                     </CardHeader>
                     <CardContent>
-                        <div className="text-2xl font-bold">{returnRate.toFixed(1)}%</div>
-                        <p className="text-xs text-muted-foreground">{returnedCount} Orders</p>
+                        <div className="text-2xl font-bold text-red-600">{formatCurrency(lostStats.value)}</div>
+                        <p className="text-xs text-muted-foreground">{lostStats.count} Orders</p>
                     </CardContent>
                 </Card>
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Net Value</CardTitle>
+                        <CardTitle className="text-sm font-medium">Remaining</CardTitle>
                         <TrendingUp className="h-4 w-4 text-blue-500" />
                     </CardHeader>
                     <CardContent>
-                        <div className="text-2xl font-bold text-green-600">
-                            {formatCurrency(metrics.reduce((acc, m) => acc + m.netValue, 0))}
-                        </div>
-                        <p className="text-xs text-muted-foreground">Excl. Shipping + 10 EGP</p>
+                        <div className="text-2xl font-bold text-blue-600">{formatCurrency(remainingStats.value)}</div>
+                        <p className="text-xs text-muted-foreground">{remainingStats.count} Orders (Pending/Ship)</p>
                     </CardContent>
                 </Card>
             </div>
@@ -291,7 +303,7 @@ function LogisticsContent() {
                 {/* Performance Trend */}
                 <Card>
                     <CardHeader>
-                        <CardTitle>Daily Orders vs Returns</CardTitle>
+                        <CardTitle>Daily Status Breakdown</CardTitle>
                     </CardHeader>
                     <CardContent className="h-[300px]">
                         <ResponsiveContainer width="100%" height="100%">
@@ -301,9 +313,9 @@ function LogisticsContent() {
                                 <YAxis fontSize={12} tickLine={false} axisLine={false} />
                                 <Tooltip />
                                 <Legend />
-                                <Bar dataKey="orders" name="Total Orders" fill="#8884d8" radius={[4, 4, 0, 0]} />
-                                <Bar dataKey="delivered" name="Delivered" fill="#4ade80" radius={[4, 4, 0, 0]} />
-                                <Bar dataKey="returns" name="Returned" fill="#f87171" radius={[4, 4, 0, 0]} />
+                                <Bar dataKey="delivered" name="Delivered" stackId="a" fill="#10b981" radius={[0, 0, 4, 4]} />
+                                <Bar dataKey="collected" name="Collected" stackId="a" fill="#3b82f6" radius={[0, 0, 0, 0]} />
+                                <Bar dataKey="lost" name="Lost" stackId="a" fill="#ef4444" radius={[4, 4, 0, 0]} />
                             </BarChart>
                         </ResponsiveContainer>
                     </CardContent>
