@@ -241,7 +241,7 @@ function LogisticsContent() {
                                         <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                                     ))}
                                 </Pie>
-                                <Tooltip formatter={(val: number) => [val, 'Orders']} />
+                                <Tooltip formatter={(val: any) => [val, 'Orders']} />
                                 <Legend verticalAlign="bottom" height={36} />
                             </PieChart>
                         </ResponsiveContainer>
