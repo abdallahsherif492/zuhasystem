@@ -78,7 +78,8 @@ export default function OrderDetailsPage() {
         shippingCost: 0,
         discount: 0,
         channel: "",
-        tags: ""
+        tags: "",
+        createdAt: ""
     });
 
     // Items Editing State
@@ -132,7 +133,8 @@ export default function OrderDetailsPage() {
                 shippingCost: data.shipping_cost || 0,
                 discount: data.discount || 0,
                 channel: data.channel || "",
-                tags: (data.tags || []).join(", ")
+                tags: (data.tags || []).join(", "),
+                createdAt: data.created_at ? new Date(data.created_at).toISOString().slice(0, 16) : ""
             });
 
             // Initialize Edit Items
@@ -267,6 +269,7 @@ export default function OrderDetailsPage() {
             const { error: orderError } = await supabase
                 .from("orders")
                 .update({
+                    created_at: new Date(editForm.createdAt).toISOString(),
                     customer_info: {
                         name: editForm.customerName,
                         phone: editForm.customerPhone,
@@ -507,9 +510,17 @@ export default function OrderDetailsPage() {
                         </div>
                         <div className="space-y-2">
                             <Label>Date Created</Label>
-                            <div className="text-sm text-muted-foreground">
-                                {format(new Date(order.created_at), "PPP p")}
-                            </div>
+                            {isEditing ? (
+                                <Input
+                                    type="datetime-local"
+                                    value={editForm.createdAt}
+                                    onChange={e => setEditForm({ ...editForm, createdAt: e.target.value })}
+                                />
+                            ) : (
+                                <div className="text-sm text-muted-foreground">
+                                    {format(new Date(order.created_at), "PPP p")}
+                                </div>
+                            )}
                         </div>
                     </CardContent>
                 </Card>
