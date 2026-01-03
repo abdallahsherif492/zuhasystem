@@ -60,6 +60,15 @@ function InsightsContent() {
         roi: 0
     });
 
+    // 4. Business Value (Snapshot)
+    const [businessValue, setBusinessValue] = useState({
+        totalInvestment: 0,
+        pendingOrdersValue: 0,
+        stockValue: 0,
+        treasuryAbdallah: 0,
+        treasuryMohamed: 0
+    });
+
     useEffect(() => {
         // Default to "This Month" if no params
         if (!fromDate || !toDate) {
@@ -164,6 +173,41 @@ function InsightsContent() {
                 roi: busExp ? (busNet / Math.abs(busExp)) * 100 : 0
             });
 
+            // --- 4. BUSINESS VALUE (SNAPSHOT) ---
+            // Fetch these in parallel
+            const [
+                { data: investData },
+                { data: pendingData },
+                { data: treasuryAbdallahData },
+                { data: treasuryMohamedData },
+                { data: stockData }
+            ] = await Promise.all([
+                // 1. Total Investment
+                supabase.from('transactions').select('amount').eq('type', 'investment'),
+                // 2. Pending Orders
+                supabase.from('orders').select('total_amount').in('status', ['Pending', 'Processing', 'Shipped']),
+                // 3. Treasury Balances
+                supabase.from('transactions').select('amount').eq('account_name', 'Abdallah Sherif'),
+                supabase.from('transactions').select('amount').eq('account_name', 'Mohamed Adel'),
+                // 4. Stock Value
+                supabase.from('variants').select('cost_price, stock_qty')
+            ]);
+
+            const investVal = investData?.reduce((sum, row) => sum + (Number(row.amount) || 0), 0) || 0;
+            const pendingVal = pendingData?.reduce((sum, row) => sum + (Number(row.total_amount) || 0), 0) || 0;
+            const treasuryAbdallahVal = treasuryAbdallahData?.reduce((sum, row) => sum + (Number(row.amount) || 0), 0) || 0;
+            const treasuryMohamedVal = treasuryMohamedData?.reduce((sum, row) => sum + (Number(row.amount) || 0), 0) || 0;
+            const stockVal = stockData?.reduce((sum, row) => sum + ((Number(row.cost_price) || 0) * (Number(row.stock_qty) || 0)), 0) || 0;
+
+            setBusinessValue({
+                totalInvestment: investVal,
+                pendingOrdersValue: pendingVal,
+                stockValue: stockVal,
+                treasuryAbdallah: treasuryAbdallahVal,
+                treasuryMohamed: treasuryMohamedVal
+            });
+
+
         } catch (error) {
             console.error("Error fetching insights:", error);
         } finally {
@@ -241,6 +285,23 @@ function InsightsContent() {
                     <MetricCard title="Ads Expenses" value={formatCurrency(businessMetrics.adsExpenses)} sub="From Transactions" />
                     <MetricCard title="Purchase Expenses" value={formatCurrency(businessMetrics.purchasesExpenses)} sub="From Transactions" />
                     <MetricCard title="Other Expenses" value={formatCurrency(businessMetrics.otherExpenses)} sub="From Transactions" />
+                </div>
+            </div>
+
+            <div className="border-t" />
+
+            {/* SECTION 4: BUSINESS VALUE (SNAPSHOT) */}
+            <div className="space-y-4">
+                <h2 className="text-xl font-semibold flex items-center gap-2">
+                    <DollarSign className="h-5 w-5 text-amber-600" />
+                    Business Value (Snapshot)
+                </h2>
+                <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+                    <MetricCard title="Total Investment" value={formatCurrency(businessValue.totalInvestment)} sub="All Time" />
+                    <MetricCard title="Pending Orders Value" value={formatCurrency(businessValue.pendingOrdersValue)} sub="Pending + Processing + Shipped" />
+                    <MetricCard title="Stock Value" value={formatCurrency(businessValue.stockValue)} sub="Cost * Qty" />
+                    <MetricCard title="Treasury: Abdallah" value={formatCurrency(businessValue.treasuryAbdallah)} sub="Cash Balance" />
+                    <MetricCard title="Treasury: Mohamed" value={formatCurrency(businessValue.treasuryMohamed)} sub="Cash Balance" />
                 </div>
             </div>
         </div>
