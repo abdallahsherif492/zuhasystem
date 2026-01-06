@@ -14,8 +14,10 @@ import {
     CardHeader,
     CardTitle,
 } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
+
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import {
     Table,
     TableBody,
@@ -91,6 +93,7 @@ export default function NewOrderPage() {
     const [shippingCost, setShippingCost] = useState(0);
     const [discount, setDiscount] = useState(0);
     const [tags, setTags] = useState("");
+    const [notes, setNotes] = useState("");
     const [orderDate, setOrderDate] = useState<Date>(new Date());
 
     // Cart Selection State
@@ -322,6 +325,7 @@ export default function NewOrderPage() {
                     status: initialStatus,
                     channel: channel,
                     tags: tags.split(",").map(t => t.trim()).filter(Boolean),
+                    notes: notes,
                     created_at: orderDate.toISOString()
                 })
                 .select()
@@ -676,6 +680,15 @@ export default function NewOrderPage() {
                                     />
                                 </PopoverContent>
                             </Popover>
+                        </div>
+
+                        <div className="space-y-2">
+                            <Label>Notes</Label>
+                            <Textarea
+                                placeholder="Add any special instructions or notes about this order..."
+                                value={notes}
+                                onChange={(e) => setNotes(e.target.value)}
+                            />
                         </div>
 
                         <div className="space-y-2">

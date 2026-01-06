@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Loader2, ArrowLeft, Printer, Save, Edit, PlusCircle, Trash2, Check, ChevronsUpDown, Search } from "lucide-react";
 import {
@@ -79,6 +80,7 @@ export default function OrderDetailsPage() {
         discount: 0,
         channel: "",
         tags: "",
+        notes: "",
         createdAt: ""
     });
 
@@ -134,6 +136,7 @@ export default function OrderDetailsPage() {
                 discount: data.discount || 0,
                 channel: data.channel || "",
                 tags: (data.tags || []).join(", "),
+                notes: data.notes || "",
                 createdAt: data.created_at ? new Date(data.created_at).toISOString().slice(0, 16) : ""
             });
 
@@ -283,6 +286,7 @@ export default function OrderDetailsPage() {
                     subtotal: newSubtotal,
                     total_cost: newTotalCost,
                     channel: editForm.channel,
+                    notes: editForm.notes,
                     tags: editForm.tags.split(",").map(t => t.trim()).filter(Boolean)
                 })
                 .eq("id", orderId);
@@ -520,6 +524,18 @@ export default function OrderDetailsPage() {
                                 <div className="text-sm text-muted-foreground">
                                     {format(new Date(order.created_at), "PPP p")}
                                 </div>
+                            )}
+                        </div>
+                        <div className="space-y-2">
+                            <Label>Notes</Label>
+                            {isEditing ? (
+                                <Textarea
+                                    value={editForm.notes}
+                                    onChange={e => setEditForm({ ...editForm, notes: e.target.value })}
+                                    placeholder="Add notes..."
+                                />
+                            ) : (
+                                <div className="text-sm whitespace-pre-wrap">{order.notes || "No notes"}</div>
                             )}
                         </div>
                     </CardContent>
