@@ -203,6 +203,17 @@ function OrdersContent() {
         }
     }
 
+
+    function handlePrintSelected() {
+        if (selectedOrders.size === 0) {
+            toast.error("Select orders to print");
+            return;
+        }
+        const ids = Array.from(selectedOrders).join(",");
+        // Open in new tab
+        window.open(`/orders/print?ids=${ids}`, '_blank');
+    }
+
     const STATUSES = ["Pending", "Processing", "Prepared", "Shipped", "Delivered", "Cancelled", "Returned"];
     const statusOptions = STATUSES.map(s => ({ label: s, value: s }));
     const govOptions = GOVERNORATES.map(g => ({ label: g, value: g }));
@@ -340,10 +351,21 @@ function OrdersContent() {
                         <div className="text-sm text-muted-foreground">
                             {filteredOrders.length} orders found. {selectedOrders.size > 0 && <span className="text-primary font-bold">({selectedOrders.size} selected)</span>}
                         </div>
-                        <Button variant="outline" onClick={handleExport} className="bg-white">
-                            <Download className="mr-2 h-4 w-4" />
-                            {selectedOrders.size > 0 ? `Export Selected (${selectedOrders.size})` : "Export All"}
-                        </Button>
+                        <div className="flex gap-2">
+                            <Button
+                                variant="secondary"
+                                onClick={handlePrintSelected}
+                                disabled={selectedOrders.size === 0}
+                                className="bg-white"
+                            >
+                                <Printer className="mr-2 h-4 w-4" />
+                                Print Selected
+                            </Button>
+                            <Button variant="outline" onClick={handleExport} className="bg-white">
+                                <Download className="mr-2 h-4 w-4" />
+                                {selectedOrders.size > 0 ? `Export Selected` : "Export All"}
+                            </Button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -451,7 +473,7 @@ function OrdersContent() {
                     </TableBody>
                 </Table>
             </div>
-        </div>
+        </div >
     );
 }
 
