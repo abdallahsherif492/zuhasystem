@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
@@ -15,17 +15,23 @@ import {
     TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Loader2, MoreHorizontal, Download, Search, Printer } from "lucide-react";
+import { Plus, Loader2, MoreHorizontal, Download, Search, Printer, FilterX } from "lucide-react";
 import * as XLSX from "xlsx";
 import { DateRangePicker } from "@/components/date-range-picker";
 import { Input } from "@/components/ui/input";
-import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
+import { MultiSelect, Option } from "@/components/ui/multi-select";
+import { toast } from "sonner";
+
+// Reuse standard lists
+const GOVERNORATES = [
+    "Cairo", "Giza", "Alexandria", "Dakahlia", "Red Sea", "Beheira", "Fayoum",
+    "Gharbiya", "Ismailia", "Monufia", "Minya", "Qaliubiya", "New Valley", "Suez",
+    "Aswan", "Assiut", "Beni Suef", "Port Said", "Damietta", "Sharkia", "South Sinai",
+    "Kafr Al Sheikh", "Matrouh", "Luxor", "Qena", "North Sinai", "Sohag"
+];
+
+const CHANNELS = ["Facebook", "Instagram", "Tiktok", "Website"];
 
 interface Order {
     id: string;
@@ -38,26 +44,62 @@ interface Order {
     channel?: string;
     shipping_cost?: number;
     tags?: string[];
+    // Include items for filtering
+    items?: {
+        variant?: {
+            product?: {
+                id: string;
+                name: string;
+            }
+        }
+    }[];
+    notes?: string; // Added notes for export
 }
 
 function OrdersContent() {
     const searchParams = useSearchParams();
     const [orders, setOrders] = useState<Order[]>([]);
     const [loading, setLoading] = useState(true);
+    const [productsOptions, setProductsOptions] = useState<Option[]>([]);
+
+    // Filters State
+    const [searchQuery, setSearchQuery] = useState("");
+    const [statusFilter, setStatusFilter] = useState<string[]>([]);
+    const [productFilter, setProductFilter] = useState<string[]>([]);
+    const [govFilter, setGovFilter] = useState<string[]>([]);
+    const [channelFilter, setChannelFilter] = useState<string[]>([]);
+
+    // Selection State
+    const [selectedOrders, setSelectedOrders] = useState<Set<string>>(new Set());
 
     const fromDate = searchParams.get("from");
     const toDate = searchParams.get("to");
 
     useEffect(() => {
         fetchOrders();
+        fetchProducts();
     }, [fromDate, toDate]);
+
+    async function fetchProducts() {
+        const { data } = await supabase.from('products').select('id, name').order('name');
+        if (data) {
+            setProductsOptions(data.map(p => ({ label: p.name, value: p.id })));
+        }
+    }
 
     async function fetchOrders() {
         try {
             setLoading(true);
             let query = supabase
                 .from("orders")
-                .select("*")
+                .select(`
+                    *,
+                    items:order_items (
+                        variant:variants (
+                            product:products (id, name)
+                        )
+                    )
+                `)
                 .order("created_at", { ascending: false });
 
             if (fromDate) query = query.gte("created_at", fromDate);
@@ -72,14 +114,26 @@ function OrdersContent() {
             setOrders(data || []);
         } catch (error) {
             console.error("Error fetching orders:", error);
+            toast.error("Failed to fetch orders");
         } finally {
             setLoading(false);
         }
     }
 
+    // Export Logic
     async function handleExport() {
         try {
-            // 1. Fetch full data with items
+            const hasSelection = selectedOrders.size > 0;
+            const targetIds = hasSelection ? Array.from(selectedOrders) : filteredOrders.map(o => o.id);
+
+            if (targetIds.length === 0) {
+                toast.error("No orders to export");
+                return;
+            }
+
+            toast.loading("Preparing Export...");
+
+            // Fetch full data for export (need details like variant title, qty, etc)
             let query = supabase
                 .from("orders")
                 .select(`
@@ -92,26 +146,19 @@ function OrdersContent() {
                         )
                     )
                 `)
-                .eq("status", "Pending")
+                .in('id', targetIds)
                 .order("created_at", { ascending: false });
-
-            if (fromDate) query = query.gte("created_at", fromDate);
-            if (toDate) {
-                const end = new Date(toDate);
-                end.setHours(23, 59, 59, 999);
-                query = query.lte("created_at", end.toISOString());
-            }
 
             const { data, error } = await query;
             if (error) throw error;
             if (!data || data.length === 0) {
-                alert("No orders to export");
+                toast.dismiss();
+                toast.error("No data found");
                 return;
             }
 
-            // 2. Format Data
+            // Format Data
             const exportData = data.map(order => {
-                // Format Items: "Product (Variant) xQty"
                 const content = order.items?.map((item: any) =>
                     `${item.variant?.product?.name} (${item.variant?.title}) x${item.quantity}`
                 ).join(" + ") || "No Items";
@@ -121,11 +168,11 @@ function OrdersContent() {
                     "اسم الراسل علي البوليصة": "Zuha Home",
                     "الـــــمــــــســـــتــــــــلـــــــــم": order.customer_info?.name || "",
                     "مــوبــايــل الــمــســتــلــم": order.customer_info?.phone || "",
-                    "مـــلاحــظــات": "قابل للكسر",
+                    "مـــلاحــظــات": order.notes || "قابل للكسر",
                     "الـــمــــنـــطــقــــة": order.customer_info?.governorate || "",
                     "الـــــعــــنــــوان": order.customer_info?.address || "",
                     "مــحــتــوى الــشــحــنــة": content,
-                    "الــكــمــيــة": 1, // Default 1 package
+                    "الــكــمــيــة": 1,
                     "قــيــمــة الــشــحــنــة": order.total_amount,
                     "شــحــن عــلــى": "المستلم",
                     "شـــحــنــة اســتــبدال": "لا",
@@ -133,42 +180,90 @@ function OrdersContent() {
                 };
             });
 
-            // 3. Generate Excel
             const worksheet = XLSX.utils.json_to_sheet(exportData);
             const workbook = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(workbook, worksheet, "Orders");
-
-            // 4. Download
-            XLSX.writeFile(workbook, `orders_export_${new Date().toISOString().split('T')[0]}.xlsx`);
+            XLSX.writeFile(workbook, `orders_export_${hasSelection ? 'selected' : 'all'}_${new Date().toISOString().split('T')[0]}.xlsx`);
+            toast.dismiss();
+            toast.success("Export successful");
 
         } catch (error) {
             console.error("Export failed:", error);
-            alert("Export failed");
+            toast.dismiss();
+            toast.error("Export failed");
         }
     }
 
-    // Search & Filter State
-    const [searchQuery, setSearchQuery] = useState("");
-    const [statusFilter, setStatusFilter] = useState("All");
-
-    const STATUSES = ["All", "Pending", "Processing", "Prepared", "Shipped", "Delivered", "Cancelled", "Returned"];
+    const STATUSES = ["Pending", "Processing", "Prepared", "Shipped", "Delivered", "Cancelled", "Returned"];
+    const statusOptions = STATUSES.map(s => ({ label: s, value: s }));
+    const govOptions = GOVERNORATES.map(g => ({ label: g, value: g }));
+    const channelOptions = CHANNELS.map(c => ({ label: c, value: c }));
 
     // Filter Logic
-    const filteredOrders = orders.filter(order => {
-        // 1. Status Filter
-        if (statusFilter !== "All" && order.status !== statusFilter) return false;
+    const filteredOrders = useMemo(() => {
+        return orders.filter(order => {
+            // 1. Search
+            if (searchQuery) {
+                const q = searchQuery.toLowerCase();
+                const matches = (
+                    order.id.toLowerCase().includes(q) ||
+                    order.customer_info?.name?.toLowerCase().includes(q) ||
+                    order.customer_info?.phone?.includes(q) ||
+                    order.channel?.toLowerCase().includes(q)
+                );
+                if (!matches) return false;
+            }
 
-        // 2. Search Query
-        if (!searchQuery) return true;
-        const q = searchQuery.toLowerCase();
+            // 2. Status Filter
+            if (statusFilter.length > 0 && !statusFilter.includes(order.status)) return false;
 
-        return (
-            order.id.toLowerCase().includes(q) ||
-            order.customer_info?.name?.toLowerCase().includes(q) ||
-            order.customer_info?.phone?.includes(q) ||
-            order.channel?.toLowerCase().includes(q)
-        );
-    });
+            // 3. Gov Filter
+            if (govFilter.length > 0 && !govFilter.includes(order.customer_info?.governorate || "")) return false;
+
+            // 4. Channel Filter
+            if (channelFilter.length > 0 && !channelFilter.includes(order.channel || "")) return false;
+
+            // 5. Product Filter
+            if (productFilter.length > 0) {
+                // Check if ANY item in order matches ANY selected product
+                const orderProductIds = order.items?.map(i => i.variant?.product?.id).filter(Boolean) || [];
+                const hasMatch = productFilter.some(pid => orderProductIds.includes(pid));
+                if (!hasMatch) return false;
+            }
+
+            return true;
+        });
+    }, [orders, searchQuery, statusFilter, govFilter, channelFilter, productFilter]);
+
+    // Selection Logic
+    const allSelected = filteredOrders.length > 0 && selectedOrders.size === filteredOrders.length;
+
+    const handleSelectAll = (checked: boolean) => {
+        if (checked) {
+            const allIds = filteredOrders.map(o => o.id);
+            setSelectedOrders(new Set(allIds));
+        } else {
+            setSelectedOrders(new Set());
+        }
+    };
+
+    const handleSelectRow = (id: string, checked: boolean) => {
+        const newSet = new Set(selectedOrders);
+        if (checked) {
+            newSet.add(id);
+        } else {
+            newSet.delete(id);
+        }
+        setSelectedOrders(newSet);
+    };
+
+    const clearFilters = () => {
+        setSearchQuery("");
+        setStatusFilter([]);
+        setProductFilter([]);
+        setGovFilter([]);
+        setChannelFilter([]);
+    }
 
     return (
         <div className="space-y-6">
@@ -185,10 +280,10 @@ function OrdersContent() {
                     </div>
                 </div>
 
-                {/* Search & Actions Bar */}
-                <div className="flex flex-col sm:flex-row gap-4 items-center justify-between bg-muted/40 p-4 rounded-lg">
-                    <div className="flex flex-1 items-center gap-2 w-full sm:w-auto">
-                        <div className="relative flex-1 sm:max-w-sm">
+                {/* Filters Bar */}
+                <div className="bg-muted/40 p-4 rounded-lg space-y-4">
+                    <div className="flex flex-col sm:flex-row gap-4">
+                        <div className="relative flex-1">
                             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                             <Input
                                 placeholder="Search orders..."
@@ -197,23 +292,50 @@ function OrdersContent() {
                                 onChange={(e) => setSearchQuery(e.target.value)}
                             />
                         </div>
-                        <Select value={statusFilter} onValueChange={setStatusFilter}>
-                            <SelectTrigger className="w-[180px] bg-white">
-                                <SelectValue placeholder="Filter by Status" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                {STATUSES.map(status => (
-                                    <SelectItem key={status} value={status}>
-                                        {status === "All" ? "All Statuses" : status}
-                                    </SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-2 flex-[2]">
+                            <MultiSelect
+                                options={statusOptions}
+                                selected={statusFilter}
+                                onChange={setStatusFilter}
+                                placeholder="Status"
+                                className="bg-white"
+                            />
+                            <MultiSelect
+                                options={channelOptions}
+                                selected={channelFilter}
+                                onChange={setChannelFilter}
+                                placeholder="Channel"
+                                className="bg-white"
+                            />
+                            <MultiSelect
+                                options={govOptions}
+                                selected={govFilter}
+                                onChange={setGovFilter}
+                                placeholder="Governorate"
+                                className="bg-white"
+                            />
+                            <MultiSelect
+                                options={productsOptions}
+                                selected={productFilter}
+                                onChange={setProductFilter}
+                                placeholder="Product"
+                                className="bg-white"
+                            />
+                        </div>
+                        <Button variant="ghost" size="icon" onClick={clearFilters} title="Clear Filters">
+                            <FilterX className="h-4 w-4" />
+                        </Button>
                     </div>
 
-                    <Button variant="outline" onClick={handleExport} className="bg-white">
-                        <Download className="mr-2 h-4 w-4" /> Export Excel
-                    </Button>
+                    <div className="flex justify-between items-center">
+                        <div className="text-sm text-muted-foreground">
+                            {filteredOrders.length} orders found. {selectedOrders.size > 0 && <span className="text-primary font-bold">({selectedOrders.size} selected)</span>}
+                        </div>
+                        <Button variant="outline" onClick={handleExport} className="bg-white">
+                            <Download className="mr-2 h-4 w-4" />
+                            {selectedOrders.size > 0 ? `Export Selected (${selectedOrders.size})` : "Export All"}
+                        </Button>
+                    </div>
                 </div>
             </div>
 
@@ -221,6 +343,12 @@ function OrdersContent() {
                 <Table>
                     <TableHeader>
                         <TableRow>
+                            <TableHead className="w-[40px]">
+                                <Checkbox
+                                    checked={allSelected}
+                                    onCheckedChange={handleSelectAll}
+                                />
+                            </TableHead>
                             <TableHead>Order ID</TableHead>
                             <TableHead>Date</TableHead>
                             <TableHead>Customer</TableHead>
@@ -235,7 +363,7 @@ function OrdersContent() {
                     <TableBody>
                         {loading ? (
                             <TableRow>
-                                <TableCell colSpan={9} className="h-24 text-center">
+                                <TableCell colSpan={10} className="h-24 text-center">
                                     <div className="flex justify-center items-center">
                                         <Loader2 className="h-6 w-6 animate-spin mr-2" />
                                         Loading...
@@ -244,13 +372,19 @@ function OrdersContent() {
                             </TableRow>
                         ) : filteredOrders.length === 0 ? (
                             <TableRow>
-                                <TableCell colSpan={9} className="h-24 text-center">
+                                <TableCell colSpan={10} className="h-24 text-center">
                                     No orders found.
                                 </TableCell>
                             </TableRow>
                         ) : (
                             filteredOrders.map((order) => (
-                                <TableRow key={order.id}>
+                                <TableRow key={order.id} data-state={selectedOrders.has(order.id) && "selected"}>
+                                    <TableCell>
+                                        <Checkbox
+                                            checked={selectedOrders.has(order.id)}
+                                            onCheckedChange={(checked) => handleSelectRow(order.id, checked as boolean)}
+                                        />
+                                    </TableCell>
                                     <TableCell className="font-mono text-xs">{order.id.slice(0, 8)}</TableCell>
                                     <TableCell>
                                         {new Date(order.created_at).toLocaleDateString()}

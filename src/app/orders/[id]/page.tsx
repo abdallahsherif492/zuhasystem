@@ -73,6 +73,7 @@ export default function OrderDetailsPage() {
     const [editForm, setEditForm] = useState({
         customerName: "",
         customerPhone: "",
+        customerPhone2: "",
         customerAddress: "",
         customerGov: "",
         status: "",
@@ -129,6 +130,7 @@ export default function OrderDetailsPage() {
             setEditForm({
                 customerName: data.customer_info?.name || "",
                 customerPhone: data.customer_info?.phone || "",
+                customerPhone2: data.customer_info?.phone2 || "",
                 customerAddress: data.customer_info?.address || "",
                 customerGov: data.customer_info?.governorate || "",
                 status: data.status,
@@ -276,6 +278,7 @@ export default function OrderDetailsPage() {
                     customer_info: {
                         name: editForm.customerName,
                         phone: editForm.customerPhone,
+                        phone2: editForm.customerPhone2,
                         address: editForm.customerAddress,
                         governorate: editForm.customerGov
                     },
@@ -461,6 +464,14 @@ export default function OrderDetailsPage() {
                                 <Input value={editForm.customerPhone} onChange={e => setEditForm({ ...editForm, customerPhone: e.target.value })} />
                             ) : (
                                 <div className="font-medium">{order.customer_info?.phone}</div>
+                            )}
+                        </div>
+                        <div className="space-y-2">
+                            <Label>Phone 2</Label>
+                            {isEditing ? (
+                                <Input value={editForm.customerPhone2} onChange={e => setEditForm({ ...editForm, customerPhone2: e.target.value })} />
+                            ) : (
+                                <div className="font-medium">{order.customer_info?.phone2 || "-"}</div>
                             )}
                         </div>
                         <div className="space-y-2">

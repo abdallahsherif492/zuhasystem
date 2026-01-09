@@ -82,6 +82,7 @@ export default function NewOrderPage() {
     // Customer State
     const [customerName, setCustomerName] = useState("");
     const [customerPhone, setCustomerPhone] = useState("");
+    const [customerPhone2, setCustomerPhone2] = useState("");
     const [customerAddress, setCustomerAddress] = useState("");
     const [customerGov, setCustomerGov] = useState("");
     const [isNewCustomer, setIsNewCustomer] = useState(true);
@@ -148,9 +149,10 @@ export default function NewOrderPage() {
 
     async function searchCustomers(query: string) {
         // Simple fetch all (assuming small DB), ideal is server-side search
+
         const { data } = await supabase
             .from("customers")
-            .select("id, name, phone, address, governorate")
+            .select("id, name, phone, phone2, address, governorate")
             .ilike("name", `%${query}%`)
             .limit(10);
         setExistingCustomers(data || []);
@@ -162,6 +164,7 @@ export default function NewOrderPage() {
             setSelectedCustomerId(null);
             setCustomerName("");
             setCustomerPhone("");
+            setCustomerPhone2("");
             setCustomerAddress("");
             setCustomerGov("");
             return;
@@ -172,6 +175,7 @@ export default function NewOrderPage() {
             setSelectedCustomerId(cust.id);
             setCustomerName(cust.name);
             setCustomerPhone(cust.phone || "");
+            setCustomerPhone2(cust.phone2 || "");
             setCustomerAddress(cust.address || "");
             setCustomerGov(cust.governorate || "");
         }
@@ -293,6 +297,7 @@ export default function NewOrderPage() {
                     .insert({
                         name: customerName,
                         phone: customerPhone,
+                        phone2: customerPhone2,
                         address: customerAddress,
                         governorate: customerGov
                     })
@@ -304,7 +309,8 @@ export default function NewOrderPage() {
             } else {
                 await supabase.from("customers").update({
                     address: customerAddress,
-                    governorate: customerGov
+                    governorate: customerGov,
+                    phone2: customerPhone2 // Update phone2 if needed
                 }).eq("id", custId);
             }
 
@@ -316,7 +322,7 @@ export default function NewOrderPage() {
                 .from("orders")
                 .insert({
                     customer_id: custId,
-                    customer_info: { name: customerName, phone: customerPhone, address: customerAddress, governorate: customerGov },
+                    customer_info: { name: customerName, phone: customerPhone, phone2: customerPhone2, address: customerAddress, governorate: customerGov },
                     total_amount: calculateTotal(),
                     total_cost: totalCost,
                     subtotal: subtotal,
@@ -445,6 +451,14 @@ export default function NewOrderPage() {
                                 <Input
                                     value={customerPhone}
                                     onChange={(e) => setCustomerPhone(e.target.value)}
+                                    placeholder="01xxxxxxxxx"
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <Label>Phone 2 (Optional)</Label>
+                                <Input
+                                    value={customerPhone2}
+                                    onChange={(e) => setCustomerPhone2(e.target.value)}
                                     placeholder="01xxxxxxxxx"
                                 />
                             </div>
