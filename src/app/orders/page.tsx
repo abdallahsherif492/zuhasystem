@@ -163,12 +163,20 @@ function OrdersContent() {
                     `${item.variant?.product?.name} (${item.variant?.title}) x${item.quantity}`
                 ).join(" + ") || "No Items";
 
+                const phone1 = order.customer_info?.phone || "";
+                const phone2 = order.customer_info?.phone2;
+                const combinedPhone = phone2 ? `${phone1} / ${phone2}` : phone1;
+
+                const baseNotes = order.notes || "";
+                const requestNotes = "قابل للكسر"; // Fragile
+                const combinedNotes = baseNotes ? `${baseNotes} | ${requestNotes}` : requestNotes;
+
                 return {
                     "كـــود الــتــاجــر": "",
                     "اسم الراسل علي البوليصة": "Zuha Home",
                     "الـــــمــــــســـــتــــــــلـــــــــم": order.customer_info?.name || "",
-                    "مــوبــايــل الــمــســتــلــم": order.customer_info?.phone || "",
-                    "مـــلاحــظــات": order.notes || "قابل للكسر",
+                    "مــوبــايــل الــمــســتــلــم": combinedPhone,
+                    "مـــلاحــظــات": combinedNotes,
                     "الـــمــــنـــطــقــــة": order.customer_info?.governorate || "",
                     "الـــــعــــنــــوان": order.customer_info?.address || "",
                     "مــحــتــوى الــشــحــنــة": content,
@@ -179,6 +187,7 @@ function OrdersContent() {
                     "مسموح بفتح الشحنة": "نعم"
                 };
             });
+
 
             const worksheet = XLSX.utils.json_to_sheet(exportData);
             const workbook = XLSX.utils.book_new();
