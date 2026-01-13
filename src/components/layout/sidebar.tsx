@@ -119,6 +119,15 @@ export function SidebarContent() {
                     Insights
                 </Button>
             </Link>
+            <Link href="/shipping">
+                <Button
+                    variant={pathname.startsWith("/shipping") ? "secondary" : "ghost"}
+                    className="w-full justify-start"
+                >
+                    <Truck className="mr-2 h-4 w-4" />
+                    Shipping
+                </Button>
+            </Link>
             <Link href="/ads">
                 <Button
                     variant={pathname.startsWith("/ads") ? "secondary" : "ghost"}

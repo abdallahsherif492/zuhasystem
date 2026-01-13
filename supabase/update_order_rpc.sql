@@ -21,6 +21,7 @@ BEGIN
     total_cost = (p_order_update->>'total_cost')::NUMERIC,
     channel = p_order_update->>'channel',
     notes = p_order_update->>'notes',
+    shipping_company_id = (p_order_update->>'shipping_company_id')::UUID,
     tags = (SELECT array_agg(x) FROM jsonb_array_elements_text(p_order_update->'tags') t(x))
   WHERE id = p_order_id;
 

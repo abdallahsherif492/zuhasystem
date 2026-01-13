@@ -66,6 +66,7 @@ export default function OrderDetailsPage() {
 
     // Product Data for Selector
     const [products, setProducts] = useState<any[]>([]);
+    const [shippingCompanies, setShippingCompanies] = useState<any[]>([]);
     const [selectedProduct, setSelectedProduct] = useState("");
     const [selectedVariant, setSelectedVariant] = useState("");
 
@@ -80,6 +81,7 @@ export default function OrderDetailsPage() {
         shippingCost: 0,
         discount: 0,
         channel: "",
+        shippingCompanyId: "",
         tags: "",
         notes: "",
         createdAt: ""
@@ -92,6 +94,7 @@ export default function OrderDetailsPage() {
     useEffect(() => {
         fetchOrderDetails();
         fetchProducts();
+        fetchShippingCompanies();
     }, [orderId]);
 
     // Helpers for Product Selection
@@ -101,6 +104,11 @@ export default function OrderDetailsPage() {
     async function fetchProducts() {
         const { data } = await supabase.from("products").select("*, variants(*)").order("name");
         setProducts(data || []);
+    }
+
+    async function fetchShippingCompanies() {
+        const { data } = await supabase.from("shipping_companies").select("*").eq("active", true).order("name");
+        setShippingCompanies(data || []);
     }
 
     async function fetchOrderDetails() {
@@ -137,6 +145,7 @@ export default function OrderDetailsPage() {
                 shippingCost: data.shipping_cost || 0,
                 discount: data.discount || 0,
                 channel: data.channel || "",
+                shippingCompanyId: data.shipping_company_id || "",
                 tags: (data.tags || []).join(", "),
                 notes: data.notes || "",
                 createdAt: data.created_at ? new Date(data.created_at).toISOString().slice(0, 16) : ""
@@ -208,6 +217,13 @@ export default function OrderDetailsPage() {
     async function handleSave() {
         setSaving(true);
         try {
+            // Validate Shipping Company if Status is 'Shipped'
+            if (editForm.status === 'Shipped' && !editForm.shippingCompanyId) {
+                toast.error("Please select a Shipping Company for shipped orders.");
+                setSaving(false);
+                return;
+            }
+
             // 1. Calculations
             const newSubtotal = editItems.reduce((acc, i) => acc + (i.sale_price * i.quantity), 0);
             const newTotalCost = editItems.reduce((acc, i) => acc + (i.cost_price * i.quantity), 0);
@@ -300,6 +316,7 @@ export default function OrderDetailsPage() {
                 subtotal: newSubtotal,
                 total_cost: newTotalCost,
                 channel: editForm.channel,
+                shipping_company_id: editForm.shippingCompanyId || null,
                 notes: editForm.notes,
                 tags: editForm.tags.split(",").map(t => t.trim()).filter(Boolean)
             };
@@ -504,6 +521,29 @@ export default function OrderDetailsPage() {
                                 <Input value={editForm.channel} onChange={e => setEditForm({ ...editForm, channel: e.target.value })} />
                             ) : (
                                 <div>{order.channel}</div>
+                            )}
+                        </div>
+                        <div className="space-y-2">
+                            <Label>Shipping Company</Label>
+                            {isEditing ? (
+                                <Select
+                                    value={editForm.shippingCompanyId}
+                                    onValueChange={v => setEditForm({ ...editForm, shippingCompanyId: v })}
+                                >
+                                    <SelectTrigger><SelectValue placeholder="Select Courier" /></SelectTrigger>
+                                    <SelectContent>
+                                        {shippingCompanies.map(c => (
+                                            <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            ) : (
+                                <div>
+                                    {order.shipping_company_id
+                                        ? shippingCompanies.find(c => c.id === order.shipping_company_id)?.name
+                                        : <span className="text-muted-foreground">-</span>
+                                    }
+                                </div>
                             )}
                         </div>
                         <div className="space-y-2">
