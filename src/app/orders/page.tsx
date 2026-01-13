@@ -185,6 +185,7 @@ function OrdersContent() {
 
                 return {
                     "كـــود الــتــاجــر": "",
+                    "رقم الأوردر": order.id.slice(0, 8),
                     "اسم الراسل علي البوليصة": "Zuha Home",
                     "الـــــمــــــســـــتــــــــلـــــــــم": order.customer_info?.name || "",
                     "مــوبــايــل الــمــســتــلــم": combinedPhone,
