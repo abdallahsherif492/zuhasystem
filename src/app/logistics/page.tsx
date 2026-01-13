@@ -31,6 +31,21 @@ import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid
 } from 'recharts';
 
+import { ChevronsUpDown, FilterX, Truck } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+import { MultiSelect, Option } from "@/components/ui/multi-select";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { toast } from "sonner";
+
+const GOVERNORATES = [
+    "Cairo", "Giza", "Alexandria", "Dakahlia", "Red Sea", "Beheira", "Fayoum",
+    "Gharbiya", "Ismailia", "Monufia", "Minya", "Qaliubiya", "New Valley", "Suez",
+    "Aswan", "Assiut", "Beni Suef", "Port Said", "Damietta", "Sharkia", "South Sinai",
+    "Kafr Al Sheikh", "Matrouh", "Luxor", "Qena", "North Sinai", "Sohag"
+].sort();
+
 const STATUSES = [
     "Pending",
     "Prepared",
@@ -65,19 +80,55 @@ function LogisticsContent() {
     const [orders, setOrders] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
 
+    // Filters & Selection
+    const [searchQuery, setSearchQuery] = useState("");
+    const [govFilter, setGovFilter] = useState<string[]>([]);
+    const [productFilter, setProductFilter] = useState<string[]>([]);
+    const [selectedOrders, setSelectedOrders] = useState<Set<string>>(new Set());
+
+    // Data for Filters/Actions
+    const [productsOptions, setProductsOptions] = useState<Option[]>([]);
+    const [shippingCompanies, setShippingCompanies] = useState<any[]>([]);
+
+    // Dialog State
+    const [shippingDialogOpen, setShippingDialogOpen] = useState(false);
+    const [pendingStatusChange, setPendingStatusChange] = useState<{ orderIds: string[], status: string } | null>(null);
+    const [selectedCompanyId, setSelectedCompanyId] = useState<string>("");
+
     const fromDate = searchParams.get("from");
     const toDate = searchParams.get("to");
 
     useEffect(() => {
         fetchOrders();
+        fetchProducts();
+        fetchShippingCompanies();
     }, [fromDate, toDate]);
+
+    async function fetchProducts() {
+        const { data } = await supabase.from('products').select('id, name').order('name');
+        if (data) {
+            setProductsOptions(data.map(p => ({ label: p.name, value: p.id })));
+        }
+    }
+
+    async function fetchShippingCompanies() {
+        const { data } = await supabase.from('shipping_companies').select('*').eq('active', true).order('name');
+        setShippingCompanies(data || []);
+    }
 
     async function fetchOrders() {
         try {
             setLoading(true);
             let query = supabase
                 .from("orders")
-                .select("*")
+                .select(`
+                    *,
+                    items:order_items (
+                        variant:variants (
+                            product:products (id, name)
+                        )
+                    )
+                `)
                 .order("created_at", { ascending: false });
 
             if (fromDate) {
@@ -99,61 +150,149 @@ function LogisticsContent() {
         }
     }
 
-    const updateStatus = async (orderId: string, newStatus: string) => {
-        const order = orders.find(o => o.id === orderId);
-        if (!order) return;
-        const oldStatus = order.status;
+    // --- Update Logic ---
 
+    const initiateStatusChange = (orderId: string, newStatus: string) => {
+        // If status is "Shipped", check if company is assigned
+        if (newStatus === "Shipped") {
+            const order = orders.find(o => o.id === orderId);
+            if (order && !order.shipping_company_id) {
+                // Open Dialog to select company
+                setPendingStatusChange({ orderIds: [orderId], status: newStatus });
+                setShippingDialogOpen(true);
+                return;
+            }
+        }
+        // Otherwise proceed
+        executeStatusUpdate([orderId], newStatus);
+    };
+
+    const executeStatusUpdate = async (orderIds: string[], newStatus: string, companyId?: string) => {
         try {
+            const payload: any = { status: newStatus };
+            if (companyId) payload.shipping_company_id = companyId;
+
             const { error } = await supabase
                 .from("orders")
-                .update({ status: newStatus })
-                .eq("id", orderId);
+                .update(payload)
+                .in("id", orderIds);
+
             if (error) throw error;
 
-            // Inventory Logic (Restock on Return)
-            if (newStatus === 'Returned' && oldStatus !== 'Returned') {
-                const { data: items } = await supabase.from('order_items').select('variant_id, quantity').eq('order_id', orderId);
-                if (items) {
-                    await restockItems(
-                        items.map(i => ({ variant_id: i.variant_id, qty: i.quantity })),
-                        orderId,
-                        "Logistics: Order Returned"
-                    );
-                }
-            } else if (oldStatus === 'Returned' && newStatus !== 'Returned') {
-                const { data: items } = await supabase.from('order_items').select('variant_id, quantity').eq('order_id', orderId);
-                if (items) {
-                    await deductStock(
-                        items.map(i => ({ variant_id: i.variant_id, qty: i.quantity })),
-                        orderId,
-                        "Logistics: Status Change (Un-returned)",
-                        "adjustment"
-                    );
+            // Handle Inventory Logic for each order (simplified loop)
+            // Note: Ideally this should be a batch RPC for performance, but loop is acceptable for typical usage
+            for (const oid of orderIds) {
+                const order = orders.find(o => o.id === oid);
+                if (!order) continue;
+                const oldStatus = order.status;
+
+                if (newStatus === 'Returned' && oldStatus !== 'Returned') {
+                    const { data: items } = await supabase.from('order_items').select('variant_id, quantity').eq('order_id', oid);
+                    if (items) {
+                        await restockItems(
+                            items.map(i => ({ variant_id: i.variant_id, qty: i.quantity })),
+                            oid,
+                            "Logistics: Order Returned"
+                        );
+                    }
+                } else if (oldStatus === 'Returned' && newStatus !== 'Returned') {
+                    const { data: items } = await supabase.from('order_items').select('variant_id, quantity').eq('order_id', oid);
+                    if (items) {
+                        await deductStock(
+                            items.map(i => ({ variant_id: i.variant_id, qty: i.quantity })),
+                            oid,
+                            "Logistics: Status Change (Un-returned)",
+                            "adjustment"
+                        );
+                    }
                 }
             }
 
-            setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: newStatus } : o));
+            toast.success("Orders updated successfully");
+            setOrders(prev => prev.map(o => orderIds.includes(o.id) ? { ...o, status: newStatus, shipping_company_id: companyId || o.shipping_company_id } : o));
+
+            // Clear selection and dialogs
+            if (orderIds.length > 1) setSelectedOrders(new Set());
+            setShippingDialogOpen(false);
+            setPendingStatusChange(null);
+            setSelectedCompanyId("");
+
         } catch (error) {
             console.error("Failed to update status", error);
-            alert("Failed to update status");
+            toast.error("Failed to update orders");
         }
     };
 
-    const [searchQuery, setSearchQuery] = useState("");
+    const confirmShippingAssignment = () => {
+        if (!selectedCompanyId) {
+            toast.error("Please select a shipping company");
+            return;
+        }
+        if (pendingStatusChange) {
+            executeStatusUpdate(pendingStatusChange.orderIds, pendingStatusChange.status, selectedCompanyId);
+        }
+    };
 
-    // --- Calculations ---
+    const handleBulkStatusChange = (status: string) => {
+        const ids = Array.from(selectedOrders);
+        if (ids.length === 0) return;
 
-    // 1. Filter by Search Query
+        if (status === "Shipped") {
+            // Check if ANY need a company? Or just force assignment for all?
+            // Safer to force prompt for bulk "Shipped" to ensure consistency or ask user.
+            // Let's prompt.
+            setPendingStatusChange({ orderIds: ids, status });
+            setShippingDialogOpen(true);
+        } else {
+            if (confirm(`Update ${ids.length} orders to ${status}?`)) {
+                executeStatusUpdate(ids, status);
+            }
+        }
+    };
+
+    // --- Calculations & Filters ---
+
+    // 1. Filter Logic
     const filteredOrders = orders.filter(order => {
-        if (!searchQuery) return true;
-        const q = searchQuery.toLowerCase();
-        return (
-            order.id.toLowerCase().includes(q) ||
-            order.customer_info?.name?.toLowerCase().includes(q) ||
-            order.customer_info?.phone?.includes(q)
-        );
+        // Search
+        if (searchQuery) {
+            const q = searchQuery.toLowerCase();
+            const matches = (
+                order.id.toLowerCase().includes(q) ||
+                order.customer_info?.name?.toLowerCase().includes(q) ||
+                order.customer_info?.phone?.includes(q)
+            );
+            if (!matches) return false;
+        }
+
+        // Gov Filter
+        if (govFilter.length > 0 && !govFilter.includes(order.customer_info?.governorate || "")) return false;
+
+        // Product Filter
+        if (productFilter.length > 0) {
+            const orderProductIds = order.items?.map((i: any) => i.variant?.product?.id).filter(Boolean) || [];
+            const hasMatch = productFilter.some(pid => orderProductIds.includes(pid));
+            if (!hasMatch) return false;
+        }
+
+        return true;
     });
+
+    // Selection Handlers
+    const handleSelectAll = (checked: boolean) => {
+        if (checked) {
+            setSelectedOrders(new Set(filteredOrders.map(o => o.id)));
+        } else {
+            setSelectedOrders(new Set());
+        }
+    };
+
+    const handleSelectRow = (id: string, checked: boolean) => {
+        const newSet = new Set(selectedOrders);
+        if (checked) newSet.add(id);
+        else newSet.delete(id);
+        setSelectedOrders(newSet);
+    };
 
     // 2. Net Value (Total - Shipping - 10)
     const calculateNetValue = (order: any) => {
@@ -239,17 +378,63 @@ function LogisticsContent() {
                     <h1 className="text-3xl font-bold tracking-tight">Logistics</h1>
                 </div>
                 <div className="flex items-center gap-2 bg-background">
-                    <div className="relative">
-                        <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-                        <Input
-                            placeholder="Search orders..."
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
-                            className="pl-8 w-[250px]"
-                        />
-                    </div>
                     <DateRangePicker />
                 </div>
+            </div>
+
+            {/* Filters Bar */}
+            <div className="bg-muted/40 p-4 rounded-lg space-y-4">
+                <div className="flex flex-col sm:flex-row gap-4">
+                    <div className="relative flex-1">
+                        <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                        <Input
+                            placeholder="Search orders..."
+                            className="pl-8 bg-white"
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                        />
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 flex-1">
+                        <MultiSelect
+                            options={GOVERNORATES.map(g => ({ label: g, value: g }))}
+                            selected={govFilter}
+                            onChange={setGovFilter}
+                            placeholder="Governorate"
+                            className="bg-white"
+                        />
+                        <MultiSelect
+                            options={productsOptions}
+                            selected={productFilter}
+                            onChange={setProductFilter}
+                            placeholder="Product"
+                            className="bg-white"
+                        />
+                    </div>
+                    <Button variant="ghost" size="icon" onClick={() => { setSearchQuery(""); setGovFilter([]); setProductFilter([]); }}>
+                        <FilterX className="h-4 w-4" />
+                    </Button>
+                </div>
+
+                {selectedOrders.size > 0 && (
+                    <div className="flex items-center justify-between bg-primary/10 p-2 rounded px-4">
+                        <span className="text-sm font-medium text-primary">{selectedOrders.size} Selected</span>
+                        <div className="flex items-center gap-2">
+                            <Select onValueChange={handleBulkStatusChange}>
+                                <SelectTrigger className="w-[180px] h-8 bg-white">
+                                    <SelectValue placeholder="Bulk Action" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="Pending">Mark Pending</SelectItem>
+                                    <SelectItem value="Prepared">Mark Prepared</SelectItem>
+                                    <SelectItem value="Shipped">Mark Shipped</SelectItem>
+                                    <SelectItem value="Delivered">Mark Delivered</SelectItem>
+                                    <SelectItem value="Collected">Mark Collected</SelectItem>
+                                    <SelectItem value="Returned">Mark Returned</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+                    </div>
+                )}
             </div>
 
             {/* Top KPIs */}
@@ -417,18 +602,30 @@ function LogisticsContent() {
                     <Table>
                         <TableHeader>
                             <TableRow>
+                                <TableHead className="w-[40px]">
+                                    <Checkbox
+                                        checked={filteredOrders.length > 0 && selectedOrders.size === filteredOrders.length}
+                                        onCheckedChange={handleSelectAll}
+                                    />
+                                </TableHead>
                                 <TableHead>Order ID</TableHead>
                                 <TableHead>Date</TableHead>
                                 <TableHead>Customer</TableHead>
                                 <TableHead>Gov</TableHead>
                                 <TableHead>Status</TableHead>
                                 <TableHead>Net Value</TableHead>
-                                <TableHead>Actions</TableHead>
+                                <TableHead>Shipping</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
                             {filteredOrders.map((order) => (
-                                <TableRow key={order.id}>
+                                <TableRow key={order.id} data-state={selectedOrders.has(order.id) ? "selected" : ""}>
+                                    <TableCell>
+                                        <Checkbox
+                                            checked={selectedOrders.has(order.id)}
+                                            onCheckedChange={(c) => handleSelectRow(order.id, c as boolean)}
+                                        />
+                                    </TableCell>
                                     <TableCell className="font-mono text-xs">{order.id.slice(0, 8)}</TableCell>
                                     <TableCell>{new Date(order.created_at).toLocaleDateString()}</TableCell>
                                     <TableCell>
@@ -440,7 +637,7 @@ function LogisticsContent() {
                                         <select
                                             className="h-8 w-32 rounded-md border border-input bg-transparent px-2 text-xs"
                                             value={order.status}
-                                            onChange={(e) => updateStatus(order.id, e.target.value)}
+                                            onChange={(e) => initiateStatusChange(order.id, e.target.value)}
                                         >
                                             {STATUSES.map(s => (
                                                 <option key={s} value={s}>{s}</option>
@@ -449,7 +646,13 @@ function LogisticsContent() {
                                     </TableCell>
                                     <TableCell>{formatCurrency(calculateNetValue(order))}</TableCell>
                                     <TableCell>
-                                        {/* Add Detail View Link later if needed */}
+                                        {/* Show Shipping Company if exists */}
+                                        {order.shipping_company_id ? (
+                                            <Badge variant="outline" className="text-[10px] whitespace-nowrap">
+                                                <Truck className="h-3 w-3 mr-1" />
+                                                {shippingCompanies.find(c => c.id === order.shipping_company_id)?.name || "Unknown"}
+                                            </Badge>
+                                        ) : "-"}
                                     </TableCell>
                                 </TableRow>
                             ))}
@@ -457,6 +660,37 @@ function LogisticsContent() {
                     </Table>
                 </CardContent>
             </Card>
+
+            {/* Shipping Assignment Dialog */}
+            <Dialog open={shippingDialogOpen} onOpenChange={setShippingDialogOpen}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Select Shipping Company</DialogTitle>
+                        <DialogDescription>
+                            You must assign a courier/company to mark this as Shipped.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4 py-4">
+                        <div className="space-y-2">
+                            <Label>Shipping Company</Label>
+                            <Select value={selectedCompanyId} onValueChange={setSelectedCompanyId}>
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Select Company" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {shippingCompanies.map(c => (
+                                        <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setShippingDialogOpen(false)}>Cancel</Button>
+                        <Button onClick={confirmShippingAssignment}>Confirm & Update</Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }
