@@ -29,7 +29,7 @@ BEGIN
   IF array_length(p_upsert_items, 1) > 0 THEN
     INSERT INTO order_items (id, order_id, variant_id, quantity, price_at_sale, cost_at_sale)
     SELECT
-      (x->>'id')::UUID, -- If NULL, it will auto-generate if column is DEFAULT gen_random_uuid()
+      COALESCE((x->>'id')::UUID, gen_random_uuid()),
       p_order_id,
       (x->>'variant_id')::UUID,
       (x->>'quantity')::INTEGER,
