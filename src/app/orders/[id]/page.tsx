@@ -270,65 +270,48 @@ export default function OrderDetailsPage() {
                 await restockItems(restockQueue, orderId, "Order Edit: Removed Items/Qty");
             }
 
-            // 5. Update Order Record
-            const { error: orderError } = await supabase
-                .from("orders")
-                .update({
-                    created_at: new Date(editForm.createdAt).toISOString(),
-                    customer_info: {
-                        name: editForm.customerName,
-                        phone: editForm.customerPhone,
-                        phone2: editForm.customerPhone2,
-                        address: editForm.customerAddress,
-                        governorate: editForm.customerGov
-                    },
-                    status: editForm.status,
-                    shipping_cost: editForm.shippingCost,
-                    discount: editForm.discount,
-                    total_amount: newTotal,
-                    subtotal: newSubtotal,
-                    total_cost: newTotalCost,
-                    channel: editForm.channel,
-                    notes: editForm.notes,
-                    tags: editForm.tags.split(",").map(t => t.trim()).filter(Boolean)
-                })
-                .eq("id", orderId);
-
-            if (orderError) throw orderError;
-
-            // 6. Sync Order Items (Upsert/Delete)
-            // Existing items have IDs. New items don't.
-            // Items to Keep/Update/Add
-            const itemsToUpsert = editItems.map(item => ({
-                id: item.id || undefined, // If undefined, Supabase creates new ID
-                order_id: orderId,
+            // 5 & 6. Transactional Update via RPC
+            const upsertItemsPayload = editItems.map(item => ({
+                id: item.id || null, // null for new items
                 variant_id: item.variantId,
                 quantity: item.quantity,
                 price_at_sale: item.sale_price,
                 cost_at_sale: item.cost_price
             }));
 
-            const { data: upsertedData, error: upsertError } = await supabase
-                .from("order_items")
-                .upsert(itemsToUpsert)
-                .select("id");
-
-            if (upsertError) throw upsertError;
-
-            // Delete removed items
-            // Any item ID that was in original but NOT in upsertedData should be deleted?
-            // Wait, upsert response only returns IDs we sent or created.
-            // Safer way: Get IDs of items currently in `editItems` that HAVE `id`.
-            // Any ID in `order.items` that is NOT in `editItems` IDs list should be removed.
-
             const keptIds = editItems.map(i => i.id).filter(Boolean);
-            const itemsToDelete = originalItems
+            const deleteIds = originalItems
                 .filter((i: any) => !keptIds.includes(i.id))
                 .map((i: any) => i.id);
 
-            if (itemsToDelete.length > 0) {
-                await supabase.from("order_items").delete().in("id", itemsToDelete);
-            }
+            const orderUpdatePayload = {
+                created_at: new Date(editForm.createdAt).toISOString(),
+                status: editForm.status,
+                customer_info: {
+                    name: editForm.customerName,
+                    phone: editForm.customerPhone,
+                    phone2: editForm.customerPhone2,
+                    address: editForm.customerAddress,
+                    governorate: editForm.customerGov
+                },
+                shipping_cost: editForm.shippingCost,
+                discount: editForm.discount,
+                total_amount: newTotal,
+                subtotal: newSubtotal,
+                total_cost: newTotalCost,
+                channel: editForm.channel,
+                notes: editForm.notes,
+                tags: editForm.tags.split(",").map(t => t.trim()).filter(Boolean)
+            };
+
+            const { error: rpcError } = await supabase.rpc('update_order_and_items', {
+                p_order_id: orderId,
+                p_order_update: orderUpdatePayload,
+                p_upsert_items: upsertItemsPayload,
+                p_delete_item_ids: deleteIds
+            });
+
+            if (rpcError) throw rpcError;
 
             // 7. Handle Status Change Inventory Logic (Standard Return Logic)
             // *NOTE*: The above diff logic handles line-item changes.
