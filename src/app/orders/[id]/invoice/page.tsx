@@ -5,6 +5,7 @@ import Image from "next/image";
 import { supabase } from "@/lib/supabase";
 import { Loader2 } from "lucide-react";
 import { format } from "date-fns";
+import Barcode from 'react-barcode';
 
 // Types for the invoice data
 type InvoiceData = {
@@ -31,6 +32,8 @@ type InvoiceData = {
             };
         };
     }>;
+    payment_status?: string;
+    paid_amount?: number;
 };
 
 export default function InvoicePage({ params }: { params: Promise<{ id: string }> }) {
@@ -144,6 +147,9 @@ export default function InvoicePage({ params }: { params: Promise<{ id: string }
                     </div>
                     <div className="text-right">
                         <h2 className="text-3xl font-bold text-gray-800 uppercase tracking-wide">Invoice</h2>
+                        <div className="flex justify-end my-2">
+                            <Barcode value={order.id.slice(0, 8)} width={1.5} height={40} fontSize={12} />
+                        </div>
                         <p className="text-gray-500 mt-2">Order #: {order.id.slice(0, 8)}</p>
                         <p className="text-gray-500">Date: {format(new Date(order.created_at), "dd MMM yyyy")}</p>
                     </div>
@@ -204,6 +210,26 @@ export default function InvoicePage({ params }: { params: Promise<{ id: string }
                             <span className="font-bold text-xl">Total:</span>
                             <span className="font-bold text-xl">{order.total_amount.toFixed(2)} EGP</span>
                         </div>
+                        {order.payment_status !== "Not Paid" && (
+                            <>
+                                <div className="flex justify-between py-2 border-b text-green-700">
+                                    <span className="font-semibold">Paid ({order.payment_status}):</span>
+                                    <span>{order.payment_status === "Paid" ? order.total_amount.toFixed(2) : order.paid_amount?.toFixed(2)} EGP</span>
+                                </div>
+                                <div className="flex justify-between py-4 border-b-2 border-gray-800 bg-gray-50 px-2">
+                                    <span className="font-bold text-xl">Balance Due:</span>
+                                    <span className="font-bold text-xl">
+                                        {(order.payment_status === "Paid" ? 0 : Math.max(0, order.total_amount - (order.paid_amount || 0))).toFixed(2)} EGP
+                                    </span>
+                                </div>
+                            </>
+                        )}
+                        {order.payment_status === "Not Paid" && (
+                            <div className="flex justify-between py-4 border-b-2 border-gray-800 bg-gray-50 px-2">
+                                <span className="font-bold text-xl">Balance Due:</span>
+                                <span className="font-bold text-xl">{order.total_amount.toFixed(2)} EGP</span>
+                            </div>
+                        )}
                     </div>
                 </div>
 

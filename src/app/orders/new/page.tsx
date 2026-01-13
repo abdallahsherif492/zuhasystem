@@ -96,6 +96,8 @@ export default function NewOrderPage() {
     const [tags, setTags] = useState("");
     const [notes, setNotes] = useState("");
     const [orderDate, setOrderDate] = useState<Date>(new Date());
+    const [paymentStatus, setPaymentStatus] = useState("Not Paid");
+    const [paidAmount, setPaidAmount] = useState(0);
 
     // Cart Selection State
     const [selectedProduct, setSelectedProduct] = useState<string>("");
@@ -332,7 +334,9 @@ export default function NewOrderPage() {
                     channel: channel,
                     tags: tags.split(",").map(t => t.trim()).filter(Boolean),
                     notes: notes,
-                    created_at: orderDate.toISOString()
+                    created_at: orderDate.toISOString(),
+                    payment_status: paymentStatus,
+                    paid_amount: paymentStatus === "Not Paid" ? 0 : paymentStatus === "Paid" ? calculateTotal() : paidAmount,
                 })
                 .select()
                 .single();
@@ -736,6 +740,32 @@ export default function NewOrderPage() {
                                 Auto-set: {customerGov === "Cairo" || customerGov === "Giza" ? "45" : "80"} if valid gov.
                             </p>
                         </div>
+
+                        <div className="space-y-2">
+                            <Label>Payment Status</Label>
+                            <Select value={paymentStatus} onValueChange={setPaymentStatus}>
+                                <SelectTrigger>
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="Not Paid">Not Paid</SelectItem>
+                                    <SelectItem value="Partially Paid">Partially Paid</SelectItem>
+                                    <SelectItem value="Paid">Paid</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+
+                        {paymentStatus === "Partially Paid" && (
+                            <div className="space-y-2">
+                                <Label>Paid Amount (EGP)</Label>
+                                <Input
+                                    type="number"
+                                    min="0"
+                                    value={paidAmount}
+                                    onChange={(e) => setPaidAmount(parseFloat(e.target.value) || 0)}
+                                />
+                            </div>
+                        )}
                     </CardContent>
                 </Card>
 

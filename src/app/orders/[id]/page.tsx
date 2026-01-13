@@ -84,7 +84,10 @@ export default function OrderDetailsPage() {
         shippingCompanyId: "",
         tags: "",
         notes: "",
-        createdAt: ""
+
+        createdAt: "",
+        paymentStatus: "",
+        paidAmount: 0,
     });
 
     // Items Editing State
@@ -148,7 +151,10 @@ export default function OrderDetailsPage() {
                 shippingCompanyId: data.shipping_company_id || "",
                 tags: (data.tags || []).join(", "),
                 notes: data.notes || "",
-                createdAt: data.created_at ? new Date(data.created_at).toISOString().slice(0, 16) : ""
+
+                createdAt: data.created_at ? new Date(data.created_at).toISOString().slice(0, 16) : "",
+                paymentStatus: data.payment_status || "Not Paid",
+                paidAmount: data.paid_amount || 0
             });
 
             // Initialize Edit Items
@@ -317,8 +323,11 @@ export default function OrderDetailsPage() {
                 total_cost: newTotalCost,
                 channel: editForm.channel,
                 shipping_company_id: editForm.shippingCompanyId || null,
+
                 notes: editForm.notes,
-                tags: editForm.tags.split(",").map(t => t.trim()).filter(Boolean)
+                tags: editForm.tags.split(",").map(t => t.trim()).filter(Boolean),
+                payment_status: editForm.paymentStatus,
+                paid_amount: editForm.paymentStatus === "Not Paid" ? 0 : editForm.paymentStatus === "Paid" ? newTotal : editForm.paidAmount,
             };
 
             const { error: rpcError } = await supabase.rpc('update_order_and_items', {
@@ -571,7 +580,40 @@ export default function OrderDetailsPage() {
                             ) : (
                                 <div className="text-sm whitespace-pre-wrap">{order.notes || "No notes"}</div>
                             )}
+
                         </div>
+                        <div className="space-y-2">
+                            <Label>Payment Status</Label>
+                            {isEditing ? (
+                                <Select value={editForm.paymentStatus} onValueChange={v => setEditForm({ ...editForm, paymentStatus: v })}>
+                                    <SelectTrigger><SelectValue /></SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="Not Paid">Not Paid</SelectItem>
+                                        <SelectItem value="Partially Paid">Partially Paid</SelectItem>
+                                        <SelectItem value="Paid">Paid</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            ) : (
+                                <div className="space-x-2">
+                                    <Badge variant={order.payment_status === 'Paid' ? 'secondary' : 'outline'}>{order.payment_status || 'Not Paid'}</Badge>
+                                    {order.payment_status === 'Partially Paid' && (
+                                        <span className="text-sm text-muted-foreground">{formatCurrency(order.paid_amount)} paid</span>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+
+                        {editForm.paymentStatus === "Partially Paid" && isEditing && (
+                            <div className="space-y-2">
+                                <Label>Paid Amount (EGP)</Label>
+                                <Input
+                                    type="number"
+                                    min="0"
+                                    value={editForm.paidAmount}
+                                    onChange={(e) => setEditForm({ ...editForm, paidAmount: parseFloat(e.target.value) || 0 })}
+                                />
+                            </div>
+                        )}
                     </CardContent>
                 </Card>
 

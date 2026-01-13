@@ -6,6 +6,7 @@ import { supabase } from "@/lib/supabase";
 import { Loader2 } from "lucide-react";
 import { format } from "date-fns";
 import { useSearchParams } from "next/navigation";
+import Barcode from 'react-barcode';
 
 type InvoiceData = {
     id: string;
@@ -33,6 +34,8 @@ type InvoiceData = {
             };
         };
     }>;
+    payment_status?: string;
+    paid_amount?: number;
 };
 
 function InvoiceCard({ order }: { order: InvoiceData }) {
@@ -42,7 +45,16 @@ function InvoiceCard({ order }: { order: InvoiceData }) {
 
     const baseNotes = order.notes || "";
     const requestNotes = "قابل للكسر";
+
     const combinedNotes = baseNotes ? `${baseNotes} | ${requestNotes}` : requestNotes;
+
+    // COD Calculation
+    let collectAmount = order.total_amount;
+    if (order.payment_status === "Paid") {
+        collectAmount = 0;
+    } else if (order.payment_status === "Partially Paid") {
+        collectAmount = Math.max(0, order.total_amount - (order.paid_amount || 0));
+    }
 
     return (
         <div className="waybill-container border-b-2 border-dashed border-gray-400 p-4 h-[33.3vh] flex flex-col justify-between text-xs box-border overflow-hidden">
@@ -59,7 +71,10 @@ function InvoiceCard({ order }: { order: InvoiceData }) {
                 </div>
                 <div className="text-right">
                     <h2 className="text-xl font-bold uppercase">Waybill</h2>
-                    <p className="font-mono">{order.id.slice(0, 8)}</p>
+                    <div className="flex justify-end">
+                        <Barcode value={order.id.slice(0, 8)} width={1} height={30} fontSize={10} displayValue={false} />
+                    </div>
+                    <p className="font-mono text-xs">{order.id.slice(0, 8)}</p>
                     <p>{format(new Date(order.created_at), "dd/MM/yyyy")}</p>
                 </div>
             </div>
@@ -109,10 +124,19 @@ function InvoiceCard({ order }: { order: InvoiceData }) {
                 <div className="text-[10px] text-gray-500 text-left">
                     Sub: {order.subtotal?.toFixed(0)} | Ship: {order.shipping_cost?.toFixed(0)}
                     {order.discount > 0 ? ` | Disc: -${order.discount.toFixed(0)}` : ''}
+                    {order.payment_status === 'Partially Paid' && ` | Paid: ${order.paid_amount?.toFixed(0)}`}
                 </div>
                 <div>
-                    <span className="font-bold text-lg mr-2">TOTAL:</span>
-                    <span className="font-bold text-xl">{order.total_amount.toFixed(0)} EGP</span>
+                    <div className="flex flex-col items-end">
+                        {order.payment_status === "Paid" ? (
+                            <span className="font-bold text-xl uppercase border-2 border-black px-2">PAID</span>
+                        ) : (
+                            <>
+                                <span className="font-bold text-xs mr-2">REQUIRED:</span>
+                                <span className="font-bold text-xl">{collectAmount.toFixed(0)} EGP</span>
+                            </>
+                        )}
+                    </div>
                 </div>
             </div>
         </div>

@@ -53,7 +53,9 @@ interface Order {
             }
         }
     }[];
-    notes?: string; // Added notes for export
+    notes?: string;
+    payment_status?: string;
+    paid_amount?: number;
 }
 
 function OrdersContent() {
@@ -171,6 +173,16 @@ function OrdersContent() {
                 const requestNotes = "قابل للكسر"; // Fragile
                 const combinedNotes = baseNotes ? `${baseNotes} | ${requestNotes}` : requestNotes;
 
+                const paymentStatus = order.payment_status || "Not Paid";
+                const paidAmount = order.paid_amount || 0;
+                let collectAmount = order.total_amount;
+
+                if (paymentStatus === "Paid") {
+                    collectAmount = 0;
+                } else if (paymentStatus === "Partially Paid") {
+                    collectAmount = Math.max(0, order.total_amount - paidAmount);
+                }
+
                 return {
                     "كـــود الــتــاجــر": "",
                     "اسم الراسل علي البوليصة": "Zuha Home",
@@ -181,10 +193,12 @@ function OrdersContent() {
                     "الـــــعــــنــــوان": order.customer_info?.address || "",
                     "مــحــتــوى الــشــحــنــة": content,
                     "الــكــمــيــة": 1,
-                    "قــيــمــة الــشــحــنــة": order.total_amount,
+                    "قــيــمــة الــشــحــنــة": collectAmount, // COD Amount
                     "شــحــن عــلــى": "المستلم",
                     "شـــحــنــة اســتــبدال": "لا",
-                    "مسموح بفتح الشحنة": "نعم"
+                    "مسموح بفتح الشحنة": "نعم",
+                    "حالة الدفع": paymentStatus,
+                    "المبلغ المدفوع": paidAmount
                 };
             });
 

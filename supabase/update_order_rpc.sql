@@ -22,6 +22,8 @@ BEGIN
     channel = p_order_update->>'channel',
     notes = p_order_update->>'notes',
     shipping_company_id = (p_order_update->>'shipping_company_id')::UUID,
+    payment_status = p_order_update->>'payment_status',
+    paid_amount = (p_order_update->>'paid_amount')::NUMERIC,
     tags = (SELECT array_agg(x) FROM jsonb_array_elements_text(p_order_update->'tags') t(x))
   WHERE id = p_order_id;
 
