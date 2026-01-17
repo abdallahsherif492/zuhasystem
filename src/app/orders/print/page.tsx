@@ -64,40 +64,40 @@ function InvoiceCard({ order, isFirstOnPage }: { order: InvoiceData, isFirstOnPa
 
     return (
         <div className={`
-             box-border w-full flex flex-col justify-between overflow-hidden bg-white p-4
-             ${isFirstOnPage ? 'border-b-2 border-dashed border-black' : ''}
-        `} style={{ height: '148mm' }}>
+             box-border w-full flex flex-col justify-between overflow-hidden bg-white p-3
+             ${isFirstOnPage ? 'border-b-2 border-dashed border-black' : 'border-t-2 border-dashed border-black'}
+        `} style={{ height: '98mm' }}>
             {/* Header */}
             <div className="flex justify-between items-start mb-0">
                 <div className="flex items-center gap-2">
-                    <div className="relative h-12 w-12 grayscale">
+                    <div className="relative h-10 w-10 grayscale">
                         <Image src="/logo.png" alt="Zuha" fill className="object-contain" />
                     </div>
                     <div>
-                        <h1 className="text-lg font-bold">Zuha Home</h1>
-                        <p className="text-[10px] text-gray-500">Fast & Reliable Shipping</p>
+                        <h1 className="text-base font-bold leading-none">Zuha Home</h1>
+                        <p className="text-[9px] text-gray-500">Fast & Reliable Shipping</p>
                     </div>
                 </div>
                 <div className="text-right">
-                    <h2 className="text-xl font-bold uppercase">Waybill</h2>
+                    <h2 className="text-lg font-bold uppercase leading-none">Waybill</h2>
                     <div className="flex justify-end">
-                        <Barcode value={order.id.slice(0, 8)} width={1} height={25} fontSize={10} displayValue={false} />
+                        <Barcode value={order.id.slice(0, 8)} width={1} height={20} fontSize={9} displayValue={false} />
                     </div>
-                    <p className="font-mono text-xs mt-1">{order.id.slice(0, 8)}</p>
-                    <p className="text-[10px]">{format(new Date(order.created_at), "dd/MM/yyyy")}</p>
+                    <p className="font-mono text-[10px] leading-none mt-0.5">{order.id.slice(0, 8)}</p>
+                    <p className="text-[9px] leading-none">{format(new Date(order.created_at), "dd/MM/yyyy")}</p>
                 </div>
             </div>
 
             <div className="grid grid-cols-2 gap-2 mb-1">
                 <div>
-                    <span className="font-bold uppercase text-gray-500 block text-[9px]">Deliver To:</span>
-                    <p className="font-bold text-sm leading-tight">{order.customer_info.name}</p>
-                    <p className="text-xs">{combinedPhone}</p>
-                    <p className="text-xs leading-tight mt-1">{order.customer_info.address}, {order.customer_info.governorate}</p>
+                    <span className="font-bold uppercase text-gray-500 block text-[8px]">Deliver To:</span>
+                    <p className="font-bold text-xs leading-tight line-clamp-1">{order.customer_info.name}</p>
+                    <p className="text-[10px] leading-tight">{combinedPhone}</p>
+                    <p className="text-[10px] leading-tight mt-0.5 line-clamp-2">{order.customer_info.address}, {order.customer_info.governorate}</p>
                 </div>
                 <div>
-                    <span className="font-bold uppercase text-gray-500 block text-[9px]">Notes:</span>
-                    <p className="font-bold text-xs bg-gray-100 p-1 rounded min-h-[40px]">{combinedNotes}</p>
+                    <span className="font-bold uppercase text-gray-500 block text-[8px]">Notes:</span>
+                    <p className="font-bold text-[10px] bg-gray-100 p-1 rounded min-h-[35px] leading-tight line-clamp-2">{combinedNotes}</p>
                 </div>
             </div>
 
@@ -105,26 +105,26 @@ function InvoiceCard({ order, isFirstOnPage }: { order: InvoiceData, isFirstOnPa
             <div className="flex-1 overflow-hidden relative border-t border-b border-gray-200 my-1">
                 <table className="w-full text-left">
                     <thead className="border-b border-gray-400">
-                        <tr className="text-[10px]">
-                            <th className="py-1">Item</th>
-                            <th className="py-1 text-center w-8">Qty</th>
-                            <th className="py-1 text-right w-16">Total</th>
+                        <tr className="text-[9px]">
+                            <th className="py-0.5">Item</th>
+                            <th className="py-0.5 text-center w-8">Qty</th>
+                            <th className="py-0.5 text-right w-14">Total</th>
                         </tr>
                     </thead>
-                    <tbody className="text-[10px]">
-                        {order.items.slice(0, 6).map((item, idx) => (
+                    <tbody className="text-[9px]">
+                        {order.items.slice(0, 3).map((item, idx) => (
                             <tr key={idx} className="border-b border-gray-50">
-                                <td className="py-0.5 truncate max-w-[180px] font-medium">
-                                    {item.variant.product.name} <span className="text-[9px] text-gray-500">({item.variant.title})</span>
+                                <td className="py-0.5 truncate max-w-[150px] font-medium">
+                                    {item.variant.product.name} <span className="text-[8px] text-gray-500">({item.variant.title})</span>
                                 </td>
                                 <td className="py-0.5 text-center font-bold">{item.quantity}</td>
                                 <td className="py-0.5 text-right">{(item.quantity * item.price_at_sale).toFixed(0)}</td>
                             </tr>
                         ))}
-                        {order.items.length > 6 && (
+                        {order.items.length > 3 && (
                             <tr>
-                                <td colSpan={3} className="text-center italic text-[9px] text-gray-400 py-0.5">
-                                    ...and {order.items.length - 6} more items
+                                <td colSpan={3} className="text-center italic text-[8px] text-gray-400 py-0.5">
+                                    ...and {order.items.length - 3} more
                                 </td>
                             </tr>
                         )}
@@ -133,8 +133,8 @@ function InvoiceCard({ order, isFirstOnPage }: { order: InvoiceData, isFirstOnPa
             </div>
 
             {/* Footer */}
-            <div className="mt-1 pt-1 flex justify-between items-end">
-                <div className="text-[9px] text-gray-500 pb-1">
+            <div className="mt-0.5 flex justify-between items-end">
+                <div className="text-[9px] text-gray-500 leading-tight">
                     <div>Sub: {order.subtotal?.toFixed(0)} | Ship: {order.shipping_cost?.toFixed(0)}</div>
                     <div>
                         {order.discount > 0 && `Disc: -${order.discount.toFixed(0)} `}
@@ -143,11 +143,11 @@ function InvoiceCard({ order, isFirstOnPage }: { order: InvoiceData, isFirstOnPa
                 </div>
                 <div className="text-right">
                     {order.payment_status === "Paid" ? (
-                        <span className="font-bold text-xl uppercase border-2 border-black px-2 inline-block">PAID</span>
+                        <span className="font-bold text-lg uppercase border-2 border-black px-1 inline-block">PAID</span>
                     ) : (
-                        <div className="flex flex-col items-end">
-                            <span className="font-bold text-[9px] uppercase text-gray-500">Amount Due</span>
-                            <span className="font-bold text-2xl leading-none">{collectAmount.toFixed(0)} <span className="text-sm">EGP</span></span>
+                        <div className="flex flex-col items-end leading-none">
+                            <span className="font-bold text-[8px] uppercase text-gray-500">Amount Due</span>
+                            <span className="font-bold text-xl">{collectAmount.toFixed(0)} <span className="text-xs">EGP</span></span>
                         </div>
                     )}
                 </div>
@@ -207,7 +207,7 @@ function PrintContent() {
     if (loading) return <div className="flex justify-center p-10"><Loader2 className="animate-spin" /> Preparing Waybills...</div>;
     if (orders.length === 0) return <div>No orders selected</div>;
 
-    const pages = chunk(orders, 2);
+    const pages = chunk(orders, 3);
 
     return (
         <div className="min-h-screen bg-gray-100 p-8 print-reset-container">
