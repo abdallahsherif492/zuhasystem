@@ -57,7 +57,7 @@ function InvoiceCard({ order }: { order: InvoiceData }) {
     }
 
     return (
-        <div className="waybill-container border-b-2 border-dashed border-gray-400 p-6 h-[49.5vh] flex flex-col justify-between text-sm box-border overflow-hidden">
+        <div className="waybill-container border-b border-dashed border-gray-400 p-6 flex flex-col justify-between text-sm box-border overflow-hidden bg-white">
             {/* Header */}
             <div className="flex justify-between items-start mb-2">
                 <div className="flex items-center gap-2">
@@ -103,17 +103,17 @@ function InvoiceCard({ order }: { order: InvoiceData }) {
                         </tr>
                     </thead>
                     <tbody>
-                        {order.items.slice(0, 4).map((item, idx) => (
+                        {order.items.slice(0, 6).map((item, idx) => (
                             <tr key={idx} className="border-b border-gray-100">
-                                <td className="py-1 truncate max-w-[150px]">
-                                    {item.variant.product.name} <span className="text-[10px] text-gray-500">({item.variant.title})</span>
+                                <td className="py-1 truncate max-w-[200px] text-sm font-medium">
+                                    {item.variant.product.name} <span className="text-xs text-gray-500">({item.variant.title})</span>
                                 </td>
-                                <td className="py-1 text-center">{item.quantity}</td>
+                                <td className="py-1 text-center font-bold">{item.quantity}</td>
                                 <td className="py-1 text-right">{(item.quantity * item.price_at_sale).toFixed(0)}</td>
                             </tr>
                         ))}
-                        {order.items.length > 4 && (
-                            <tr><td colSpan={3} className="text-center italic text-gray-500 py-1">...and {order.items.length - 4} more items</td></tr>
+                        {order.items.length > 6 && (
+                            <tr><td colSpan={3} className="text-center italic text-gray-500 py-1">...and {order.items.length - 6} more items</td></tr>
                         )}
                     </tbody>
                 </table>
@@ -198,15 +198,19 @@ function PrintContent() {
     if (orders.length === 0) return <div>No orders selected</div>;
 
     return (
-        <div className="p-0 m-0 print-reset">
+        <div className="fixed inset-0 z-[9999] bg-white overflow-auto p-0 m-0 print-reset">
             <style jsx global>{`
+                /* Hide Layout Elements */
+                nav, aside, header, footer, .sidebar { display: none !important; }
+                
                 @media print {
                     @page { size: A4; margin: 0; }
                     body { margin: 0; background: white; -webkit-print-color-adjust: exact; }
-                    nav, header, footer, .no-print { display: none !important; }
+                    .print-reset { position: static; overflow: visible; } /* Reset fixed pos for print */
                     .waybill-container {
-                        height: 49.5vh; /* 2 per page */
+                        height: 50vh; /* Exactly half page */
                         page-break-inside: avoid;
+                        border-bottom: 1px dashed #000;
                     }
                 }
             `}</style>
