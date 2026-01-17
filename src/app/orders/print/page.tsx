@@ -57,7 +57,7 @@ function InvoiceCard({ order }: { order: InvoiceData }) {
     }
 
     return (
-        <div className="waybill-container border-b-2 border-dashed border-gray-400 p-4 h-[33.3vh] flex flex-col justify-between text-xs box-border overflow-hidden">
+        <div className="waybill-container border-b-2 border-dashed border-gray-400 p-6 h-[49.5vh] flex flex-col justify-between text-sm box-border overflow-hidden">
             {/* Header */}
             <div className="flex justify-between items-start mb-2">
                 <div className="flex items-center gap-2">
@@ -205,7 +205,7 @@ function PrintContent() {
                     body { margin: 0; background: white; -webkit-print-color-adjust: exact; }
                     nav, header, footer, .no-print { display: none !important; }
                     .waybill-container {
-                        height: 33vh; /* Approximate 1/3 of page */
+                        height: 49.5vh; /* 2 per page */
                         page-break-inside: avoid;
                     }
                 }
