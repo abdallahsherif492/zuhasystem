@@ -21,7 +21,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Loader2, Search, ArrowUpRight, ArrowDownRight, Package, Box, Plus } from "lucide-react";
+import { Loader2, Search, ArrowUpRight, ArrowDownRight, Package, Box, Plus, Edit } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import {
@@ -33,6 +33,13 @@ import {
     DialogTitle,
     DialogTrigger,
 } from "@/components/ui/dialog";
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
@@ -93,6 +100,7 @@ export default function InventoryPage() {
     const [isRestockOpen, setIsRestockOpen] = useState(false);
     const [selectedVariant, setSelectedVariant] = useState<any>(null);
     const [restockForm, setRestockForm] = useState({
+        type: "add", // add, reduce, set
         qty: 0,
         costPrice: 0,
         supplier: "",
@@ -101,6 +109,7 @@ export default function InventoryPage() {
     const openRestock = (item: any) => {
         setSelectedVariant(item);
         setRestockForm({
+            type: "add",
             qty: 0,
             costPrice: item.cost_price || 0,
             supplier: "",
@@ -110,23 +119,56 @@ export default function InventoryPage() {
 
     const handleRestockSubmit = async () => {
         if (!selectedVariant) return;
-        if (restockForm.qty <= 0) {
+        if (restockForm.type !== 'set' && restockForm.qty <= 0) {
             toast.error("Quantity must be greater than 0");
+            return;
+        }
+        if (restockForm.type === 'set' && restockForm.qty < 0) {
+            toast.error("Quantity cannot be negative");
             return;
         }
 
         try {
             setLoading(true);
 
-            // 1. Increment Stock
-            const { error: rpcError } = await supabase.rpc('increment_stock', {
-                row_id: selectedVariant.id,
-                amount: restockForm.qty
-            });
-            if (rpcError) throw rpcError;
+            let changeAmount = 0;
+            let transactionType = 'manual_adjustment';
 
-            // 2. Update Cost Price (if changed)
-            if (restockForm.costPrice !== selectedVariant.cost_price) {
+            // Calculate Change
+            if (restockForm.type === 'add') {
+                changeAmount = restockForm.qty;
+                transactionType = 'restock';
+            } else if (restockForm.type === 'reduce') {
+                changeAmount = -restockForm.qty;
+                transactionType = 'manual_deduction';
+            } else if (restockForm.type === 'set') {
+                changeAmount = restockForm.qty - selectedVariant.stock_qty;
+                transactionType = 'manual_set';
+            }
+
+            if (changeAmount === 0 && restockForm.type === 'set') {
+                toast.info("No change in quantity");
+                setIsRestockOpen(false);
+                return;
+            }
+
+            // 1. Update Stock
+            if (changeAmount > 0) {
+                const { error } = await supabase.rpc('increment_stock', {
+                    row_id: selectedVariant.id,
+                    amount: changeAmount
+                });
+                if (error) throw error;
+            } else if (changeAmount < 0) {
+                const { error } = await supabase.rpc('decrement_stock', {
+                    row_id: selectedVariant.id,
+                    amount: Math.abs(changeAmount)
+                });
+                if (error) throw error;
+            }
+
+            // 2. Update Cost Price (if changed & adding/setting)
+            if (restockForm.costPrice !== selectedVariant.cost_price && restockForm.type !== 'reduce') {
                 await supabase.from('variants')
                     .update({ cost_price: restockForm.costPrice })
                     .eq('id', selectedVariant.id);
@@ -135,18 +177,18 @@ export default function InventoryPage() {
             // 3. Log Transaction
             await supabase.from('inventory_transactions').insert({
                 variant_id: selectedVariant.id,
-                quantity_change: restockForm.qty,
-                transaction_type: 'restock',
+                quantity_change: changeAmount,
+                transaction_type: transactionType,
                 reference_id: null,
-                note: `Supplier: ${restockForm.supplier || 'Unknown'}`
+                note: `Action: ${restockForm.type}. Note: ${restockForm.supplier || 'N/A'}`
             });
 
-            toast.success("Stock added successfully");
+            toast.success("Stock updated successfully");
             setIsRestockOpen(false);
             fetchData(); // Refresh list
         } catch (error: any) {
             console.error(error);
-            toast.error("Failed to add stock");
+            toast.error("Failed to update stock");
         } finally {
             setLoading(false);
         }
@@ -278,7 +320,7 @@ export default function InventoryPage() {
                                             <TableCell className="text-right font-bold">{formatCurrency(item.stock_qty * item.cost_price)}</TableCell>
                                             <TableCell className="text-right">
                                                 <Button size="sm" variant="outline" onClick={() => openRestock(item)}>
-                                                    <Plus className="h-4 w-4 mr-1" /> Add Stock
+                                                    <Edit className="h-4 w-4 mr-1" /> Adjust
                                                 </Button>
                                             </TableCell>
                                         </TableRow>
@@ -291,14 +333,32 @@ export default function InventoryPage() {
                     <Dialog open={isRestockOpen} onOpenChange={setIsRestockOpen}>
                         <DialogContent>
                             <DialogHeader>
-                                <DialogTitle>Add Stock: {selectedVariant?.product?.name} - {selectedVariant?.title}</DialogTitle>
+                                <DialogTitle>Adjust Stock: {selectedVariant?.product?.name} - {selectedVariant?.title}</DialogTitle>
                                 <DialogDescription>
                                     Enter quantity received and supplier details.
                                 </DialogDescription>
                             </DialogHeader>
                             <div className="grid gap-4 py-4">
                                 <div className="grid grid-cols-4 items-center gap-4">
-                                    <Label className="text-right">Quantity</Label>
+                                    <Label className="text-right">Action</Label>
+                                    <Select
+                                        value={restockForm.type}
+                                        onValueChange={(v) => setRestockForm({ ...restockForm, type: v })}
+                                    >
+                                        <SelectTrigger className="col-span-3">
+                                            <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="add">Add Stock (+)</SelectItem>
+                                            <SelectItem value="reduce">Remove Stock (-)</SelectItem>
+                                            <SelectItem value="set">Set Exact Quantity (=)</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                                <div className="grid grid-cols-4 items-center gap-4">
+                                    <Label className="text-right">
+                                        {restockForm.type === 'set' ? 'New Quantity' : 'Quantity'}
+                                    </Label>
                                     <Input
                                         type="number"
                                         className="col-span-3"
@@ -306,27 +366,29 @@ export default function InventoryPage() {
                                         onChange={(e) => setRestockForm({ ...restockForm, qty: parseInt(e.target.value) || 0 })}
                                     />
                                 </div>
+                                {restockForm.type !== 'reduce' && (
+                                    <div className="grid grid-cols-4 items-center gap-4">
+                                        <Label className="text-right">Unit Cost</Label>
+                                        <Input
+                                            type="number"
+                                            className="col-span-3"
+                                            value={restockForm.costPrice}
+                                            onChange={(e) => setRestockForm({ ...restockForm, costPrice: parseFloat(e.target.value) || 0 })}
+                                        />
+                                    </div>
+                                )}
                                 <div className="grid grid-cols-4 items-center gap-4">
-                                    <Label className="text-right">Unit Cost</Label>
-                                    <Input
-                                        type="number"
-                                        className="col-span-3"
-                                        value={restockForm.costPrice}
-                                        onChange={(e) => setRestockForm({ ...restockForm, costPrice: parseFloat(e.target.value) || 0 })}
-                                    />
-                                </div>
-                                <div className="grid grid-cols-4 items-center gap-4">
-                                    <Label className="text-right">Supplier</Label>
+                                    <Label className="text-right">Note/Reason</Label>
                                     <Input
                                         className="col-span-3"
-                                        placeholder="e.g. Ali Baba, Local Market"
+                                        placeholder={restockForm.type === 'add' ? "Supplier Name" : "Reason for adjustment"}
                                         value={restockForm.supplier}
                                         onChange={(e) => setRestockForm({ ...restockForm, supplier: e.target.value })}
                                     />
                                 </div>
                             </div>
                             <DialogFooter>
-                                <Button onClick={handleRestockSubmit}>Confirm Add Stock</Button>
+                                <Button onClick={handleRestockSubmit}>Confirm Update</Button>
                             </DialogFooter>
                         </DialogContent>
                     </Dialog>
