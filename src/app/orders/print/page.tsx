@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useState, use } from "react";
+import { useEffect, useState } from "react";
 import Image from "next/image";
 import { supabase } from "@/lib/supabase";
 import { Loader2 } from "lucide-react";
 import { format } from "date-fns";
 import { useSearchParams } from "next/navigation";
 import Barcode from 'react-barcode';
+import { Suspense } from "react";
 
 type InvoiceData = {
     id: string;
@@ -38,14 +39,19 @@ type InvoiceData = {
     paid_amount?: number;
 };
 
-function InvoiceCard({ order }: { order: InvoiceData }) {
+// Helper to chunk array
+const chunk = <T,>(arr: T[], size: number): T[][] =>
+    Array.from({ length: Math.ceil(arr.length / size) }, (v, i) =>
+        arr.slice(i * size, i * size + size)
+    );
+
+function InvoiceCard({ order, isFirstOnPage }: { order: InvoiceData, isFirstOnPage: boolean }) {
     const phone1 = order.customer_info?.phone || "";
     const phone2 = order.customer_info?.phone2;
     const combinedPhone = phone2 ? `${phone1} / ${phone2}` : phone1;
 
     const baseNotes = order.notes || "";
     const requestNotes = "قابل للكسر";
-
     const combinedNotes = baseNotes ? `${baseNotes} | ${requestNotes}` : requestNotes;
 
     // COD Calculation
@@ -57,9 +63,12 @@ function InvoiceCard({ order }: { order: InvoiceData }) {
     }
 
     return (
-        <div className="waybill-container flex flex-col justify-between text-sm box-border overflow-hidden bg-white p-4 h-[49.8vh]">
+        <div className={`
+             box-border w-full flex flex-col justify-between overflow-hidden bg-white p-4
+             ${isFirstOnPage ? 'border-b-2 border-dashed border-black' : ''}
+        `} style={{ height: '148mm' }}>
             {/* Header */}
-            <div className="flex justify-between items-start mb-2">
+            <div className="flex justify-between items-start mb-0">
                 <div className="flex items-center gap-2">
                     <div className="relative h-12 w-12 grayscale">
                         <Image src="/logo.png" alt="Zuha" fill className="object-contain" />
@@ -72,50 +81,50 @@ function InvoiceCard({ order }: { order: InvoiceData }) {
                 <div className="text-right">
                     <h2 className="text-xl font-bold uppercase">Waybill</h2>
                     <div className="flex justify-end">
-                        <Barcode value={order.id.slice(0, 8)} width={1} height={30} fontSize={10} displayValue={false} />
+                        <Barcode value={order.id.slice(0, 8)} width={1} height={25} fontSize={10} displayValue={false} />
                     </div>
-                    <p className="font-mono text-xs">{order.id.slice(0, 8)}</p>
-                    <p>{format(new Date(order.created_at), "dd/MM/yyyy")}</p>
+                    <p className="font-mono text-xs mt-1">{order.id.slice(0, 8)}</p>
+                    <p className="text-[10px]">{format(new Date(order.created_at), "dd/MM/yyyy")}</p>
                 </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4 mb-2">
+            <div className="grid grid-cols-2 gap-2 mb-1">
                 <div>
-                    <span className="font-bold uppercase text-gray-500 block text-[10px]">Deliver To:</span>
-                    <p className="font-bold text-sm">{order.customer_info.name}</p>
-                    <p className="items-center">{combinedPhone}</p>
-                    <p className="leading-tight mt-1">{order.customer_info.address}, {order.customer_info.governorate}</p>
+                    <span className="font-bold uppercase text-gray-500 block text-[9px]">Deliver To:</span>
+                    <p className="font-bold text-sm leading-tight">{order.customer_info.name}</p>
+                    <p className="text-xs">{combinedPhone}</p>
+                    <p className="text-xs leading-tight mt-1">{order.customer_info.address}, {order.customer_info.governorate}</p>
                 </div>
                 <div>
-                    <span className="font-bold uppercase text-gray-500 block text-[10px]">Notes:</span>
-                    <p className="font-bold text-sm bg-gray-100 p-1 rounded">{combinedNotes}</p>
+                    <span className="font-bold uppercase text-gray-500 block text-[9px]">Notes:</span>
+                    <p className="font-bold text-xs bg-gray-100 p-1 rounded min-h-[40px]">{combinedNotes}</p>
                 </div>
             </div>
 
-            {/* Items (Simplified table) */}
-            <div className="flex-1 overflow-hidden">
+            {/* Items Table - Flex Grow to Fill Space */}
+            <div className="flex-1 overflow-hidden relative border-t border-b border-gray-200 my-1">
                 <table className="w-full text-left">
-                    <thead className="border-b border-black">
-                        <tr>
+                    <thead className="border-b border-gray-400">
+                        <tr className="text-[10px]">
                             <th className="py-1">Item</th>
                             <th className="py-1 text-center w-8">Qty</th>
                             <th className="py-1 text-right w-16">Total</th>
                         </tr>
                     </thead>
-                    <tbody className="text-xs">
-                        {order.items.slice(0, 5).map((item, idx) => (
-                            <tr key={idx} className="border-b border-gray-100">
-                                <td className="py-0.5 truncate max-w-[200px] font-medium">
-                                    {item.variant.product.name} <span className="text-[10px] text-gray-500">({item.variant.title})</span>
+                    <tbody className="text-[10px]">
+                        {order.items.slice(0, 6).map((item, idx) => (
+                            <tr key={idx} className="border-b border-gray-50">
+                                <td className="py-0.5 truncate max-w-[180px] font-medium">
+                                    {item.variant.product.name} <span className="text-[9px] text-gray-500">({item.variant.title})</span>
                                 </td>
                                 <td className="py-0.5 text-center font-bold">{item.quantity}</td>
                                 <td className="py-0.5 text-right">{(item.quantity * item.price_at_sale).toFixed(0)}</td>
                             </tr>
                         ))}
-                        {order.items.length > 5 && (
+                        {order.items.length > 6 && (
                             <tr>
-                                <td colSpan={3} className="text-center italic text-[10px] text-gray-500 py-0.5">
-                                    ...and {order.items.length - 5} more items
+                                <td colSpan={3} className="text-center italic text-[9px] text-gray-400 py-0.5">
+                                    ...and {order.items.length - 6} more items
                                 </td>
                             </tr>
                         )}
@@ -123,24 +132,24 @@ function InvoiceCard({ order }: { order: InvoiceData }) {
                 </table>
             </div>
 
-            {/* Total Footer */}
-            <div className="mt-2 text-right border-t border-black pt-2 flex justify-between items-center">
-                <div className="text-[10px] text-gray-500 text-left">
-                    Sub: {order.subtotal?.toFixed(0)} | Ship: {order.shipping_cost?.toFixed(0)}
-                    {order.discount > 0 ? ` | Disc: -${order.discount.toFixed(0)}` : ''}
-                    {order.payment_status === 'Partially Paid' && ` | Paid: ${order.paid_amount?.toFixed(0)}`}
-                </div>
-                <div>
-                    <div className="flex flex-col items-end">
-                        {order.payment_status === "Paid" ? (
-                            <span className="font-bold text-xl uppercase border-2 border-black px-2">PAID</span>
-                        ) : (
-                            <>
-                                <span className="font-bold text-xs mr-2">REQUIRED:</span>
-                                <span className="font-bold text-xl">{collectAmount.toFixed(0)} EGP</span>
-                            </>
-                        )}
+            {/* Footer */}
+            <div className="mt-1 pt-1 flex justify-between items-end">
+                <div className="text-[9px] text-gray-500 pb-1">
+                    <div>Sub: {order.subtotal?.toFixed(0)} | Ship: {order.shipping_cost?.toFixed(0)}</div>
+                    <div>
+                        {order.discount > 0 && `Disc: -${order.discount.toFixed(0)} `}
+                        {order.payment_status === 'Partially Paid' && `Paid: ${order.paid_amount?.toFixed(0)}`}
                     </div>
+                </div>
+                <div className="text-right">
+                    {order.payment_status === "Paid" ? (
+                        <span className="font-bold text-xl uppercase border-2 border-black px-2 inline-block">PAID</span>
+                    ) : (
+                        <div className="flex flex-col items-end">
+                            <span className="font-bold text-[9px] uppercase text-gray-500">Amount Due</span>
+                            <span className="font-bold text-2xl leading-none">{collectAmount.toFixed(0)} <span className="text-sm">EGP</span></span>
+                        </div>
+                    )}
                 </div>
             </div>
         </div>
@@ -176,12 +185,12 @@ function PrintContent() {
                 .in("id", ids);
 
             if (data) {
-                // Ensure correct shape
-                // We rely on 'customer_info' being present as JSONB
                 const formatted = data.map((o: any) => ({
                     ...o,
                     customer_info: o.customer_info || {}
                 }));
+                // Sort to maintain order if needed, or keep input order
+                // For now, let's just use the fetched order.
                 setOrders(formatted);
             }
             setLoading(false);
@@ -191,52 +200,81 @@ function PrintContent() {
 
     useEffect(() => {
         if (!loading && orders.length > 0) {
-            setTimeout(() => window.print(), 500);
+            setTimeout(() => window.print(), 800);
         }
     }, [loading, orders]);
 
-    if (loading) {
-        return <div className="flex justify-center p-10"><Loader2 className="animate-spin" /> Preparing Waybills...</div>;
-    }
-
+    if (loading) return <div className="flex justify-center p-10"><Loader2 className="animate-spin" /> Preparing Waybills...</div>;
     if (orders.length === 0) return <div>No orders selected</div>;
 
+    const pages = chunk(orders, 2);
+
     return (
-        <div className="fixed inset-0 z-[9999] bg-white overflow-auto p-0 m-0 print-reset">
+        <div className="min-h-screen bg-gray-100 p-8 print-reset-container">
             <style jsx global>{`
-                /* Hide Layout Elements */
+                /* Hide global UI */
                 nav, aside, header, footer, .sidebar { display: none !important; }
                 
                 @media print {
-                    @page { size: A4; margin: 0; }
-                    body { margin: 0; background: white; -webkit-print-color-adjust: exact; }
-                    .print-reset { position: static; overflow: visible; }
-                    .waybill-container {
-                        height: 49.8vh !important; /* Strict half page */
-                        max-height: 49.8vh !important;
-                        overflow: hidden !important; /* Force content cut-off if too long */
-                        page-break-inside: avoid;
-                        page-break-after: always; /* Ensure proper flow */
-                        border-bottom: 2px dashed #000;
+                    @page { 
+                        size: A4 portrait; 
+                        margin: 0; 
+                    }
+                    body { 
+                        margin: 0 !important; 
+                        background: white !important; 
+                        padding: 0 !important;
+                    }
+                    .print-reset-container { 
+                        padding: 0 !important; 
+                        background: white !important; 
+                        min-height: 0 !important;
+                    }
+                    .print-page {
+                        width: 210mm;
+                        height: 296mm; /* Slightly less than 297mm to prevent overflow */
+                        page-break-after: always;
+                        overflow: hidden;
                         display: flex;
                         flex-direction: column;
+                        border: none !important;
+                        box-shadow: none !important;
+                        margin: 0;
                     }
-                    .waybill-container:nth-child(2n) {
-                         page-break-after: always; /* Force new page after every 2nd item */
-                         border-bottom: none; /* Last item on page doesn't need border if we break */
+                    /* Remove page break after the last page to avoid empty sheet */
+                    .print-page:last-child {
+                        page-break-after: auto;
                     }
                 }
             `}</style>
-            <div className="flex flex-col">
-                {orders.map((order, i) => (
-                    <InvoiceCard key={order.id} order={order} />
+
+            {/* Screen Preview Implementation */}
+            <div className="flex flex-col gap-8 print:hidden items-center">
+                {pages.map((pageOrders, pageIdx) => (
+                    <div key={pageIdx} className="w-[210mm] h-[296mm] bg-white shadow-lg flex flex-col overflow-hidden relative">
+                        {/* Preview Header */}
+                        <div className="absolute top-0 right-0 bg-black text-white px-2 py-1 text-xs z-10">Page {pageIdx + 1}</div>
+
+                        {pageOrders.map((order, idx) => (
+                            <InvoiceCard key={order.id} order={order} isFirstOnPage={idx === 0} />
+                        ))}
+                    </div>
+                ))}
+            </div>
+
+            {/* Actual Print Layout */}
+            <div className="hidden print:block">
+                {pages.map((pageOrders, pageIdx) => (
+                    <div key={pageIdx} className="print-page">
+                        {pageOrders.map((order, idx) => (
+                            <InvoiceCard key={order.id} order={order} isFirstOnPage={idx === 0} />
+                        ))}
+                    </div>
                 ))}
             </div>
         </div>
     );
 }
-
-import { Suspense } from "react";
 
 export default function BulkPrintPage() {
     return (
