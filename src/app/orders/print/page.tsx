@@ -57,7 +57,7 @@ function InvoiceCard({ order }: { order: InvoiceData }) {
     }
 
     return (
-        <div className="waybill-container border-b border-dashed border-gray-400 p-6 flex flex-col justify-between text-sm box-border overflow-hidden bg-white">
+        <div className="waybill-container flex flex-col justify-between text-sm box-border overflow-hidden bg-white p-4 h-[49.8vh]">
             {/* Header */}
             <div className="flex justify-between items-start mb-2">
                 <div className="flex items-center gap-2">
@@ -102,18 +102,22 @@ function InvoiceCard({ order }: { order: InvoiceData }) {
                             <th className="py-1 text-right w-16">Total</th>
                         </tr>
                     </thead>
-                    <tbody>
-                        {order.items.slice(0, 6).map((item, idx) => (
+                    <tbody className="text-xs">
+                        {order.items.slice(0, 5).map((item, idx) => (
                             <tr key={idx} className="border-b border-gray-100">
-                                <td className="py-1 truncate max-w-[200px] text-sm font-medium">
-                                    {item.variant.product.name} <span className="text-xs text-gray-500">({item.variant.title})</span>
+                                <td className="py-0.5 truncate max-w-[200px] font-medium">
+                                    {item.variant.product.name} <span className="text-[10px] text-gray-500">({item.variant.title})</span>
                                 </td>
-                                <td className="py-1 text-center font-bold">{item.quantity}</td>
-                                <td className="py-1 text-right">{(item.quantity * item.price_at_sale).toFixed(0)}</td>
+                                <td className="py-0.5 text-center font-bold">{item.quantity}</td>
+                                <td className="py-0.5 text-right">{(item.quantity * item.price_at_sale).toFixed(0)}</td>
                             </tr>
                         ))}
-                        {order.items.length > 6 && (
-                            <tr><td colSpan={3} className="text-center italic text-gray-500 py-1">...and {order.items.length - 6} more items</td></tr>
+                        {order.items.length > 5 && (
+                            <tr>
+                                <td colSpan={3} className="text-center italic text-[10px] text-gray-500 py-0.5">
+                                    ...and {order.items.length - 5} more items
+                                </td>
+                            </tr>
                         )}
                     </tbody>
                 </table>
@@ -206,17 +210,28 @@ function PrintContent() {
                 @media print {
                     @page { size: A4; margin: 0; }
                     body { margin: 0; background: white; -webkit-print-color-adjust: exact; }
-                    .print-reset { position: static; overflow: visible; } /* Reset fixed pos for print */
+                    .print-reset { position: static; overflow: visible; }
                     .waybill-container {
-                        height: 50vh; /* Exactly half page */
+                        height: 49.8vh !important; /* Strict half page */
+                        max-height: 49.8vh !important;
+                        overflow: hidden !important; /* Force content cut-off if too long */
                         page-break-inside: avoid;
-                        border-bottom: 1px dashed #000;
+                        page-break-after: always; /* Ensure proper flow */
+                        border-bottom: 2px dashed #000;
+                        display: flex;
+                        flex-direction: column;
+                    }
+                    .waybill-container:nth-child(2n) {
+                         page-break-after: always; /* Force new page after every 2nd item */
+                         border-bottom: none; /* Last item on page doesn't need border if we break */
                     }
                 }
             `}</style>
-            {orders.map(order => (
-                <InvoiceCard key={order.id} order={order} />
-            ))}
+            <div className="flex flex-col">
+                {orders.map((order, i) => (
+                    <InvoiceCard key={order.id} order={order} />
+                ))}
+            </div>
         </div>
     );
 }
