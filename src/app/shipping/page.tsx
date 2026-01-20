@@ -13,6 +13,8 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import Link from "next/link";
+import { Upload } from "lucide-react";
 
 const GOVERNORATES = [
     "Cairo", "Giza", "Alexandria", "Dakahlia", "Red Sea", "Beheira", "Fayoum",
@@ -165,9 +167,17 @@ export default function ShippingPage() {
                     <h1 className="text-3xl font-bold tracking-tight">Shipping Management</h1>
                     <p className="text-muted-foreground">Manage couriers, companies, and shipping rates.</p>
                 </div>
-                <Button onClick={() => handleOpenDialog()}>
-                    <Plus className="mr-2 h-4 w-4" /> Add Company
-                </Button>
+                <div className="flex gap-2">
+                    <Link href="/shipping/update">
+                        <Button variant="outline">
+                            <Upload className="mr-2 h-4 w-4" />
+                            Bulk Updates
+                        </Button>
+                    </Link>
+                    <Button onClick={() => handleOpenDialog()}>
+                        <Plus className="mr-2 h-4 w-4" /> Add Company
+                    </Button>
+                </div>
             </div>
 
             {loading ? (

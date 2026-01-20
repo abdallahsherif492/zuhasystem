@@ -271,9 +271,11 @@ export default function UpdateShippingPage() {
                                 <TableBody>
                                     {unmatchedRows.map((row, i) => (
                                         <TableRow key={i}>
-                                            <TableCell className="font-mono text-xs">{JSON.stringify(row)}</TableCell>
+                                            <TableCell className="font-mono text-xs max-w-[300px] truncate" title={JSON.stringify(row)}>
+                                                {row["Phone Number"] || row["phone"]} - {row["Amount"] || row["amount"]}
+                                            </TableCell>
                                             <TableCell className="text-red-500 flex items-center gap-2">
-                                                <AlertCircle className="h-4 w-4" /> Not found in "Shipped"
+                                                <AlertCircle className="h-4 w-4" /> {row.reason}
                                             </TableCell>
                                         </TableRow>
                                     ))}
