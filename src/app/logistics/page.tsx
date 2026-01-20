@@ -256,9 +256,10 @@ function LogisticsContent() {
     // 1. Filter Logic
     const filteredOrders = orders.filter(order => {
         // Search
+        // Search
         if (searchQuery) {
-            const q = searchQuery.toLowerCase();
-            const matches = (
+            const terms = searchQuery.toLowerCase().split(',').map(t => t.trim()).filter(Boolean);
+            const matches = terms.some(q =>
                 order.id.toLowerCase().includes(q) ||
                 order.customer_info?.name?.toLowerCase().includes(q) ||
                 order.customer_info?.phone?.includes(q)
@@ -392,7 +393,7 @@ function LogisticsContent() {
                     <div className="relative flex-1">
                         <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                         <Input
-                            placeholder="Search orders..."
+                            placeholder="Search orders (comma separated for multiple)..."
                             className="pl-8 bg-white"
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
