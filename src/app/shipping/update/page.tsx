@@ -7,20 +7,29 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Loader2, Upload, CheckCircle2, AlertCircle } from "lucide-react";
+import { Loader2, Upload, CheckCircle2, AlertCircle, ArrowUpRight } from "lucide-react";
 import Papa from "papaparse";
 import { toast } from "sonner";
 import { formatCurrency, cn } from "@/lib/utils";
-import { Badge } from "@/components/ui/badge";
 
 type Order = {
     id: string;
     customer_info: {
         phone: string;
+        phone2?: string;
         name: string;
     };
     total_amount: number;
     status: string;
+    items: Array<{
+        quantity: number;
+        variant: {
+            title: string;
+            product: {
+                name: string;
+            };
+        };
+    }>;
 };
 
 type MatchedOrder = {
@@ -29,8 +38,14 @@ type MatchedOrder = {
     matchType: 'Exact' | 'Fuzzy';
 };
 
+type UnmatchedRow = {
+    row: any;
+    reason: string;
+    candidateOrder?: Order; // If matched by phone but rejected by content
+};
+
 export default function UpdateShippingPage() {
-    const [shippedOrders, setShippedOrders] = useState<Order[]>([]);
+    const [allOrders, setAllOrders] = useState<Order[]>([]);
     const [loading, setLoading] = useState(true);
 
     // Upload State
@@ -40,24 +55,47 @@ export default function UpdateShippingPage() {
 
     // Matching Results
     const [matchedOrders, setMatchedOrders] = useState<MatchedOrder[]>([]);
-    const [unmatchedRows, setUnmatchedRows] = useState<any[]>([]);
+    const [unmatchedRows, setUnmatchedRows] = useState<UnmatchedRow[]>([]);
 
     useEffect(() => {
-        fetchShippedOrders();
+        fetchOrders();
     }, []);
 
-    const fetchShippedOrders = async () => {
+    const fetchOrders = async () => {
         setLoading(true);
+        // Fetch ALL orders (item details needed for matching)
         const { data, error } = await supabase
             .from("orders")
-            .select("id, customer_info, total_amount, status")
-            .eq("status", "Shipped");
+            .select(`
+                id, 
+                customer_info, 
+                total_amount, 
+                status,
+                items:order_items (
+                    quantity,
+                    variant:variants (
+                        title,
+                        product:products (name)
+                    )
+                )
+            `)
+            .neq("status", "Cancelled");
 
         if (error) {
             console.error(error);
-            toast.error("Failed to fetch shipped orders");
+            toast.error("Failed to fetch orders");
         } else {
-            setShippedOrders(data || []);
+            // Transform/Cast data to match our Order type if needed, or just cast to any for simplicity in this complexity
+            // The issue is likely that Supabase returns variant as an array (relational) or object depending on relationship.
+            // Let's force cast for now as we know the shape.
+            const formatted = (data as any).map((o: any) => ({
+                ...o,
+                items: o.items.map((i: any) => ({
+                    quantity: i.quantity,
+                    variant: Array.isArray(i.variant) ? i.variant[0] : i.variant
+                }))
+            }));
+            setAllOrders(formatted as Order[]);
         }
         setLoading(false);
     };
@@ -69,8 +107,14 @@ export default function UpdateShippingPage() {
 
     const normalizePhone = (phone: string) => {
         if (!phone) return "";
-        // Remove all non-digits
         return phone.replace(/\D/g, "");
+    };
+
+    // Helper to format DB items into CSV-like string: "Product (Variant) xQty + ..."
+    const formatOrderContent = (order: Order) => {
+        return order.items.map(item =>
+            `${item.variant.product.name} (${item.variant.title}) x${item.quantity}`
+        ).join(" + ");
     };
 
     const handleProcessCSV = () => {
@@ -83,41 +127,79 @@ export default function UpdateShippingPage() {
             complete: (results) => {
                 const rows = results.data as any[];
                 const matched: MatchedOrder[] = [];
-                const unmatched: any[] = [];
+                const unmatched: UnmatchedRow[] = [];
                 const usedOrderIds = new Set<string>();
 
                 rows.forEach((row, index) => {
                     const csvPhone = row["Phone Number"] || row["phone"] || row["Mobile"] || "";
-                    const csvAmount = parseFloat(row["Amount"] || row["amount"] || "0");
+                    // CSV content column - try a few common names if not standard, or just check the row string if plain text? 
+                    // Assuming columns: "Phone Number", "Content" (or based on user request example)
+                    // The user said: "Product Name (Varient) xQuantity" is how it looks in the sheet. Let's assume column name is "Content" or "Description"
+                    const csvContent = row["Content"] || row["Description"] || row["Order Details"] || row["Items"] || "";
 
-                    if (!csvPhone && !csvAmount) return; // Skip empty rows
+                    if (!csvPhone) return;
 
                     const normalizedCsvPhone = normalizePhone(csvPhone.toString());
 
-                    // Find in Shipped Orders
-                    const match = shippedOrders.find(order => {
-                        if (usedOrderIds.has(order.id)) return false;
-
+                    // Find in Orders by Phone
+                    let potentialMatches = allOrders.filter(order => {
                         const orderPhone = normalizePhone(order.customer_info?.phone || "");
-                        const orderAmount = order.total_amount;
-
-                        // Strict Match: Phone includes CSV Phone (or vice versa) AND Amount matches
-                        // Note: CSV matching often requires loose phone checks (e.g. without 0 prefix)
-                        const phoneMatch = orderPhone.includes(normalizedCsvPhone) || normalizedCsvPhone.includes(orderPhone);
-                        const amountMatch = Math.abs(orderAmount - csvAmount) < 1; // Tolerance of 1 EGP
-
-                        return phoneMatch && amountMatch;
+                        const orderPhone2 = normalizePhone(order.customer_info?.phone2 || "");
+                        return orderPhone.includes(normalizedCsvPhone) || normalizedCsvPhone.includes(orderPhone) ||
+                            (orderPhone2 && (orderPhone2.includes(normalizedCsvPhone) || normalizedCsvPhone.includes(orderPhone2)));
                     });
 
+                    // Prefer Shipped
+                    const shippedMatch = potentialMatches.find(o => o.status === 'Shipped');
+                    const match = shippedMatch || potentialMatches[0];
+
                     if (match) {
-                        matched.push({
-                            order: match,
-                            csvRow: row,
-                            matchType: "Exact"
-                        });
-                        usedOrderIds.add(match.id);
+                        const dbContent = formatOrderContent(match);
+
+                        // Content Match Logic: 
+                        // Normalize both strings (remove extra spaces, lowercase)
+                        // This comparison might be tricky given "Default" vs "Blue". 
+                        // Let's do a loose inclusion check or simple equality. 
+                        // User said: "Product Name (Varient) xQuantity"
+                        // DB: "Product Name (Title) xQuantity"
+                        const normalizeStr = (s: string) => s.toLowerCase().replace(/\s+/g, "").trim();
+                        // Also remove "(Default)" if it exists as it's common noise
+                        const cleanDB = normalizeStr(dbContent).replace("(default)", "");
+                        const cleanCSV = normalizeStr(csvContent).replace("(default)", "");
+
+                        const contentMatch = cleanDB === cleanCSV || cleanDB.includes(cleanCSV) || cleanCSV.includes(cleanDB);
+                        const isShipped = match.status === 'Shipped';
+
+                        if (isShipped && contentMatch) {
+                            if (!usedOrderIds.has(match.id)) {
+                                matched.push({
+                                    order: match,
+                                    csvRow: { ...row, reason: "Perfect Match" },
+                                    matchType: "Exact"
+                                });
+                                usedOrderIds.add(match.id);
+                            } else {
+                                unmatched.push({
+                                    row,
+                                    reason: "Order already matched by another row",
+                                    candidateOrder: match
+                                });
+                            }
+                        } else {
+                            // Explain why it failed
+                            let start = `Found Order ${match.id.slice(0, 8)}`;
+                            let reasons = [];
+                            if (!isShipped) reasons.push(`Status is '${match.status}'`);
+                            if (!contentMatch) reasons.push(`Content mismatch`);
+
+                            unmatched.push({
+                                row,
+                                reason: start + ": " + reasons.join(", "),
+                                candidateOrder: match
+                            });
+                        }
                     } else {
-                        unmatched.push(row);
+                        unmatched.push({ row, reason: "No order found with this phone number" });
                     }
                 });
 
@@ -136,10 +218,21 @@ export default function UpdateShippingPage() {
     const handleBulkUpdate = async () => {
         if (matchedOrders.length === 0) return;
         if (!confirm(`Are you sure you want to update ${matchedOrders.length} orders to Delivered?`)) return;
+        await updateOrders(matchedOrders.map(m => m.order.id));
+    };
 
+    const handleForceApprove = async (orderId: string, rowIndex: number) => {
+        if (!confirm("Force approve this order as Delivered?")) return;
+
+        await updateOrders([orderId]);
+
+        // Remove from unmatched
+        setUnmatchedRows(prev => prev.filter((_, idx) => idx !== rowIndex));
+        toast.success("Order force approved");
+    };
+
+    const updateOrders = async (ids: string[]) => {
         setIsProcessing(true);
-        const ids = matchedOrders.map(m => m.order.id);
-
         const { error } = await supabase
             .from("orders")
             .update({ status: "Delivered" })
@@ -153,7 +246,7 @@ export default function UpdateShippingPage() {
             setUnmatchedRows([]);
             setSelectedFile(null);
             if (fileInputRef.current) fileInputRef.current.value = "";
-            fetchShippedOrders(); // Refresh list
+            fetchOrders();
         }
         setIsProcessing(false);
     };
@@ -163,16 +256,17 @@ export default function UpdateShippingPage() {
             <div className="flex flex-col gap-2">
                 <h1 className="text-3xl font-bold tracking-tight">Update Shipping Status</h1>
                 <p className="text-muted-foreground">
-                    Upload a CSV file with "Phone Number" and "Amount" columns to bulk update shipped orders to <strong>Delivered</strong>.
+                    Upload CSV with "Phone Number" and "Content" to bulk update shipped orders to <strong>Delivered</strong>.
                 </p>
             </div>
 
             <div className="flex flex-col sm:flex-row gap-6 items-start">
-                {/* Upload Card */}
                 <Card className="w-full sm:w-1/3">
                     <CardHeader>
                         <CardTitle>Upload CSV</CardTitle>
-                        <CardDescription>Currently {shippedOrders.length} orders are Shipped.</CardDescription>
+                        <CardDescription>
+                            Searching {allOrders.filter(o => o.status === 'Shipped').length} 'Shipped' orders.
+                        </CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-4">
                         <Input
@@ -193,7 +287,6 @@ export default function UpdateShippingPage() {
                     </CardContent>
                 </Card>
 
-                {/* Stat Cards */}
                 <div className="flex-1 grid grid-cols-2 gap-4">
                     <Card className="bg-green-50 border-green-200">
                         <CardHeader className="pb-2">
@@ -201,7 +294,7 @@ export default function UpdateShippingPage() {
                         </CardHeader>
                         <CardContent>
                             <div className="text-3xl font-bold text-green-800">{matchedOrders.length}</div>
-                            <p className="text-xs text-green-600">Ready to update</p>
+                            <p className="text-xs text-green-600">Perfect Content Match</p>
                         </CardContent>
                     </Card>
                     <Card className="bg-red-50 border-red-200">
@@ -210,13 +303,12 @@ export default function UpdateShippingPage() {
                         </CardHeader>
                         <CardContent>
                             <div className="text-3xl font-bold text-red-800">{unmatchedRows.length}</div>
-                            <p className="text-xs text-red-600">Review required</p>
+                            <p className="text-xs text-red-600">Checks Failed</p>
                         </CardContent>
                     </Card>
                 </div>
             </div>
 
-            {/* Results */}
             {(matchedOrders.length > 0 || unmatchedRows.length > 0) && (
                 <Tabs defaultValue="matched" className="w-full">
                     <TabsList>
@@ -235,22 +327,23 @@ export default function UpdateShippingPage() {
                             <Table>
                                 <TableHeader>
                                     <TableRow>
-                                        <TableHead>Order ID</TableHead>
+                                        <TableHead>Order</TableHead>
                                         <TableHead>Customer</TableHead>
-                                        <TableHead>Phone (DB)</TableHead>
-                                        <TableHead>Amount (DB)</TableHead>
-                                        <TableHead>From CSV</TableHead>
+                                        <TableHead>Content (DB)</TableHead>
+                                        <TableHead>Content (CSV)</TableHead>
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
                                     {matchedOrders.map((m, i) => (
                                         <TableRow key={i}>
                                             <TableCell className="font-mono text-xs">{m.order.id.slice(0, 8)}</TableCell>
-                                            <TableCell>{m.order.customer_info.name}</TableCell>
-                                            <TableCell>{m.order.customer_info.phone}</TableCell>
-                                            <TableCell>{formatCurrency(m.order.total_amount)}</TableCell>
-                                            <TableCell className="text-green-600 text-xs">
-                                                {JSON.stringify(m.csvRow)}
+                                            <TableCell>
+                                                <div className="text-sm font-medium">{m.order.customer_info.name}</div>
+                                                <div className="text-xs text-muted-foreground">{m.order.customer_info.phone}</div>
+                                            </TableCell>
+                                            <TableCell className="text-xs max-w-[250px]">{formatOrderContent(m.order)}</TableCell>
+                                            <TableCell className="text-green-600 text-xs max-w-[250px]">
+                                                {m.csvRow["Content"] || m.csvRow["Items"] || "N/A"}
                                             </TableCell>
                                         </TableRow>
                                     ))}
@@ -266,16 +359,38 @@ export default function UpdateShippingPage() {
                                     <TableRow>
                                         <TableHead>Row Data</TableHead>
                                         <TableHead>Reason</TableHead>
+                                        <TableHead className="text-right">Action</TableHead>
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
-                                    {unmatchedRows.map((row, i) => (
+                                    {unmatchedRows.map((item, i) => (
                                         <TableRow key={i}>
-                                            <TableCell className="font-mono text-xs max-w-[300px] truncate" title={JSON.stringify(row)}>
-                                                {row["Phone Number"] || row["phone"]} - {row["Amount"] || row["amount"]}
+                                            <TableCell className="font-mono text-xs max-w-[200px] truncate" title={JSON.stringify(item.row)}>
+                                                <div>{item.row["Phone Number"]}</div>
+                                                <div className="text-muted-foreground">{item.row["Content"] || item.row["Items"]}</div>
                                             </TableCell>
-                                            <TableCell className="text-red-500 flex items-center gap-2">
-                                                <AlertCircle className="h-4 w-4" /> {row.reason}
+                                            <TableCell className="text-red-500 text-xs">
+                                                <div className="flex items-center gap-2 font-semibold">
+                                                    <AlertCircle className="h-4 w-4" /> {item.reason}
+                                                </div>
+                                                {item.candidateOrder && (
+                                                    <div className="mt-1 text-black">
+                                                        DB Says: <span className="font-mono">{formatOrderContent(item.candidateOrder)}</span>
+                                                    </div>
+                                                )}
+                                            </TableCell>
+                                            <TableCell className="text-right">
+                                                {item.candidateOrder && (
+                                                    <Button
+                                                        size="sm"
+                                                        variant="outline"
+                                                        className="h-8 text-xs border-green-200 hover:bg-green-50 text-green-700"
+                                                        onClick={() => handleForceApprove(item.candidateOrder!.id, i)}
+                                                    >
+                                                        Force Approve
+                                                        <ArrowUpRight className="ml-1 h-3 w-3" />
+                                                    </Button>
+                                                )}
                                             </TableCell>
                                         </TableRow>
                                     ))}
