@@ -22,6 +22,7 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
+  Legend,
 } from "recharts";
 import { Loader2, DollarSign, Package, ShoppingBag, AlertTriangle } from "lucide-react";
 import { Variant } from "@/types";
@@ -231,7 +232,7 @@ function DashboardContent() {
         {/* Main Chart */}
         <Card className="col-span-4">
           <CardHeader>
-            <CardTitle>Overview</CardTitle>
+            <CardTitle>Revenue & Orders Overview</CardTitle>
           </CardHeader>
           <CardContent className="pl-2">
             <ResponsiveContainer width="100%" height={350}>
@@ -244,18 +245,33 @@ function DashboardContent() {
                   axisLine={false}
                 />
                 <YAxis
-                  stroke="#888888"
+                  yAxisId="left"
+                  orientation="left"
+                  stroke="#10b981" // Emerald
                   fontSize={12}
                   tickLine={false}
                   axisLine={false}
-                  tickFormatter={(value) => formatCurrency(value)}
+                  tickFormatter={(value) => `${value}`} // formatCurrency implied but value is raw
+                />
+                <YAxis
+                  yAxisId="right"
+                  orientation="right"
+                  stroke="#3b82f6" // Blue
+                  fontSize={12}
+                  tickLine={false}
+                  axisLine={false}
                 />
                 <Tooltip
-                  formatter={(value: any) => formatCurrency(value)}
+                  formatter={(value: any, name: any) => {
+                    if (name === "Revenue") return formatCurrency(value);
+                    return value; // Orders count
+                  }}
                   labelStyle={{ color: "black" }}
                   contentStyle={{ borderRadius: '8px' }}
                 />
-                <Bar dataKey="sales" fill="#10b981" radius={[4, 4, 0, 0]} />
+                <Legend />
+                <Bar yAxisId="left" dataKey="sales" name="Revenue" fill="#10b981" radius={[4, 4, 0, 0]} />
+                <Bar yAxisId="right" dataKey="orders" name="Order Count" fill="#3b82f6" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </CardContent>
