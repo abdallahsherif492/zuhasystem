@@ -1,5 +1,5 @@
 -- Shipping Companies / Couriers Table
-CREATE TABLE shipping_companies (
+CREATE TABLE IF NOT EXISTS shipping_companies (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name TEXT NOT NULL,
   type TEXT CHECK (type IN ('Company', 'Courier', 'Office')) DEFAULT 'Company',
@@ -11,7 +11,7 @@ CREATE TABLE shipping_companies (
 
 -- Add relation to Orders
 ALTER TABLE orders 
-ADD COLUMN shipping_company_id UUID REFERENCES shipping_companies(id);
+ADD COLUMN IF NOT EXISTS shipping_company_id UUID REFERENCES shipping_companies(id);
 
 -- Index
-CREATE INDEX idx_orders_shipping_company ON orders(shipping_company_id);
+CREATE INDEX IF NOT EXISTS idx_orders_shipping_company ON orders(shipping_company_id);

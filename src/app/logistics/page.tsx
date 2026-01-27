@@ -31,7 +31,8 @@ import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid
 } from 'recharts';
 
-import { ChevronsUpDown, FilterX, Truck } from "lucide-react";
+import { ChevronsUpDown, FilterX, Truck, Upload, X } from "lucide-react";
+import Papa from "papaparse";
 import { Checkbox } from "@/components/ui/checkbox";
 import { MultiSelect, Option } from "@/components/ui/multi-select";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -95,6 +96,7 @@ function LogisticsContent() {
     const [shippingDialogOpen, setShippingDialogOpen] = useState(false);
     const [pendingStatusChange, setPendingStatusChange] = useState<{ orderIds: string[], status: string } | null>(null);
     const [selectedCompanyId, setSelectedCompanyId] = useState<string>("");
+    const [phoneFilter, setPhoneFilter] = useState<string[] | null>(null);
 
     const fromDate = searchParams.get("from");
     const toDate = searchParams.get("to");
@@ -251,6 +253,46 @@ function LogisticsContent() {
         }
     };
 
+    const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        if (!file) return;
+
+        Papa.parse(file, {
+            complete: (results: any) => {
+                const phones = new Set<string>();
+                // Try to find a column that looks like a phone number or just take the first column
+                results.data.forEach((row: any) => {
+                    const values = Array.isArray(row) ? row : Object.values(row);
+                    values.forEach((val: any) => {
+                        if (val && typeof val === 'string') {
+                            // Simple normalize: remove non-digits
+                            const clean = val.replace(/\D/g, '');
+                            if (clean.length >= 10) { // Assuming Egyptian phones are 10+ digits
+                                phones.add(clean);
+                                // Also add with 0 prefix if missing, or without if present to be safe? 
+                                // Let's just store the raw digits for now and doing fuzzy match in filter
+                            }
+                        }
+                    });
+                });
+
+                if (phones.size > 0) {
+                    // Clean up phone numbers to ensure they match format in DB (usually 01xxxxxxxxx)
+                    const normalizedPhones = Array.from(phones).map(p => {
+                        // Ensure it starts with 0 if it's an Egyptian mobile (10 digits starting with 1 -> 01...)
+                        if (p.length === 10 && p.startsWith('1')) return '0' + p;
+                        return p;
+                    });
+                    setPhoneFilter(normalizedPhones);
+                    toast.success(`Loaded ${normalizedPhones.length} phone numbers`);
+                } else {
+                    toast.error("No valid phone numbers found in CSV");
+                }
+            },
+            header: false // We'll manually inspect rows to be flexible
+        });
+    };
+
     // --- Calculations & Filters ---
 
     // 1. Filter Logic
@@ -278,6 +320,14 @@ function LogisticsContent() {
             const orderProductIds = order.items?.map((i: any) => i.variant?.product?.id).filter(Boolean) || [];
             const hasMatch = productFilter.some(pid => orderProductIds.includes(pid));
             if (!hasMatch) return false;
+        }
+
+        // Phone List Filter
+        if (phoneFilter) {
+            const orderPhone = order.customer_info?.phone?.replace(/\D/g, '') || '';
+            // Check for exact match or suffix match
+            const match = phoneFilter.some(p => orderPhone.includes(p) || p.includes(orderPhone));
+            if (!match) return false;
         }
 
         return true;
@@ -447,6 +497,28 @@ function LogisticsContent() {
                         </div>
                     </div>
                 )}
+
+                {/* Phone Filter CSV */}
+                <div className="flex items-center gap-2">
+                    <div className="relative">
+                        <input
+                            type="file"
+                            accept=".csv"
+                            id="csv-upload"
+                            className="hidden"
+                            onChange={handleFileUpload}
+                        />
+                        <Button variant="outline" size="sm" onClick={() => document.getElementById('csv-upload')?.click()}>
+                            <Upload className="h-4 w-4 mr-2" />
+                            {phoneFilter ? `Filtered (${phoneFilter.length} phones)` : "Upload Phones CSV"}
+                        </Button>
+                    </div>
+                    {phoneFilter && (
+                        <Button variant="ghost" size="icon" onClick={() => { setPhoneFilter(null); if (document.getElementById('csv-upload')) (document.getElementById('csv-upload') as HTMLInputElement).value = '' }}>
+                            <X className="h-4 w-4" />
+                        </Button>
+                    )}
+                </div>
             </div>
 
             {/* Top KPIs */}
