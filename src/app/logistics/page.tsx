@@ -253,6 +253,23 @@ function LogisticsContent() {
         }
     };
 
+    const updateShippingCompany = async (orderId: string, companyId: string) => {
+        try {
+            const { error } = await supabase
+                .from("orders")
+                .update({ shipping_company_id: companyId || null }) // null if empty string
+                .eq("id", orderId);
+
+            if (error) throw error;
+
+            toast.success("Shipping company updated");
+            setOrders(prev => prev.map(o => o.id === orderId ? { ...o, shipping_company_id: companyId || null } : o));
+        } catch (error) {
+            console.error("Failed to update shipping company", error);
+            toast.error("Failed to update shipping company");
+        }
+    };
+
     const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];
         if (!file) return;
@@ -730,13 +747,16 @@ function LogisticsContent() {
                                     </TableCell>
                                     <TableCell>{formatCurrency(calculateNetValue(order))}</TableCell>
                                     <TableCell>
-                                        {/* Show Shipping Company if exists */}
-                                        {order.shipping_company_id ? (
-                                            <Badge variant="outline" className="text-[10px] whitespace-nowrap">
-                                                <Truck className="h-3 w-3 mr-1" />
-                                                {shippingCompanies.find(c => c.id === order.shipping_company_id)?.name || "Unknown"}
-                                            </Badge>
-                                        ) : "-"}
+                                        <select
+                                            className="h-8 w-auto min-w-[120px] rounded-md border border-input bg-transparent px-2 text-xs"
+                                            value={order.shipping_company_id || ""}
+                                            onChange={(e) => updateShippingCompany(order.id, e.target.value)}
+                                        >
+                                            <option value="">No Company</option>
+                                            {shippingCompanies.map(c => (
+                                                <option key={c.id} value={c.id}>{c.name}</option>
+                                            ))}
+                                        </select>
                                     </TableCell>
                                 </TableRow>
                             ))}
