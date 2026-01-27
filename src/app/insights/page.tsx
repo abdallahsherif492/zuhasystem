@@ -66,7 +66,9 @@ function InsightsContent() {
         pendingOrdersValue: 0,
         stockValue: 0,
         treasuryAbdallah: 0,
-        treasuryMohamed: 0
+        treasuryMohamed: 0,
+        estimatedBusinessValue: 0,
+        investmentGrowthRatio: 0
     });
 
     useEffect(() => {
@@ -184,8 +186,8 @@ function InsightsContent() {
             ] = await Promise.all([
                 // 1. Total Investment
                 supabase.from('transactions').select('amount').eq('type', 'investment'),
-                // 2. Pending Orders
-                supabase.from('orders').select('total_amount').in('status', ['Pending', 'Processing', 'Shipped']),
+                // 2. Pending Orders (Pending + Prepared + Shipped)
+                supabase.from('orders').select('total_amount').in('status', ['Pending', 'Prepared', 'Shipped']),
                 // 3. Treasury Balances
                 supabase.from('transactions').select('amount').eq('account_name', 'Abdallah Sherif'),
                 supabase.from('transactions').select('amount').eq('account_name', 'Mohamed Adel'),
@@ -199,12 +201,17 @@ function InsightsContent() {
             const treasuryMohamedVal = treasuryMohamedData?.reduce((sum, row) => sum + (Number(row.amount) || 0), 0) || 0;
             const stockVal = stockData?.reduce((sum, row) => sum + ((Number(row.cost_price) || 0) * (Number(row.stock_qty) || 0)), 0) || 0;
 
+            const estimatedVal = treasuryAbdallahVal + treasuryMohamedVal + stockVal + pendingVal;
+            const growthRatio = investVal ? ((estimatedVal - investVal) / investVal) * 100 : 0;
+
             setBusinessValue({
                 totalInvestment: investVal,
                 pendingOrdersValue: pendingVal,
                 stockValue: stockVal,
                 treasuryAbdallah: treasuryAbdallahVal,
-                treasuryMohamed: treasuryMohamedVal
+                treasuryMohamed: treasuryMohamedVal,
+                estimatedBusinessValue: estimatedVal,
+                investmentGrowthRatio: growthRatio
             });
 
 
@@ -226,7 +233,41 @@ function InsightsContent() {
                 <DateRangePicker />
             </div>
 
-            {/* SECTION 1: ADS INSIGHTS */}
+            {/* SECTION 1: BUSINESS VALUE (SNAPSHOT) - Moved to Top */}
+            <div className="space-y-4">
+                <h2 className="text-xl font-semibold flex items-center gap-2">
+                    <DollarSign className="h-5 w-5 text-amber-600" />
+                    Business Value (Snapshot)
+                </h2>
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                    {/* New Metrics */}
+                    <MetricCard
+                        title="Est. Business Value"
+                        value={formatCurrency(businessValue.estimatedBusinessValue)}
+                        sub="Stock + Cash + Pending Orders"
+                        bold
+                        className="bg-primary/5 border-primary/20"
+                    />
+                    <MetricCard
+                        title="Growth Ratio"
+                        value={`${businessValue.investmentGrowthRatio.toFixed(1)}%`}
+                        sub="(Est. Value - Inv) / Inv"
+                        pos={businessValue.investmentGrowthRatio > 0}
+                        neg={businessValue.investmentGrowthRatio < 0}
+                    />
+                    <MetricCard title="Total Investment" value={formatCurrency(businessValue.totalInvestment)} sub="All Time" />
+                    <MetricCard title="Stock Value" value={formatCurrency(businessValue.stockValue)} sub="Cost * Qty" />
+                </div>
+                <div className="grid grid-cols-3 gap-4">
+                    <MetricCard title="Pending Orders Value" value={formatCurrency(businessValue.pendingOrdersValue)} sub="Pending + Prepared + Shipped" />
+                    <MetricCard title="Treasury: Abdallah" value={formatCurrency(businessValue.treasuryAbdallah)} sub="Cash Balance" />
+                    <MetricCard title="Treasury: Mohamed" value={formatCurrency(businessValue.treasuryMohamed)} sub="Cash Balance" />
+                </div>
+            </div>
+
+            <div className="border-t" />
+
+            {/* SECTION 2: ADS INSIGHTS */}
             <div className="space-y-4">
                 <h2 className="text-xl font-semibold flex items-center gap-2">
                     <Megaphone className="h-5 w-5 text-blue-600" />
@@ -244,7 +285,7 @@ function InsightsContent() {
 
             <div className="border-t" />
 
-            {/* SECTION 2: ORDERS INSIGHTS */}
+            {/* SECTION 3: ORDERS INSIGHTS */}
             <div className="space-y-4">
                 <h2 className="text-xl font-semibold flex items-center gap-2">
                     <Package className="h-5 w-5 text-purple-600" />
@@ -269,7 +310,7 @@ function InsightsContent() {
 
             <div className="border-t" />
 
-            {/* SECTION 3: BUSINESS INSIGHTS */}
+            {/* SECTION 4: BUSINESS INSIGHTS */}
             <div className="space-y-4">
                 <h2 className="text-xl font-semibold flex items-center gap-2">
                     <Briefcase className="h-5 w-5 text-green-600" />
@@ -287,31 +328,14 @@ function InsightsContent() {
                     <MetricCard title="Other Expenses" value={formatCurrency(businessMetrics.otherExpenses)} sub="From Transactions" />
                 </div>
             </div>
-
-            <div className="border-t" />
-
-            {/* SECTION 4: BUSINESS VALUE (SNAPSHOT) */}
-            <div className="space-y-4">
-                <h2 className="text-xl font-semibold flex items-center gap-2">
-                    <DollarSign className="h-5 w-5 text-amber-600" />
-                    Business Value (Snapshot)
-                </h2>
-                <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
-                    <MetricCard title="Total Investment" value={formatCurrency(businessValue.totalInvestment)} sub="All Time" />
-                    <MetricCard title="Pending Orders Value" value={formatCurrency(businessValue.pendingOrdersValue)} sub="Pending + Processing + Shipped" />
-                    <MetricCard title="Stock Value" value={formatCurrency(businessValue.stockValue)} sub="Cost * Qty" />
-                    <MetricCard title="Treasury: Abdallah" value={formatCurrency(businessValue.treasuryAbdallah)} sub="Cash Balance" />
-                    <MetricCard title="Treasury: Mohamed" value={formatCurrency(businessValue.treasuryMohamed)} sub="Cash Balance" />
-                </div>
-            </div>
         </div>
     );
 }
 
 // Helper Card Component
-function MetricCard({ title, value, sub, pos, neg, bold }: any) {
+function MetricCard({ title, value, sub, pos, neg, bold, className }: any) {
     return (
-        <Card>
+        <Card className={className}>
             <CardHeader className="p-4 pb-2">
                 <CardTitle className="text-xs font-medium text-muted-foreground uppercase">{title}</CardTitle>
             </CardHeader>
