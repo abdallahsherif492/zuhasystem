@@ -13,6 +13,7 @@ import {
 } from "recharts";
 import { format, parseISO, startOfDay, isWithinInterval, endOfDay, startOfMonth } from "date-fns";
 import { useRouter } from "next/navigation";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d'];
 
@@ -233,101 +234,112 @@ function InsightsContent() {
                 <DateRangePicker />
             </div>
 
-            {/* SECTION 1: BUSINESS VALUE (SNAPSHOT) - Moved to Top */}
-            <div className="space-y-4">
-                <h2 className="text-xl font-semibold flex items-center gap-2">
-                    <DollarSign className="h-5 w-5 text-amber-600" />
-                    Business Value (Snapshot)
-                </h2>
-                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                    {/* New Metrics */}
-                    <MetricCard
-                        title="Est. Business Value"
-                        value={formatCurrency(businessValue.estimatedBusinessValue)}
-                        sub="Stock + Cash + Pending Orders"
-                        bold
-                        className="bg-primary/5 border-primary/20"
-                    />
-                    <MetricCard
-                        title="Growth Ratio"
-                        value={`${businessValue.investmentGrowthRatio.toFixed(1)}%`}
-                        sub="(Est. Value - Inv) / Inv"
-                        pos={businessValue.investmentGrowthRatio > 0}
-                        neg={businessValue.investmentGrowthRatio < 0}
-                    />
-                    <MetricCard title="Total Investment" value={formatCurrency(businessValue.totalInvestment)} sub="All Time" />
-                    <MetricCard title="Stock Value" value={formatCurrency(businessValue.stockValue)} sub="Cost * Qty" />
-                </div>
-                <div className="grid grid-cols-3 gap-4">
-                    <MetricCard title="Pending Orders Value" value={formatCurrency(businessValue.pendingOrdersValue)} sub="Pending + Prepared + Shipped" />
-                    <MetricCard title="Treasury: Abdallah" value={formatCurrency(businessValue.treasuryAbdallah)} sub="Cash Balance" />
-                    <MetricCard title="Treasury: Mohamed" value={formatCurrency(businessValue.treasuryMohamed)} sub="Cash Balance" />
-                </div>
-            </div>
+            <Tabs defaultValue="snapshot" className="space-y-4">
+                <TabsList>
+                    <TabsTrigger value="snapshot">Business Value</TabsTrigger>
+                    <TabsTrigger value="ads">Ads Insights</TabsTrigger>
+                    <TabsTrigger value="orders">Orders Insights</TabsTrigger>
+                    <TabsTrigger value="business">Business Metrics</TabsTrigger>
+                </TabsList>
 
-            <div className="border-t" />
+                <TabsContent value="snapshot" className="space-y-4">
+                    {/* SECTION 1: BUSINESS VALUE (SNAPSHOT) - Moved to Top */}
+                    <div className="space-y-4">
+                        <h2 className="text-xl font-semibold flex items-center gap-2">
+                            <DollarSign className="h-5 w-5 text-amber-600" />
+                            Business Value (Snapshot)
+                        </h2>
+                        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                            {/* New Metrics */}
+                            <MetricCard
+                                title="Est. Business Value"
+                                value={formatCurrency(businessValue.estimatedBusinessValue)}
+                                sub="Stock + Cash + Pending Orders"
+                                bold
+                                className="bg-primary/5 border-primary/20"
+                            />
+                            <MetricCard
+                                title="Growth Ratio"
+                                value={`${businessValue.investmentGrowthRatio.toFixed(1)}%`}
+                                sub="(Est. Value - Inv) / Inv"
+                                pos={businessValue.investmentGrowthRatio > 0}
+                                neg={businessValue.investmentGrowthRatio < 0}
+                            />
+                            <MetricCard title="Total Investment" value={formatCurrency(businessValue.totalInvestment)} sub="All Time" />
+                            <MetricCard title="Stock Value" value={formatCurrency(businessValue.stockValue)} sub="Cost * Qty" />
+                        </div>
+                        <div className="grid grid-cols-3 gap-4">
+                            <MetricCard title="Pending Orders Value" value={formatCurrency(businessValue.pendingOrdersValue)} sub="Pending + Prepared + Shipped" />
+                            <MetricCard title="Treasury: Abdallah" value={formatCurrency(businessValue.treasuryAbdallah)} sub="Cash Balance" />
+                            <MetricCard title="Treasury: Mohamed" value={formatCurrency(businessValue.treasuryMohamed)} sub="Cash Balance" />
+                        </div>
+                    </div>
+                </TabsContent>
 
-            {/* SECTION 2: ADS INSIGHTS */}
-            <div className="space-y-4">
-                <h2 className="text-xl font-semibold flex items-center gap-2">
-                    <Megaphone className="h-5 w-5 text-blue-600" />
-                    Ads Insights
-                </h2>
-                <div className="grid grid-cols-2 lg:grid-cols-6 gap-4">
-                    <MetricCard title="Ads Spent" value={formatCurrency(adsMetrics.adsSpent)} sub="From CSV Uploads" />
-                    <MetricCard title="Orders Count" value={adsMetrics.ordersCount} />
-                    <MetricCard title="Order Revenue" value={formatCurrency(adsMetrics.revenue)} />
-                    <MetricCard title="AOV" value={formatCurrency(adsMetrics.aov)} />
-                    <MetricCard title="Cost Per Order" value={formatCurrency(adsMetrics.cpo)} neg={true} />
-                    <MetricCard title="ROAS" value={`${adsMetrics.roas.toFixed(2)}x`} pos={adsMetrics.roas > 2} />
-                </div>
-            </div>
+                <TabsContent value="ads" className="space-y-4">
+                    {/* SECTION 2: ADS INSIGHTS */}
+                    <div className="space-y-4">
+                        <h2 className="text-xl font-semibold flex items-center gap-2">
+                            <Megaphone className="h-5 w-5 text-blue-600" />
+                            Ads Insights
+                        </h2>
+                        <div className="grid grid-cols-2 lg:grid-cols-6 gap-4">
+                            <MetricCard title="Ads Spent" value={formatCurrency(adsMetrics.adsSpent)} sub="From CSV Uploads" />
+                            <MetricCard title="Orders Count" value={adsMetrics.ordersCount} />
+                            <MetricCard title="Order Revenue" value={formatCurrency(adsMetrics.revenue)} />
+                            <MetricCard title="AOV" value={formatCurrency(adsMetrics.aov)} />
+                            <MetricCard title="Cost Per Order" value={formatCurrency(adsMetrics.cpo)} neg={true} />
+                            <MetricCard title="ROAS" value={`${adsMetrics.roas.toFixed(2)}x`} pos={adsMetrics.roas > 2} />
+                        </div>
+                    </div>
+                </TabsContent>
 
-            <div className="border-t" />
+                <TabsContent value="orders" className="space-y-4">
+                    {/* SECTION 3: ORDERS INSIGHTS */}
+                    <div className="space-y-4">
+                        <h2 className="text-xl font-semibold flex items-center gap-2">
+                            <Package className="h-5 w-5 text-purple-600" />
+                            Orders Insights
+                        </h2>
+                        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                            <MetricCard title="Orders Count" value={ordersMetrics.count} />
+                            <MetricCard title="Revenue" value={formatCurrency(ordersMetrics.revenue)} />
+                            <MetricCard title="AOV" value={formatCurrency(ordersMetrics.aov)} />
+                            <MetricCard title="COGS" value={formatCurrency(ordersMetrics.cogs)} neg />
 
-            {/* SECTION 3: ORDERS INSIGHTS */}
-            <div className="space-y-4">
-                <h2 className="text-xl font-semibold flex items-center gap-2">
-                    <Package className="h-5 w-5 text-purple-600" />
-                    Orders Insights
-                </h2>
-                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                    <MetricCard title="Orders Count" value={ordersMetrics.count} />
-                    <MetricCard title="Revenue" value={formatCurrency(ordersMetrics.revenue)} />
-                    <MetricCard title="AOV" value={formatCurrency(ordersMetrics.aov)} />
-                    <MetricCard title="COGS" value={formatCurrency(ordersMetrics.cogs)} neg />
+                            <MetricCard title="Ads Spent" value={formatCurrency(ordersMetrics.adsSpent)} neg />
+                            <MetricCard title="Shipping + Fees" value={formatCurrency(ordersMetrics.shipping + ordersMetrics.handlingFees)} sub={`Shipping + ${formatCurrency(ordersMetrics.handlingFees)} Fees`} neg />
 
-                    <MetricCard title="Ads Spent" value={formatCurrency(ordersMetrics.adsSpent)} neg />
-                    <MetricCard title="Shipping + Fees" value={formatCurrency(ordersMetrics.shipping + ordersMetrics.handlingFees)} sub={`Shipping + ${formatCurrency(ordersMetrics.handlingFees)} Fees`} neg />
+                            <MetricCard title="Net Profit" value={formatCurrency(ordersMetrics.netProfit)} pos={ordersMetrics.netProfit > 0} bold />
+                            <MetricCard title="Profit / Order" value={formatCurrency(ordersMetrics.netProfitPerOrder)} pos={ordersMetrics.netProfitPerOrder > 0} />
 
-                    <MetricCard title="Net Profit" value={formatCurrency(ordersMetrics.netProfit)} pos={ordersMetrics.netProfit > 0} bold />
-                    <MetricCard title="Profit / Order" value={formatCurrency(ordersMetrics.netProfitPerOrder)} pos={ordersMetrics.netProfitPerOrder > 0} />
+                            <MetricCard title="Won Rate" value={`${ordersMetrics.wonRate.toFixed(1)}%`} />
+                            <MetricCard title="Collectable (Net)" value={formatCurrency(ordersMetrics.collectable)} sub="Rev - Ship - Fees" bold />
+                        </div>
+                    </div>
+                </TabsContent>
 
-                    <MetricCard title="Won Rate" value={`${ordersMetrics.wonRate.toFixed(1)}%`} />
-                    <MetricCard title="Collectable (Net)" value={formatCurrency(ordersMetrics.collectable)} sub="Rev - Ship - Fees" bold />
-                </div>
-            </div>
-
-            <div className="border-t" />
-
-            {/* SECTION 4: BUSINESS INSIGHTS */}
-            <div className="space-y-4">
-                <h2 className="text-xl font-semibold flex items-center gap-2">
-                    <Briefcase className="h-5 w-5 text-green-600" />
-                    Business Insights
-                </h2>
-                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                    <MetricCard title="Transaction Revenue" value={formatCurrency(businessMetrics.revenue)} pos />
-                    <MetricCard title="Total Expenses" value={formatCurrency(businessMetrics.totalExpenses)} neg />
-                    <MetricCard title="Net Profit" value={formatCurrency(businessMetrics.netProfit)} pos={businessMetrics.netProfit > 0} bold />
-                    <MetricCard title="ROI" value={`${businessMetrics.roi.toFixed(1)}%`} pos={businessMetrics.roi > 0} />
-                </div>
-                <div className="grid grid-cols-3 gap-4">
-                    <MetricCard title="Ads Expenses" value={formatCurrency(businessMetrics.adsExpenses)} sub="From Transactions" />
-                    <MetricCard title="Purchase Expenses" value={formatCurrency(businessMetrics.purchasesExpenses)} sub="From Transactions" />
-                    <MetricCard title="Other Expenses" value={formatCurrency(businessMetrics.otherExpenses)} sub="From Transactions" />
-                </div>
-            </div>
+                <TabsContent value="business" className="space-y-4">
+                    {/* SECTION 4: BUSINESS INSIGHTS */}
+                    <div className="space-y-4">
+                        <h2 className="text-xl font-semibold flex items-center gap-2">
+                            <Briefcase className="h-5 w-5 text-green-600" />
+                            Business Insights
+                        </h2>
+                        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                            <MetricCard title="Transaction Revenue" value={formatCurrency(businessMetrics.revenue)} pos />
+                            <MetricCard title="Total Expenses" value={formatCurrency(businessMetrics.totalExpenses)} neg />
+                            <MetricCard title="Net Profit" value={formatCurrency(businessMetrics.netProfit)} pos={businessMetrics.netProfit > 0} bold />
+                            <MetricCard title="ROI" value={`${businessMetrics.roi.toFixed(1)}%`} pos={businessMetrics.roi > 0} />
+                        </div>
+                        <div className="grid grid-cols-3 gap-4">
+                            <MetricCard title="Ads Expenses" value={formatCurrency(businessMetrics.adsExpenses)} sub="From Transactions" />
+                            <MetricCard title="Purchase Expenses" value={formatCurrency(businessMetrics.purchasesExpenses)} sub="From Transactions" />
+                            <MetricCard title="Other Expenses" value={formatCurrency(businessMetrics.otherExpenses)} sub="From Transactions" />
+                        </div>
+                    </div>
+                </TabsContent>
+            </Tabs>
         </div>
     );
 }
