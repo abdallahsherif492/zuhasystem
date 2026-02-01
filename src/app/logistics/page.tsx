@@ -275,38 +275,33 @@ function LogisticsContent() {
         if (!file) return;
 
         Papa.parse(file, {
+            skipEmptyLines: true,
+            header: false,
             complete: (results: any) => {
                 const phones = new Set<string>();
-                // Try to find a column that looks like a phone number or just take the first column
                 results.data.forEach((row: any) => {
                     const values = Array.isArray(row) ? row : Object.values(row);
                     values.forEach((val: any) => {
                         if (val && typeof val === 'string') {
-                            // Simple normalize: remove non-digits
-                            const clean = val.replace(/\D/g, '');
-                            if (clean.length >= 10) { // Assuming Egyptian phones are 10+ digits
+                            let clean = val.replace(/\D/g, '');
+                            // Normalize Egyptian phones
+                            if (clean.startsWith('20')) clean = clean.slice(2);
+                            if (clean.length === 10 && clean.startsWith('1')) clean = '0' + clean;
+
+                            if (clean.length >= 10 && clean.length <= 15) {
                                 phones.add(clean);
-                                // Also add with 0 prefix if missing, or without if present to be safe? 
-                                // Let's just store the raw digits for now and doing fuzzy match in filter
                             }
                         }
                     });
                 });
 
                 if (phones.size > 0) {
-                    // Clean up phone numbers to ensure they match format in DB (usually 01xxxxxxxxx)
-                    const normalizedPhones = Array.from(phones).map(p => {
-                        // Ensure it starts with 0 if it's an Egyptian mobile (10 digits starting with 1 -> 01...)
-                        if (p.length === 10 && p.startsWith('1')) return '0' + p;
-                        return p;
-                    });
-                    setPhoneFilter(normalizedPhones);
-                    toast.success(`Loaded ${normalizedPhones.length} phone numbers`);
+                    setPhoneFilter(Array.from(phones));
+                    toast.success(`Loaded ${phones.size} phone numbers`);
                 } else {
-                    toast.error("No valid phone numbers found in CSV");
+                    toast.error("No valid phone numbers found");
                 }
-            },
-            header: false // We'll manually inspect rows to be flexible
+            }
         });
     };
 
@@ -340,10 +335,12 @@ function LogisticsContent() {
         }
 
         // Phone List Filter
-        if (phoneFilter) {
-            const orderPhone = order.customer_info?.phone?.replace(/\D/g, '') || '';
-            // Check for exact match or suffix match
-            const match = phoneFilter.some(p => orderPhone.includes(p) || p.includes(orderPhone));
+        if (phoneFilter && phoneFilter.length > 0) {
+            let orderPhone = order.customer_info?.phone?.replace(/\D/g, '') || '';
+            if (orderPhone.startsWith('20')) orderPhone = orderPhone.slice(2);
+            if (orderPhone.length === 10 && orderPhone.startsWith('1')) orderPhone = '0' + orderPhone;
+
+            const match = phoneFilter.includes(orderPhone);
             if (!match) return false;
         }
 
