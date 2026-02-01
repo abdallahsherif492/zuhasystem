@@ -137,6 +137,33 @@ export function SidebarContent() {
                     Ads Spent
                 </Button>
             </Link>
+            <div className="pt-4 pb-2">
+                <h4 className="mb-1 rounded-md px-2 py-1 text-sm font-semibold">
+                    Detailed Analytics
+                </h4>
+                <div className="grid grid-flow-row auto-rows-max text-sm gap-1">
+                    <Link href="/insights/expenses">
+                        <Button
+                            variant={pathname.startsWith("/insights/expenses") ? "secondary" : "ghost"}
+                            className="w-full justify-start h-8"
+                            size="sm"
+                        >
+                            <Banknote className="mr-2 h-3 w-3" />
+                            Expenses
+                        </Button>
+                    </Link>
+                    <Link href="/insights/channel-analytics">
+                        <Button
+                            variant={pathname.startsWith("/insights/channel-analytics") ? "secondary" : "ghost"}
+                            className="w-full justify-start h-8"
+                            size="sm"
+                        >
+                            <Megaphone className="mr-2 h-3 w-3" />
+                            Channels
+                        </Button>
+                    </Link>
+                </div>
+            </div>
         </div>
     );
 }
