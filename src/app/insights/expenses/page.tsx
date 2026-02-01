@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { formatCurrency } from "@/lib/utils";
@@ -15,7 +15,7 @@ import { format, startOfMonth } from "date-fns";
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d', '#ffc658', '#8dd1e1'];
 
-export default function ExpensesAnalyticsPage() {
+function ExpensesAnalyticsContent() {
     const router = useRouter();
     const searchParams = useSearchParams();
     const fromDate = searchParams.get("from");
@@ -190,5 +190,13 @@ export default function ExpensesAnalyticsPage() {
                 </CardContent>
             </Card>
         </div>
+    );
+}
+
+export default function ExpensesAnalyticsPage() {
+    return (
+        <Suspense fallback={<div className="flex justify-center p-20"><Loader2 className="h-8 w-8 animate-spin" /></div>}>
+            <ExpensesAnalyticsContent />
+        </Suspense>
     );
 }
