@@ -277,19 +277,8 @@ export default function NewOrderPage() {
             }
 
             // 0.5. Determine Initial Status
-            // If all items are in stock (current_stock >= qty), auto-set to "Prepared".
-            // Otherwise, keep as "Pending" (so it goes to Purchases).
+            // Always set to Pending as per user request (stock is deducted regardless).
             let initialStatus = "Pending";
-            if (latestVariants) {
-                const allInStock = cart.every(item => {
-                    const v = latestVariants.find(lv => lv.id === item.variantId);
-                    return (v?.stock_qty || 0) >= item.quantity;
-                });
-
-                if (allInStock && cart.length > 0) {
-                    initialStatus = "Prepared";
-                }
-            }
 
             // 1. Create or Update Customer
             let custId = selectedCustomerId;
