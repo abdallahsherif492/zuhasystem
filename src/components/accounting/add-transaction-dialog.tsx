@@ -52,7 +52,7 @@ interface AddTransactionDialogProps {
 }
 
 const ACCOUNTS = ["Mohamed Adel", "Abdallah Sherif"];
-const EXPENSE_CATEGORIES = ["Ads", "Website", "Purchases", "Other"];
+const EXPENSE_CATEGORIES = ["Ads", "Website", "Purchases", "Salaries", "Rent", "Transportation", "Fulfilment", "Other"];
 const REVENUE_CATEGORIES = ["Orders Collection", "Deposit", "Other"];
 
 // Define the form values type explicitly for better type inference
