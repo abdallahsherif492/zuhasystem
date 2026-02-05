@@ -69,13 +69,22 @@ function ExpensesAnalyticsContent() {
     const totalExpenses = expensesData.reduce((sum, item) => sum + Number(item.total_amount), 0);
     const costPerOrder = totalOrders > 0 ? totalExpenses / totalOrders : 0;
 
-    // Group by Category for Pie Chart
-    const categoryMap = new Map();
+    // Aggregate by Category
+    const aggregatedMap = new Map<string, number>();
     expensesData.forEach(item => {
-        const current = categoryMap.get(item.category) || 0;
-        categoryMap.set(item.category, current + Number(item.total_amount));
+        const current = aggregatedMap.get(item.category) || 0;
+        aggregatedMap.set(item.category, current + Number(item.total_amount));
     });
-    const categoryData = Array.from(categoryMap.entries()).map(([name, value]) => ({ name, value }));
+
+    const aggregatedExpenses = Array.from(aggregatedMap.entries())
+        .map(([category, amount]) => ({
+            category,
+            total_amount: amount,
+            cost_per_order: totalOrders > 0 ? amount / totalOrders : 0
+        }))
+        .sort((a, b) => b.total_amount - a.total_amount);
+
+    const categoryData = aggregatedExpenses.map(item => ({ name: item.category, value: item.total_amount }));
 
     if (loading) {
         return <div className="flex justify-center p-20"><Loader2 className="h-8 w-8 animate-spin" /></div>;
@@ -115,7 +124,7 @@ function ExpensesAnalyticsContent() {
                 {/* Pie Chart: Expenses by Category */}
                 <Card className="col-span-1">
                     <CardHeader>
-                        <CardTitle>Expenses by Category</CardTitle>
+                        <CardTitle>Expenses Share</CardTitle>
                     </CardHeader>
                     <CardContent className="h-[300px]">
                         <ResponsiveContainer width="100%" height="100%">
@@ -143,19 +152,19 @@ function ExpensesAnalyticsContent() {
                 {/* Bar Chart: Detailed Expenses Breakdown */}
                 <Card className="col-span-1">
                     <CardHeader>
-                        <CardTitle>Top Expenses (Detailed)</CardTitle>
+                        <CardTitle>Top Expenses (By Category)</CardTitle>
                     </CardHeader>
                     <CardContent className="h-[300px]">
                         <ResponsiveContainer width="100%" height="100%">
                             <BarChart
-                                data={expensesData.slice(0, 10)} // Top 10 expenses
+                                data={aggregatedExpenses.slice(0, 10)} // Top 10 categories
                                 layout="vertical"
                                 margin={{ top: 5, right: 30, left: 40, bottom: 5 }}
                             >
                                 <CartesianGrid strokeDasharray="3 3" horizontal={false} />
                                 <XAxis type="number" hide />
                                 <YAxis
-                                    dataKey="sub_category"
+                                    dataKey="category"
                                     type="category"
                                     width={100}
                                     tick={{ fontSize: 12 }}
@@ -176,16 +185,19 @@ function ExpensesAnalyticsContent() {
                 </CardHeader>
                 <CardContent>
                     <div className="space-y-4">
-                        {expensesData.map((item, i) => (
-                            <div key={i} className="flex items-center justify-between border-b pb-2 last:border-0 last:pb-0">
-                                <div className="space-y-1">
-                                    <p className="text-sm font-medium leading-none">{item.sub_category}</p>
-                                    <p className="text-xs text-muted-foreground">{item.category}</p>
-                                </div>
-                                <div className="font-medium">{formatCurrency(item.total_amount)}</div>
+                        <div className="flex items-center justify-between border-b pb-2 font-semibold text-sm">
+                            <div className="flex-1">Category</div>
+                            <div className="w-32 text-right">Total Amount</div>
+                            <div className="w-32 text-right">Cost / Order</div>
+                        </div>
+                        {aggregatedExpenses.map((item, i) => (
+                            <div key={i} className="flex items-center justify-between border-b pb-2 last:border-0 last:pb-0 text-sm">
+                                <div className="flex-1 font-medium">{item.category}</div>
+                                <div className="w-32 text-right font-medium text-green-600">{formatCurrency(item.total_amount)}</div>
+                                <div className="w-32 text-right text-muted-foreground">{formatCurrency(item.cost_per_order)}</div>
                             </div>
                         ))}
-                        {expensesData.length === 0 && <p className="text-center text-muted-foreground py-4">No expenses found for this period.</p>}
+                        {aggregatedExpenses.length === 0 && <p className="text-center text-muted-foreground py-4">No expenses found for this period.</p>}
                     </div>
                 </CardContent>
             </Card>
