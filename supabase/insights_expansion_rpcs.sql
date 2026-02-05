@@ -38,7 +38,7 @@ BEGIN
   SELECT 
     o.channel,
     COUNT(*) as total_orders,
-    COUNT(*) FILTER (WHERE o.status = 'Delivered') as delivered_orders,
+    COUNT(*) FILTER (WHERE o.status IN ('Delivered', 'Collected')) as delivered_orders,
     SUM(o.total_amount) as total_revenue
   FROM orders o
   WHERE 
