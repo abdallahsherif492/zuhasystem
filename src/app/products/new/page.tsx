@@ -255,32 +255,33 @@ export default function NewProductPage() {
                                             render={({ field }) => (
                                                 <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm">
                                                     <div className="space-y-0.5">
-                                                        <FormLabel>Track Inventory</FormLabel>
+                                                        <FormLabel>Open Product</FormLabel>
+                                                        <FormDescription>
+                                                            If enabled, orders can be placed even with 0 stock (negative stock).
+                                                        </FormDescription>
                                                     </div>
                                                     <FormControl>
                                                         <Switch
-                                                            checked={field.value}
-                                                            onCheckedChange={field.onChange}
+                                                            checked={!field.value}
+                                                            onCheckedChange={(checked) => field.onChange(!checked)}
                                                         />
                                                     </FormControl>
                                                 </FormItem>
                                             )}
                                         />
-                                        {form.watch(`variants.${index}.track_inventory`) && (
-                                            <FormField
-                                                control={form.control}
-                                                name={`variants.${index}.stock_qty`}
-                                                render={({ field }) => (
-                                                    <FormItem>
-                                                        <FormLabel>Stock Quantity</FormLabel>
-                                                        <FormControl>
-                                                            <Input type="number" {...field} />
-                                                        </FormControl>
-                                                        <FormMessage />
-                                                    </FormItem>
-                                                )}
-                                            />
-                                        )}
+                                        <FormField
+                                            control={form.control}
+                                            name={`variants.${index}.stock_qty`}
+                                            render={({ field }) => (
+                                                <FormItem>
+                                                    <FormLabel>Stock Quantity</FormLabel>
+                                                    <FormControl>
+                                                        <Input type="number" {...field} />
+                                                    </FormControl>
+                                                    <FormMessage />
+                                                </FormItem>
+                                            )}
+                                        />
                                     </div>
                                     {fields.length > 1 && (
                                         <div className="mt-4 flex justify-end">
