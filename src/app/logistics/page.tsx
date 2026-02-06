@@ -190,19 +190,33 @@ function LogisticsContent() {
                 const oldStatus = order.status;
 
                 if (newStatus === 'Returned' && oldStatus !== 'Returned') {
-                    const { data: items } = await supabase.from('order_items').select('variant_id, quantity').eq('order_id', oid);
+                    const { data: items } = await supabase
+                        .from('order_items')
+                        .select('variant_id, quantity, variant:variants(track_inventory)')
+                        .eq('order_id', oid);
                     if (items) {
                         await restockItems(
-                            items.map(i => ({ variant_id: i.variant_id, qty: i.quantity })),
+                            items.map((i: any) => ({
+                                variant_id: i.variant_id,
+                                qty: i.quantity,
+                                track_inventory: i.variant?.track_inventory
+                            })),
                             oid,
                             "Logistics: Order Returned"
                         );
                     }
                 } else if (oldStatus === 'Returned' && newStatus !== 'Returned') {
-                    const { data: items } = await supabase.from('order_items').select('variant_id, quantity').eq('order_id', oid);
+                    const { data: items } = await supabase
+                        .from('order_items')
+                        .select('variant_id, quantity, variant:variants(track_inventory)')
+                        .eq('order_id', oid);
                     if (items) {
                         await deductStock(
-                            items.map(i => ({ variant_id: i.variant_id, qty: i.quantity })),
+                            items.map((i: any) => ({
+                                variant_id: i.variant_id,
+                                qty: i.quantity,
+                                track_inventory: i.variant?.track_inventory
+                            })),
                             oid,
                             "Logistics: Status Change (Un-returned)",
                             "adjustment"

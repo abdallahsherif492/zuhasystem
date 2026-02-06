@@ -344,9 +344,13 @@ export default function NewOrderPage() {
             const { error: itemsError } = await supabase.from("order_items").insert(itemsData);
             if (itemsError) throw itemsError;
 
-            // 4. Deduct Stock (Always deduct, regardless of track_inventory setting, as per user request)
+            // 4. Deduct Stock (Only if track_inventory is true)
             // The validation step above ensures we don't violate track_inventory=true constraints.
-            await deductStock(cart.map(c => ({ variant_id: c.variantId, qty: c.quantity })), orderData.id);
+            await deductStock(cart.map(c => ({
+                variant_id: c.variantId,
+                qty: c.quantity,
+                track_inventory: c.trackInventory
+            })), orderData.id);
 
             router.push("/orders");
             router.refresh();

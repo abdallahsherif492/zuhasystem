@@ -260,27 +260,30 @@ export default function OrderDetailsPage() {
             const allInvolvedVariants = new Set([...originalMap.keys(), ...newMap.keys()]);
 
             // Prepare Stock Adjustments
-            const deductionQueue: { variant_id: string, qty: number }[] = [];
-            const restockQueue: { variant_id: string, qty: number }[] = [];
+            const deductionQueue: { variant_id: string, qty: number, track_inventory: boolean }[] = [];
+            const restockQueue: { variant_id: string, qty: number, track_inventory: boolean }[] = [];
 
             for (const vid of Array.from(allInvolvedVariants)) {
                 const oldQty = originalMap.get(vid) || 0;
                 const newQty = newMap.get(vid) || 0;
                 const diff = newQty - oldQty;
 
+                const vInfo = freshVariants?.find(v => v.id === vid);
+                const trackInv = vInfo?.track_inventory ?? false;
+
                 if (diff > 0) {
                     // Need more items -> Deduct
                     // Check stock first
-                    const vInfo = freshVariants?.find(v => v.id === vid);
-                    if (vInfo?.track_inventory) {
-                        if (vInfo.stock_qty < diff) {
-                            throw new Error(`Insufficient stock for variant ${vid}. Need ${diff} more, have ${vInfo.stock_qty}.`);
+                    if (trackInv) {
+                        const available = vInfo?.stock_qty || 0;
+                        if (available < diff) {
+                            throw new Error(`Insufficient stock for variant ${vid}. Need ${diff} more, have ${available}.`);
                         }
                     }
-                    deductionQueue.push({ variant_id: vid as string, qty: diff });
+                    deductionQueue.push({ variant_id: vid as string, qty: diff, track_inventory: trackInv });
                 } else if (diff < 0) {
                     // Less items -> Return to stock
-                    restockQueue.push({ variant_id: vid as string, qty: Math.abs(diff) });
+                    restockQueue.push({ variant_id: vid as string, qty: Math.abs(diff), track_inventory: trackInv });
                 }
             }
 
@@ -368,7 +371,11 @@ export default function OrderDetailsPage() {
                 // So yes, we should restock the *new* quantities.
 
                 if (newStatus === 'Returned' && oldStatus !== 'Returned') {
-                    const finalItems = editItems.map(i => ({ variant_id: i.variantId, qty: i.quantity }));
+                    const finalItems = editItems.map(i => ({
+                        variant_id: i.variantId,
+                        qty: i.quantity,
+                        track_inventory: i.track_inventory
+                    }));
                     await restockItems(finalItems, orderId, "Status Change: Returned");
                     toast.success("Order marked Returned - Stock restored");
                 }
@@ -387,7 +394,11 @@ export default function OrderDetailsPage() {
 
                     // Allow me to handle basic status changes.
                     // If moving FROM Returned, we need to DEDUCT the items represented by the new list.
-                    const finalItems = editItems.map(i => ({ variant_id: i.variantId, qty: i.quantity }));
+                    const finalItems = editItems.map(i => ({
+                        variant_id: i.variantId,
+                        qty: i.quantity,
+                        track_inventory: i.track_inventory
+                    }));
                     await deductStock(finalItems, orderId, "Status Change: Un-returned");
                 }
             }
