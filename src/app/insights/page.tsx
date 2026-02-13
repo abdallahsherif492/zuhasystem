@@ -9,7 +9,7 @@ import { DateRangePicker } from "@/components/date-range-picker";
 import { Loader2, TrendingUp, TrendingDown, DollarSign, Target, Activity, Percent, Megaphone, Package, Briefcase } from "lucide-react";
 import {
     LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-    PieChart, Pie, Cell, Legend, BarChart, Bar
+    PieChart, Pie, Cell, Legend, BarChart, Bar, AreaChart, Area
 } from "recharts";
 import { format, parseISO, startOfDay, isWithinInterval, endOfDay, startOfMonth } from "date-fns";
 import { useRouter } from "next/navigation";
@@ -34,6 +34,7 @@ function InsightsContent() {
         cpo: 0,
         roas: 0
     });
+    const [dailyAdsData, setDailyAdsData] = useState<any[]>([]);
 
     // 2. Orders Metrics
     const [ordersMetrics, setOrdersMetrics] = useState({
@@ -113,6 +114,14 @@ function InsightsContent() {
                 cpo: adsOrders ? adsSpent / adsOrders : 0,
                 roas: adsSpent ? adsRev / adsSpent : 0
             });
+
+            // 1.1 Daily Ads Data
+            const { data: dailyData, error: dailyError } = await supabase.rpc('get_daily_ads_performance', {
+                from_date: start,
+                to_date: end
+            });
+            if (dailyError) throw dailyError;
+            setDailyAdsData(dailyData || []);
 
             // --- 2. ORDERS INSIGHTS ---
             const { data: ordData, error: ordError } = await supabase.rpc('get_insight_orders_stats', {
@@ -291,6 +300,80 @@ function InsightsContent() {
                             <MetricCard title="Cost Per Order" value={formatCurrency(adsMetrics.cpo)} neg={true} />
                             <MetricCard title="ROAS" value={`${adsMetrics.roas.toFixed(2)}x`} pos={adsMetrics.roas > 2} />
                         </div>
+                    </div>
+                    {/* Charts Section */}
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                        <Card>
+                            <CardHeader>
+                                <CardTitle>Cost Per Order (CPO) Trend</CardTitle>
+                                <CardDescription>Daily cost to acquire an order</CardDescription>
+                            </CardHeader>
+                            <CardContent className="h-[300px]">
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <AreaChart data={dailyAdsData}>
+                                        <defs>
+                                            <linearGradient id="colorCpo" x1="0" y1="0" x2="0" y2="1">
+                                                <stop offset="5%" stopColor="#ef4444" stopOpacity={0.8} />
+                                                <stop offset="95%" stopColor="#ef4444" stopOpacity={0} />
+                                            </linearGradient>
+                                        </defs>
+                                        <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                                        <XAxis
+                                            dataKey="day_date"
+                                            tickFormatter={(value) => format(parseISO(value), "dd MMM")}
+                                            tickLine={false}
+                                            axisLine={false}
+                                        />
+                                        <YAxis tickFormatter={(value) => `EGP ${value}`} axisLine={false} tickLine={false} />
+                                        <Tooltip
+                                            formatter={(value: any) => formatCurrency(Number(value) || 0)}
+                                            labelFormatter={(label) => format(parseISO(label), "dd MMM yyyy")}
+                                        />
+                                        <Area
+                                            type="monotone"
+                                            dataKey="daily_cpo"
+                                            stroke="#ef4444"
+                                            fillOpacity={1}
+                                            fill="url(#colorCpo)"
+                                            name="CPO"
+                                        />
+                                    </AreaChart>
+                                </ResponsiveContainer>
+                            </CardContent>
+                        </Card>
+
+                        <Card>
+                            <CardHeader>
+                                <CardTitle>ROAS Trend</CardTitle>
+                                <CardDescription>Return on Ad Spend (Revenue / Spend)</CardDescription>
+                            </CardHeader>
+                            <CardContent className="h-[300px]">
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <LineChart data={dailyAdsData}>
+                                        <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                                        <XAxis
+                                            dataKey="day_date"
+                                            tickFormatter={(value) => format(parseISO(value), "dd MMM")}
+                                            tickLine={false}
+                                            axisLine={false}
+                                        />
+                                        <YAxis tickFormatter={(value) => `${value}x`} axisLine={false} tickLine={false} />
+                                        <Tooltip
+                                            formatter={(value: any) => `${(Number(value) || 0).toFixed(2)}x`}
+                                            labelFormatter={(label) => format(parseISO(label), "dd MMM yyyy")}
+                                        />
+                                        <Line
+                                            type="monotone"
+                                            dataKey="daily_roas"
+                                            stroke="#10b981"
+                                            strokeWidth={2}
+                                            dot={false}
+                                            name="ROAS"
+                                        />
+                                    </LineChart>
+                                </ResponsiveContainer>
+                            </CardContent>
+                        </Card>
                     </div>
                 </TabsContent>
 

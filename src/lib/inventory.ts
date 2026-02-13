@@ -30,23 +30,22 @@ export async function deductStock(
     type: string = "sale"
 ) {
     for (const item of items) {
-        // 1. Decrement Stock (Only if tracking is enabled)
-        if (item.track_inventory) {
-            const { error: updateError } = await supabase.rpc('decrement_stock', {
-                row_id: item.variant_id,
-                amount: item.qty
-            });
+        // 1. Decrement Stock (Always call, passing logic flag)
+        const { error: updateError } = await supabase.rpc('decrement_stock', {
+            row_id: item.variant_id,
+            amount: item.qty,
+            is_open: !item.track_inventory // track_inventory=false => Open Product
+        });
 
-            // 2. Log Transaction
-            if (!updateError) {
-                await supabase.from('inventory_transactions').insert({
-                    variant_id: item.variant_id,
-                    quantity_change: -item.qty,
-                    transaction_type: type,
-                    reference_id: orderId,
-                    note: note
-                });
-            }
+        // 2. Log Transaction
+        if (!updateError) {
+            await supabase.from('inventory_transactions').insert({
+                variant_id: item.variant_id,
+                quantity_change: -item.qty,
+                transaction_type: type,
+                reference_id: orderId,
+                note: note
+            });
         }
     }
 }
@@ -60,23 +59,21 @@ export async function restockItems(
     note: string = "Order Returned"
 ) {
     for (const item of items) {
-        // 1. Increment Stock (Only if tracking is enabled)
-        if (item.track_inventory) {
-            const { error: updateError } = await supabase.rpc('increment_stock', {
-                row_id: item.variant_id,
-                amount: item.qty
-            });
+        // 1. Increment Stock (Always for consistency, even Open products represent physical items when returned)
+        const { error: updateError } = await supabase.rpc('increment_stock', {
+            row_id: item.variant_id,
+            amount: item.qty
+        });
 
-            // 2. Log Transaction
-            if (!updateError) {
-                await supabase.from('inventory_transactions').insert({
-                    variant_id: item.variant_id,
-                    quantity_change: item.qty,
-                    transaction_type: 'return',
-                    reference_id: orderId,
-                    note: note
-                });
-            }
+        // 2. Log Transaction
+        if (!updateError) {
+            await supabase.from('inventory_transactions').insert({
+                variant_id: item.variant_id,
+                quantity_change: item.qty,
+                transaction_type: 'return',
+                reference_id: orderId,
+                note: note
+            });
         }
     }
 }
