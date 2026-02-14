@@ -122,7 +122,7 @@ function ProductAnalysisContent() {
 
             // Process orders
             ordersData?.forEach(order => {
-                const isDelivered = order.status === 'Delivered';
+                const isDelivered = order.status === 'Delivered' || order.status === 'Collected';
 
                 // Track unique products in this order to increment total_orders correctly (1 order can have multiple items of same product?)
                 // Usually "Total Orders" means count of orders containing this product.
