@@ -12,28 +12,45 @@ RETURNS TABLE (
   total_units NUMERIC,
   delivered_count BIGINT,
   delivery_rate NUMERIC
-) AS $$
+) 
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
 BEGIN
   RETURN QUERY
+  WITH relevant_orders AS (
+    SELECT id, status
+    FROM orders 
+    WHERE created_at >= from_date AND created_at <= to_date
+    AND status != 'Cancelled'
+  ),
+  product_stats AS (
+    SELECT 
+      v.product_id,
+      COUNT(DISTINCT ro.id) as order_count,
+      SUM(oi.quantity) as units,
+      SUM(oi.price_at_sale * oi.quantity) as revenue,
+      COUNT(DISTINCT CASE WHEN ro.status = 'Delivered' THEN ro.id END) as delivered
+    FROM relevant_orders ro
+    JOIN order_items oi ON ro.id = oi.order_id
+    JOIN variants v ON oi.variant_id = v.id
+    GROUP BY v.product_id
+  )
   SELECT
     p.id as product_id,
     p.name as product_name,
-    COUNT(DISTINCT o.id) as total_orders,
-    COALESCE(SUM(oi.price_at_sale * oi.quantity), 0) as total_sales,
-    COALESCE(SUM(oi.quantity), 0) as total_units,
-    COUNT(DISTINCT CASE WHEN o.status = 'Delivered' THEN o.id END) as delivered_count,
+    COALESCE(ps.order_count, 0) as total_orders,
+    COALESCE(ps.revenue, 0) as total_sales,
+    COALESCE(ps.units, 0) as total_units,
+    COALESCE(ps.delivered, 0) as delivered_count,
     CASE 
-      WHEN COUNT(DISTINCT o.id) > 0 THEN 
-        ROUND((COUNT(DISTINCT CASE WHEN o.status = 'Delivered' THEN o.id END)::numeric / COUNT(DISTINCT o.id)::numeric) * 100, 2)
+      WHEN COALESCE(ps.order_count, 0) > 0 THEN 
+        ROUND((COALESCE(ps.delivered, 0)::numeric / ps.order_count::numeric) * 100, 2)
       ELSE 0 
     END as delivery_rate
   FROM products p
-  JOIN variants v ON p.id = v.product_id
-  JOIN order_items oi ON v.id = oi.variant_id
-  JOIN orders o ON oi.order_id = o.id
-  WHERE o.created_at >= from_date AND o.created_at <= to_date
-  AND o.status != 'Cancelled' -- Exclude cancelled orders from "Total Orders"? usually yes for analysis
-  GROUP BY p.id, p.name
-  ORDER BY total_sales DESC;
+  LEFT JOIN product_stats ps ON p.id = ps.product_id
+  ORDER BY total_sales DESC NULLS LAST;
 END;
-$$ LANGUAGE plpgsql;
+$$;
