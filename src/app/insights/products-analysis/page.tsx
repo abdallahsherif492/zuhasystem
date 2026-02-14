@@ -36,6 +36,7 @@ function ProductAnalysisContent() {
     const toDate = searchParams.get("to");
 
     const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
     const [data, setData] = useState<ProductMetric[]>([]);
     const [filteredData, setFilteredData] = useState<ProductMetric[]>([]);
     const [searchQuery, setSearchQuery] = useState("");
@@ -71,19 +72,100 @@ function ProductAnalysisContent() {
 
     async function fetchData() {
         setLoading(true);
+        setError(null);
         try {
             const start = fromDate ? `${fromDate}T00:00:00` : new Date().toISOString();
             const end = toDate ? `${toDate}T23:59:59` : new Date().toISOString();
 
-            const { data: rpcData, error } = await supabase.rpc('get_products_analysis_metrics', {
-                from_date: start,
-                to_date: end
+            // 1. Fetch all products
+            const { data: productsData, error: productsError } = await supabase
+                .from('products')
+                .select('id, name');
+
+            if (productsError) throw productsError;
+
+            // 2. Fetch orders with items and variants
+            const { data: ordersData, error: ordersError } = await supabase
+                .from('orders')
+                .select(`
+                    id, 
+                    status, 
+                    order_items (
+                        quantity,
+                        price_at_sale,
+                        variants (
+                            product_id
+                        )
+                    )
+                `)
+                .gte('created_at', start)
+                .lte('created_at', end)
+                .neq('status', 'Cancelled');
+
+            if (ordersError) throw ordersError;
+
+            // 3. Aggregate Metrics
+            const metricsMap = new Map<string, ProductMetric>();
+
+            // Initialize all products with 0
+            productsData?.forEach(p => {
+                metricsMap.set(p.id, {
+                    product_id: p.id,
+                    product_name: p.name,
+                    total_orders: 0,
+                    total_sales: 0,
+                    total_units: 0,
+                    delivered_count: 0,
+                    delivery_rate: 0
+                });
             });
 
-            if (error) throw error;
-            setData(rpcData || []);
-        } catch (error) {
-            console.error("Error fetching product analysis:", error);
+            // Process orders
+            ordersData?.forEach(order => {
+                const isDelivered = order.status === 'Delivered';
+
+                // Track unique products in this order to increment total_orders correctly (1 order can have multiple items of same product?)
+                // Usually "Total Orders" means count of orders containing this product.
+                const productsInOrder = new Set<string>();
+
+                order.order_items.forEach((item: any) => {
+                    const productId = item.variants?.product_id;
+                    if (productId && metricsMap.has(productId)) {
+                        const metric = metricsMap.get(productId)!;
+
+                        // Update Sales & Units
+                        metric.total_sales += Number(item.price_at_sale) * item.quantity;
+                        metric.total_units += item.quantity;
+
+                        productsInOrder.add(productId);
+                    }
+                });
+
+                // Update Order Counts
+                productsInOrder.forEach(productId => {
+                    const metric = metricsMap.get(productId)!;
+                    metric.total_orders += 1;
+                    if (isDelivered) {
+                        metric.delivered_count += 1;
+                    }
+                });
+            });
+
+            // Calculate Rates & Finalize
+            const result: ProductMetric[] = Array.from(metricsMap.values()).map(m => ({
+                ...m,
+                delivery_rate: m.total_orders > 0
+                    ? Math.round((m.delivered_count / m.total_orders) * 100 * 100) / 100
+                    : 0
+            }));
+
+            // Sort by default (Total Sales DESC)
+            result.sort((a, b) => b.total_sales - a.total_sales);
+
+            setData(result);
+        } catch (err: any) {
+            console.error("Error fetching analysis:", err);
+            setError(err.message || "Failed to load data");
         } finally {
             setLoading(false);
         }
@@ -172,8 +254,8 @@ function ProductAnalysisContent() {
                                                 <TableCell className="text-right">{item.total_units}</TableCell>
                                                 <TableCell className="text-right">
                                                     <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${item.delivery_rate >= 80 ? 'bg-green-100 text-green-800' :
-                                                            item.delivery_rate >= 50 ? 'bg-yellow-100 text-yellow-800' :
-                                                                'bg-red-100 text-red-800'
+                                                        item.delivery_rate >= 50 ? 'bg-yellow-100 text-yellow-800' :
+                                                            'bg-red-100 text-red-800'
                                                         }`}>
                                                         {item.delivery_rate}%
                                                     </span>
