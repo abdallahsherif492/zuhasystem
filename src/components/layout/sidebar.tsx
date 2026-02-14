@@ -162,6 +162,16 @@ export function SidebarContent() {
                             Channels
                         </Button>
                     </Link>
+                    <Link href="/insights/products-analysis">
+                        <Button
+                            variant={pathname.startsWith("/insights/products-analysis") ? "secondary" : "ghost"}
+                            className="w-full justify-start h-8"
+                            size="sm"
+                        >
+                            <Package className="mr-2 h-3 w-3" />
+                            Products
+                        </Button>
+                    </Link>
                 </div>
             </div>
         </div>
