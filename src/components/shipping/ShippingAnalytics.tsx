@@ -19,6 +19,7 @@ type CompanyMetrics = {
     delivered_count: number;
     returned_count: number;
     total_value: number; // Net value (Total - Shipping)
+    shipped_value: number; // Net value of ONLY Shipped orders
 };
 
 export function ShippingAnalytics() {
@@ -76,7 +77,8 @@ export function ShippingAnalytics() {
                     shipped_count: 0,
                     delivered_count: 0,
                     returned_count: 0,
-                    total_value: 0
+                    total_value: 0,
+                    shipped_value: 0
                 });
             });
 
@@ -86,16 +88,16 @@ export function ShippingAnalytics() {
                 if (map.has(companyId)) {
                     const m = map.get(companyId)!;
                     m.total_orders++;
+                    const net = (order.total_amount || 0) - (order.shipping_cost || 0);
 
-                    if (order.status === 'Shipped') m.shipped_count++;
+                    if (order.status === 'Shipped') {
+                        m.shipped_count++;
+                        m.shipped_value += net;
+                    }
                     if (order.status === 'Delivered' || order.status === 'Collected') m.delivered_count++;
                     if (order.status === 'Returned') m.returned_count++;
 
                     // Value (Net)
-                    // Should we count value for ALL orders or only Delivered?
-                    // "Value of these orders" -> usually means the value of the volume associated with them.
-                    // But typically simple sum of all.
-                    const net = (order.total_amount || 0) - (order.shipping_cost || 0);
                     m.total_value += net;
                 }
             });
@@ -142,9 +144,10 @@ export function ShippingAnalytics() {
                                     <TableHead>Company</TableHead>
                                     <TableHead className="text-right">Total Orders</TableHead>
                                     <TableHead className="text-right">Shipped</TableHead>
+                                    <TableHead className="text-right">Net Value (Shipped)</TableHead>
                                     <TableHead className="text-right">Delivered / Collected</TableHead>
                                     <TableHead className="text-right">Returned</TableHead>
-                                    <TableHead className="text-right">Net Value</TableHead>
+                                    <TableHead className="text-right">Net Value (Total)</TableHead>
                                     <TableHead></TableHead>
                                 </TableRow>
                             </TableHeader>
@@ -158,6 +161,9 @@ export function ShippingAnalytics() {
                                                 <span>{m.shipped_count}</span>
                                                 <span className="text-xs text-muted-foreground">{getPercentage(m.shipped_count, m.total_orders)}</span>
                                             </div>
+                                        </TableCell>
+                                        <TableCell className="text-right font-mono text-blue-600">
+                                            {formatCurrency(m.shipped_value)}
                                         </TableCell>
                                         <TableCell className="text-right">
                                             <div className="flex flex-col items-end">

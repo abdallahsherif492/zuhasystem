@@ -8,7 +8,7 @@ import { DateRangePicker } from "@/components/date-range-picker";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, ArrowLeft, ExternalLink } from "lucide-react";
+import { Loader2, ArrowLeft, ExternalLink, AlertCircle } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 import {
     Select,
@@ -17,7 +17,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select";
-import { format, startOfMonth } from "date-fns";
+import { format, startOfMonth, differenceInDays } from "date-fns";
 import Link from "next/link";
 
 const formatDate = (dateStr: string) => {
@@ -64,6 +64,13 @@ function ShippingCompanyDetailsContent() {
         delivered: 0,
         returned: 0,
         value: 0
+    });
+
+    // Aging Stats
+    const [agingStats, setAgingStats] = useState({
+        plus7: 0,
+        plus10: 0,
+        plus15: 0
     });
 
     useEffect(() => {
@@ -115,14 +122,30 @@ function ShippingCompanyDetailsContent() {
                 value: 0
             };
 
+            const newAging = {
+                plus7: 0,
+                plus10: 0,
+                plus15: 0
+            };
+
+            const now = new Date();
+
             ordersData?.forEach(o => {
                 newStats.total++;
-                if (o.status === 'Shipped') newStats.shipped++;
+                if (o.status === 'Shipped') {
+                    newStats.shipped++;
+                    // Calculate Aging
+                    const age = differenceInDays(now, new Date(o.created_at));
+                    if (age >= 7) newAging.plus7++;
+                    if (age >= 10) newAging.plus10++;
+                    if (age >= 15) newAging.plus15++;
+                }
                 if (o.status === 'Delivered' || o.status === 'Collected') newStats.delivered++;
                 if (o.status === 'Returned') newStats.returned++;
                 newStats.value += (o.total_amount || 0) - (o.shipping_cost || 0);
             });
             setStats(newStats);
+            setAgingStats(newAging);
 
         } catch (error) {
             console.error("Error fetching company details:", error);
@@ -134,6 +157,7 @@ function ShippingCompanyDetailsContent() {
     const filteredOrders = orders.filter(o => {
         if (statusFilter === 'All') return true;
         if (statusFilter === 'Delivered') return o.status === 'Delivered' || o.status === 'Collected';
+        // Special filters for Aging could be added here if needed, but sticky filters are simpler
         return o.status === statusFilter;
     });
 
@@ -178,6 +202,40 @@ function ShippingCompanyDetailsContent() {
                 </Card>
             </div>
 
+            {/* Aging Warning Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <Card className="border-yellow-200 bg-yellow-50/50">
+                    <CardHeader className="pb-2 flex flex-row items-center gap-2">
+                        <AlertCircle className="h-4 w-4 text-yellow-600" />
+                        <CardTitle className="text-sm font-medium text-yellow-800">Shipped &gt; 7 Days</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="text-2xl font-bold text-yellow-700">{agingStats.plus7}</div>
+                        <p className="text-xs text-yellow-600/80">Orders pending delivery for over a week</p>
+                    </CardContent>
+                </Card>
+                <Card className="border-orange-200 bg-orange-50/50">
+                    <CardHeader className="pb-2 flex flex-row items-center gap-2">
+                        <AlertCircle className="h-4 w-4 text-orange-600" />
+                        <CardTitle className="text-sm font-medium text-orange-800">Shipped &gt; 10 Days</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="text-2xl font-bold text-orange-700">{agingStats.plus10}</div>
+                        <p className="text-xs text-orange-600/80">Extended delay warning</p>
+                    </CardContent>
+                </Card>
+                <Card className="border-red-200 bg-red-50/50">
+                    <CardHeader className="pb-2 flex flex-row items-center gap-2">
+                        <AlertCircle className="h-4 w-4 text-red-600" />
+                        <CardTitle className="text-sm font-medium text-red-800">Shipped &gt; 15 Days</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="text-2xl font-bold text-red-700">{agingStats.plus15}</div>
+                        <p className="text-xs text-red-600/80">Critical attention needed</p>
+                    </CardContent>
+                </Card>
+            </div>
+
             {/* Orders Table */}
             <Card>
                 <CardHeader>
@@ -208,6 +266,7 @@ function ShippingCompanyDetailsContent() {
                                 <TableRow>
                                     <TableHead>Order ID</TableHead>
                                     <TableHead>Date</TableHead>
+                                    <TableHead>Age</TableHead>
                                     <TableHead>Customer</TableHead>
                                     <TableHead>Status</TableHead>
                                     <TableHead className="text-right">Total</TableHead>
@@ -217,35 +276,39 @@ function ShippingCompanyDetailsContent() {
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
-                                {filteredOrders.map(order => (
-                                    <TableRow key={order.id}>
-                                        <TableCell className="font-mono text-xs">{order.id.slice(0, 8)}</TableCell>
-                                        <TableCell>{formatDate(order.created_at)}</TableCell>
-                                        <TableCell>{order.customer_info?.name || 'Guest'}</TableCell>
-                                        <TableCell>
-                                            <Badge variant={
-                                                order.status === 'Delivered' || order.status === 'Collected' ? 'default' :
-                                                    order.status === 'Returned' ? 'destructive' :
-                                                        order.status === 'Shipped' ? 'secondary' : 'outline'
-                                            }>
-                                                {order.status}
-                                            </Badge>
-                                        </TableCell>
-                                        <TableCell className="text-right">{formatCurrency(order.total_amount)}</TableCell>
-                                        <TableCell className="text-right text-muted-foreground">{formatCurrency(order.shipping_cost)}</TableCell>
-                                        <TableCell className="text-right font-medium">{formatCurrency((order.total_amount || 0) - (order.shipping_cost || 0))}</TableCell>
-                                        <TableCell>
-                                            <Link href={`/orders/${order.id}`}>
-                                                <Button variant="ghost" size="icon">
-                                                    <ExternalLink className="h-4 w-4" />
-                                                </Button>
-                                            </Link>
-                                        </TableCell>
-                                    </TableRow>
-                                ))}
+                                {filteredOrders.map(order => {
+                                    const age = differenceInDays(new Date(), new Date(order.created_at));
+                                    return (
+                                        <TableRow key={order.id}>
+                                            <TableCell className="font-mono text-xs">{order.id.slice(0, 8)}</TableCell>
+                                            <TableCell>{formatDate(order.created_at)}</TableCell>
+                                            <TableCell className="text-xs text-muted-foreground">{age} days</TableCell>
+                                            <TableCell>{order.customer_info?.name || 'Guest'}</TableCell>
+                                            <TableCell>
+                                                <Badge variant={
+                                                    order.status === 'Delivered' || order.status === 'Collected' ? 'default' :
+                                                        order.status === 'Returned' ? 'destructive' :
+                                                            order.status === 'Shipped' ? 'secondary' : 'outline'
+                                                }>
+                                                    {order.status}
+                                                </Badge>
+                                            </TableCell>
+                                            <TableCell className="text-right">{formatCurrency(order.total_amount)}</TableCell>
+                                            <TableCell className="text-right text-muted-foreground">{formatCurrency(order.shipping_cost)}</TableCell>
+                                            <TableCell className="text-right font-medium">{formatCurrency((order.total_amount || 0) - (order.shipping_cost || 0))}</TableCell>
+                                            <TableCell>
+                                                <Link href={`/orders/${order.id}`}>
+                                                    <Button variant="ghost" size="icon">
+                                                        <ExternalLink className="h-4 w-4" />
+                                                    </Button>
+                                                </Link>
+                                            </TableCell>
+                                        </TableRow>
+                                    );
+                                })}
                                 {filteredOrders.length === 0 && (
                                     <TableRow>
-                                        <TableCell colSpan={8} className="text-center h-24 text-muted-foreground">
+                                        <TableCell colSpan={9} className="text-center h-24 text-muted-foreground">
                                             No orders found.
                                         </TableCell>
                                     </TableRow>
