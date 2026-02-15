@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Loader2, Upload, Megaphone, Trash2, Calendar as CalendarIcon, Filter } from "lucide-react";
+import { Loader2, Upload, Megaphone, Trash2, Calendar as CalendarIcon, Plus } from "lucide-react";
 import Papa from "papaparse";
 import { toast } from "sonner";
 import { formatCurrency, cn } from "@/lib/utils";
@@ -15,6 +15,23 @@ import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Progress } from "@/components/ui/progress";
 import { DateRange } from "react-day-picker";
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+    DialogTrigger,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select";
 
 type AdExpense = {
     id: string;
@@ -34,6 +51,13 @@ export default function AdsPage() {
     const [progress, setProgress] = useState(0);
     const [isProcessing, setIsProcessing] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
+
+    // Manual Entry State
+    const [isManualOpen, setIsManualOpen] = useState(false);
+    const [manualDate, setManualDate] = useState<Date | undefined>(new Date());
+    const [manualPlatform, setManualPlatform] = useState("Facebook");
+    const [manualAmount, setManualAmount] = useState("");
+    const [isSubmitting, setIsSubmitting] = useState(false);
 
     // Filter State
     const [dateRange, setDateRange] = useState<DateRange | undefined>({
@@ -170,6 +194,43 @@ export default function AdsPage() {
         });
     };
 
+    const handleManualSubmit = async () => {
+        if (!manualDate || !manualAmount) {
+            toast.error("Please fill in all fields");
+            return;
+        }
+
+        setIsSubmitting(true);
+        try {
+            const amount = parseFloat(manualAmount);
+            const amountWithVat = amount * 1.14;
+            const dateStr = format(manualDate, "yyyy-MM-dd");
+
+            const { error } = await supabase
+                .from("ads_expenses")
+                .upsert({
+                    ad_date: dateStr,
+                    platform: manualPlatform,
+                    amount: amountWithVat,
+                    currency: "EGP"
+                }, { onConflict: "ad_date,platform" });
+
+            if (error) throw error;
+
+            toast.success("Ad spend added successfully");
+            setIsManualOpen(false);
+            setManualAmount("");
+            setManualDate(new Date());
+            fetchExpenses();
+
+        } catch (error) {
+            console.error("Error adding manual expense:", error);
+            toast.error("Failed to add expense");
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
     const handleDelete = async (id: string) => {
         if (!confirm("Are you sure you want to delete this record?")) return;
 
@@ -192,25 +253,121 @@ export default function AdsPage() {
                     <p className="text-muted-foreground">Import and analyze your daily ad spend.</p>
                 </div>
 
-                {/* Upload Section */}
-                <Card className="w-full sm:w-auto p-4 flex flex-col sm:flex-row items-center gap-4">
-                    <div className="grid w-full max-w-sm items-center gap-1.5">
-                        <Input
-                            ref={fileInputRef}
-                            type="file"
-                            accept=".csv"
-                            onChange={handleFileSelect}
-                            disabled={isProcessing}
-                        />
-                    </div>
-                    <Button
-                        onClick={handleProcessCSV}
-                        disabled={!selectedFile || isProcessing}
-                    >
-                        {isProcessing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}
-                        {isProcessing ? "Processing..." : "Import CSV"}
-                    </Button>
-                </Card>
+                <div className="flex flex-col sm:flex-row gap-4 w-full sm:w-auto">
+                    {/* Manual Entry Dialog */}
+                    <Dialog open={isManualOpen} onOpenChange={setIsManualOpen}>
+                        <DialogTrigger asChild>
+                            <Button variant="outline">
+                                <Plus className="mr-2 h-4 w-4" />
+                                Manual Entry
+                            </Button>
+                        </DialogTrigger>
+                        <DialogContent>
+                            <DialogHeader>
+                                <DialogTitle>Add Daily Ad Spend</DialogTitle>
+                                <DialogDescription>
+                                    Enter the base amount. The system will automatically add 14% VAT.
+                                </DialogDescription>
+                            </DialogHeader>
+                            <div className="grid gap-4 py-4">
+                                <div className="grid grid-cols-4 items-center gap-4">
+                                    <Label htmlFor="date" className="text-right">
+                                        Date
+                                    </Label>
+                                    <div className="col-span-3">
+                                        <Popover>
+                                            <PopoverTrigger asChild>
+                                                <Button
+                                                    variant={"outline"}
+                                                    className={cn(
+                                                        "w-full justify-start text-left font-normal",
+                                                        !manualDate && "text-muted-foreground"
+                                                    )}
+                                                >
+                                                    <CalendarIcon className="mr-2 h-4 w-4" />
+                                                    {manualDate ? format(manualDate, "PPP") : <span>Pick a date</span>}
+                                                </Button>
+                                            </PopoverTrigger>
+                                            <PopoverContent className="w-auto p-0">
+                                                <Calendar
+                                                    mode="single"
+                                                    selected={manualDate}
+                                                    onSelect={setManualDate}
+                                                    initialFocus
+                                                />
+                                            </PopoverContent>
+                                        </Popover>
+                                    </div>
+                                </div>
+                                <div className="grid grid-cols-4 items-center gap-4">
+                                    <Label htmlFor="platform" className="text-right">
+                                        Platform
+                                    </Label>
+                                    <div className="col-span-3">
+                                        <Select value={manualPlatform} onValueChange={setManualPlatform}>
+                                            <SelectTrigger>
+                                                <SelectValue placeholder="Select platform" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="Facebook">Facebook</SelectItem>
+                                                <SelectItem value="Google">Google</SelectItem>
+                                                <SelectItem value="Tiktok">Tiktok</SelectItem>
+                                                <SelectItem value="Snapchat">Snapchat</SelectItem>
+                                                <SelectItem value="Other">Other</SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                </div>
+                                <div className="grid grid-cols-4 items-center gap-4">
+                                    <Label htmlFor="amount" className="text-right">
+                                        Amount (EGP)
+                                    </Label>
+                                    <div className="col-span-3">
+                                        <Input
+                                            id="amount"
+                                            type="number"
+                                            placeholder="e.g. 1000"
+                                            value={manualAmount}
+                                            onChange={(e) => setManualAmount(e.target.value)}
+                                        />
+                                        {manualAmount && (
+                                            <p className="text-xs text-muted-foreground mt-1">
+                                                Total with VAT (14%): <span className="font-bold text-primary">{formatCurrency(parseFloat(manualAmount) * 1.14)}</span>
+                                            </p>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                            <DialogFooter>
+                                <Button onClick={handleManualSubmit} disabled={isSubmitting}>
+                                    {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                                    Save
+                                </Button>
+                            </DialogFooter>
+                        </DialogContent>
+                    </Dialog>
+
+                    {/* Upload Section */}
+                    <Card className="p-1 flex flex-row items-center gap-2 border-0 shadow-none bg-transparent">
+                        <div className="grid w-full max-w-sm items-center gap-1.5">
+                            <Input
+                                ref={fileInputRef}
+                                type="file"
+                                accept=".csv"
+                                onChange={handleFileSelect}
+                                disabled={isProcessing}
+                                className="w-[200px]"
+                            />
+                        </div>
+                        <Button
+                            onClick={handleProcessCSV}
+                            disabled={!selectedFile || isProcessing}
+                        >
+                            {isProcessing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}
+                            {isProcessing ? "Processing..." : "Import"}
+                        </Button>
+                    </Card>
+                </div>
             </div>
 
             {/* Progress Bar */}
