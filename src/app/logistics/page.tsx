@@ -47,6 +47,11 @@ const GOVERNORATES = [
     "Kafr Al Sheikh", "Matrouh", "Luxor", "Qena", "North Sinai", "Sohag"
 ].sort();
 
+const GOV_OPTIONS: Option[] = [
+    { label: "All Except Cairo & Giza", value: "ALL_EXCEPT_CAIRO_GIZA" },
+    ...GOVERNORATES.map(g => ({ label: g, value: g }))
+];
+
 const STATUSES = [
     "Pending",
     "Prepared",
@@ -336,7 +341,18 @@ function LogisticsContent() {
         }
 
         // Gov Filter
-        if (govFilter.length > 0 && !govFilter.includes(order.customer_info?.governorate || "")) return false;
+        if (govFilter.length > 0) {
+            const gov = order.customer_info?.governorate || "";
+            const hasAllExcept = govFilter.includes("ALL_EXCEPT_CAIRO_GIZA");
+
+            if (hasAllExcept) {
+                if (gov === "Cairo" || gov === "Giza") {
+                    if (!govFilter.includes(gov)) return false;
+                }
+            } else {
+                if (!govFilter.includes(gov)) return false;
+            }
+        }
 
         // Status Filter
         if (statusFilter.length > 0 && !statusFilter.includes(order.status)) return false;
@@ -486,7 +502,7 @@ function LogisticsContent() {
                             className="bg-white"
                         />
                         <MultiSelect
-                            options={GOVERNORATES.map(g => ({ label: g, value: g }))}
+                            options={GOV_OPTIONS}
                             selected={govFilter}
                             onChange={setGovFilter}
                             placeholder="Governorate"
