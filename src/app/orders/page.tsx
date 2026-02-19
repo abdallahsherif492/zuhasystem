@@ -232,7 +232,10 @@ function OrdersContent() {
 
     const STATUSES = ["Pending", "Processing", "Prepared", "Shipped", "Delivered", "Cancelled", "Returned"];
     const statusOptions = STATUSES.map(s => ({ label: s, value: s }));
-    const govOptions = GOVERNORATES.map(g => ({ label: g, value: g }));
+    const govOptions: Option[] = [
+        { label: "All Except Cairo & Giza", value: "ALL_EXCEPT_CAIRO_GIZA" },
+        ...GOVERNORATES.map(g => ({ label: g, value: g }))
+    ];
     const channelOptions = CHANNELS.map(c => ({ label: c, value: c }));
 
     // Filter Logic
@@ -254,7 +257,18 @@ function OrdersContent() {
             if (statusFilter.length > 0 && !statusFilter.includes(order.status)) return false;
 
             // 3. Gov Filter
-            if (govFilter.length > 0 && !govFilter.includes(order.customer_info?.governorate || "")) return false;
+            if (govFilter.length > 0) {
+                const gov = order.customer_info?.governorate || "";
+                const hasAllExcept = govFilter.includes("ALL_EXCEPT_CAIRO_GIZA");
+
+                if (hasAllExcept) {
+                    if (gov === "Cairo" || gov === "Giza") {
+                        if (!govFilter.includes(gov)) return false;
+                    }
+                } else {
+                    if (!govFilter.includes(gov)) return false;
+                }
+            }
 
             // 4. Channel Filter
             if (channelFilter.length > 0 && !channelFilter.includes(order.channel || "")) return false;
