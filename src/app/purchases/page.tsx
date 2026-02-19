@@ -11,6 +11,19 @@ import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { toast } from "sonner";
 import { ItemsSummary } from "@/components/purchases/items-summary";
+import { MultiSelect, Option } from "@/components/ui/multi-select";
+
+const GOVERNORATES = [
+    "Cairo", "Giza", "Alexandria", "Dakahlia", "Red Sea", "Beheira", "Fayoum",
+    "Gharbiya", "Ismailia", "Monufia", "Minya", "Qaliubiya", "New Valley", "Suez",
+    "Aswan", "Assiut", "Beni Suef", "Port Said", "Damietta", "Sharkia", "South Sinai",
+    "Kafr Al Sheikh", "Matrouh", "Luxor", "Qena", "North Sinai", "Sohag"
+].sort();
+
+const GOV_OPTIONS: Option[] = [
+    { label: "All Except Cairo & Giza", value: "ALL_EXCEPT_CAIRO_GIZA" },
+    ...GOVERNORATES.map(g => ({ label: g, value: g }))
+];
 
 // Type definitions
 type OrderItem = {
@@ -43,6 +56,7 @@ export default function PurchasesPage() {
     // We use Set<number> for O(1) lookups per order, stored in a Record by OrderID
     const [checkedState, setCheckedState] = useState<Record<string, Set<number>>>({});
     const [processingIds, setProcessingIds] = useState<Set<string>>(new Set());
+    const [govFilter, setGovFilter] = useState<string[]>([]);
 
     useEffect(() => {
         fetchPendingOrders();
@@ -162,22 +176,48 @@ export default function PurchasesPage() {
         );
     }
 
+    const filteredOrders = orders.filter(order => {
+        if (govFilter.length === 0) return true;
+        
+        const gov = order.customer_info?.governorate || "";
+        const hasAllExcept = govFilter.includes("ALL_EXCEPT_CAIRO_GIZA");
+        
+        if (hasAllExcept) {
+            if (gov === "Cairo" || gov === "Giza") {
+                return govFilter.includes(gov);
+            }
+            return true;
+        }
+        
+        return govFilter.includes(gov);
+    });
+
     return (
         <div className="space-y-6">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                 <div>
                     <h1 className="text-3xl font-bold tracking-tight">Purchases / Fulfillment</h1>
                     <p className="text-muted-foreground">Pick items to move Pending orders to Prepared.</p>
                 </div>
                 <Badge variant="secondary" className="text-lg px-4 py-1">
-                    {orders.length} Pending
+                    {filteredOrders.length} Pending
                 </Badge>
             </div>
 
-            <ItemsSummary orders={orders} />
+            <div className="flex items-center gap-2 bg-white p-4 rounded-md border shadow-sm w-full md:max-w-md">
+                <MultiSelect
+                    options={GOV_OPTIONS}
+                    selected={govFilter}
+                    onChange={setGovFilter}
+                    placeholder="Filter by Governorate..."
+                    className="w-full bg-white z-50 text-sm"
+                />
+            </div>
+
+            <ItemsSummary orders={filteredOrders} />
 
             {
-                orders.length === 0 ? (
+                filteredOrders.length === 0 ? (
                     <div className="text-center py-12 border rounded-lg bg-muted/10">
                         <CheckCircle2 className="h-12 w-12 mx-auto text-green-500 mb-4" />
                         <h3 className="text-xl font-semibold">All Caught Up!</h3>
@@ -185,7 +225,7 @@ export default function PurchasesPage() {
                     </div>
                 ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-                        {orders.map((order) => {
+                        {filteredOrders.map((order) => {
                             const checked = checkedState[order.id] || new Set();
                             const isCompleting = processingIds.has(order.id);
 
