@@ -36,6 +36,16 @@ import Papa from "papaparse";
 import { Checkbox } from "@/components/ui/checkbox";
 import { MultiSelect, Option } from "@/components/ui/multi-select";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
@@ -103,6 +113,11 @@ function LogisticsContent() {
     const [selectedCompanyId, setSelectedCompanyId] = useState<string>("");
     const [phoneFilter, setPhoneFilter] = useState<string[] | null>(null);
 
+    // Confirmation Dialog State
+    const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
+    const [pendingConfirmAction, setPendingConfirmAction] = useState<(() => void) | null>(null);
+    const [confirmDialogContent, setConfirmDialogContent] = useState({ title: "", description: "" });
+
     const fromDate = searchParams.get("from");
     const toDate = searchParams.get("to");
 
@@ -161,18 +176,32 @@ function LogisticsContent() {
     // --- Update Logic ---
 
     const initiateStatusChange = (orderId: string, newStatus: string) => {
-        // If status is "Shipped", check if company is assigned
-        if (newStatus === "Shipped") {
-            const order = orders.find(o => o.id === orderId);
-            if (order && !order.shipping_company_id) {
-                // Open Dialog to select company
-                setPendingStatusChange({ orderIds: [orderId], status: newStatus });
-                setShippingDialogOpen(true);
-                return;
+        const action = () => {
+            if (newStatus === "Shipped") {
+                const order = orders.find(o => o.id === orderId);
+                if (order && !order.shipping_company_id) {
+                    setPendingStatusChange({ orderIds: [orderId], status: newStatus });
+                    setShippingDialogOpen(true);
+                    return;
+                }
             }
+            executeStatusUpdate([orderId], newStatus);
+        };
+
+        const order = orders.find(o => o.id === orderId);
+        const preStates = ["Pending", "Cancelled"];
+        const isDeductingAction = order && preStates.includes(order.status) && !preStates.includes(newStatus);
+
+        if (isDeductingAction) {
+            setConfirmDialogContent({
+                title: "Deduct Stock?",
+                description: `Moving this order to ${newStatus} will permanently deduct stock from the system. Do you want to proceed?`
+            });
+            setPendingConfirmAction(() => action);
+            setConfirmDialogOpen(true);
+        } else {
+            action();
         }
-        // Otherwise proceed
-        executeStatusUpdate([orderId], newStatus);
     };
 
     const executeStatusUpdate = async (orderIds: string[], newStatus: string, companyId?: string) => {
@@ -189,28 +218,19 @@ function LogisticsContent() {
 
             // Handle Inventory Logic for each order (simplified loop)
             // Note: Ideally this should be a batch RPC for performance, but loop is acceptable for typical usage
+            const preStates = ["Pending", "Cancelled"];
+            const newIsPreState = preStates.includes(newStatus);
+
             for (const oid of orderIds) {
                 const order = orders.find(o => o.id === oid);
                 if (!order) continue;
                 const oldStatus = order.status;
+                const oldIsPreState = preStates.includes(oldStatus);
 
-                if (newStatus === 'Returned' && oldStatus !== 'Returned') {
-                    const { data: items } = await supabase
-                        .from('order_items')
-                        .select('variant_id, quantity, variant:variants(track_inventory)')
-                        .eq('order_id', oid);
-                    if (items) {
-                        await restockItems(
-                            items.map((i: any) => ({
-                                variant_id: i.variant_id,
-                                qty: i.quantity,
-                                track_inventory: i.variant?.track_inventory
-                            })),
-                            oid,
-                            "Logistics: Order Returned"
-                        );
-                    }
-                } else if (oldStatus === 'Returned' && newStatus !== 'Returned') {
+                const isFullDeduction = oldIsPreState && !newIsPreState;
+                const isFullRestock = !oldIsPreState && newIsPreState;
+
+                if (isFullDeduction) {
                     const { data: items } = await supabase
                         .from('order_items')
                         .select('variant_id, quantity, variant:variants(track_inventory)')
@@ -223,8 +243,23 @@ function LogisticsContent() {
                                 track_inventory: i.variant?.track_inventory
                             })),
                             oid,
-                            "Logistics: Status Change (Un-returned)",
-                            "adjustment"
+                            `Logistics: Status Change to ${newStatus}`
+                        );
+                    }
+                } else if (isFullRestock) {
+                    const { data: items } = await supabase
+                        .from('order_items')
+                        .select('variant_id, quantity, variant:variants(track_inventory)')
+                        .eq('order_id', oid);
+                    if (items) {
+                        await restockItems(
+                            items.map((i: any) => ({
+                                variant_id: i.variant_id,
+                                qty: i.quantity,
+                                track_inventory: i.variant?.track_inventory
+                            })),
+                            oid,
+                            `Logistics: Status Change to ${newStatus} (Restocked)`
                         );
                     }
                 }
@@ -259,15 +294,29 @@ function LogisticsContent() {
         const ids = Array.from(selectedOrders);
         if (ids.length === 0) return;
 
-        if (status === "Shipped") {
-            // Check if ANY need a company? Or just force assignment for all?
-            // Safer to force prompt for bulk "Shipped" to ensure consistency or ask user.
-            // Let's prompt.
-            setPendingStatusChange({ orderIds: ids, status });
-            setShippingDialogOpen(true);
+        const action = () => {
+            if (status === "Shipped") {
+                setPendingStatusChange({ orderIds: ids, status });
+                setShippingDialogOpen(true);
+            } else {
+                executeStatusUpdate(ids, status);
+            }
+        };
+
+        const hasPendingOrders = ids.some(id => orders.find(o => o.id === id)?.status === "Pending");
+        const preStates = ["Pending", "Cancelled"];
+        const isDeductingAction = hasPendingOrders && !preStates.includes(status);
+
+        if (isDeductingAction) {
+            setConfirmDialogContent({
+                title: "Deduct Stock?",
+                description: `Moving ${ids.length} orders from Pending/Cancelled to ${status} will permanently deduct stock from the system. Do you want to proceed?`
+            });
+            setPendingConfirmAction(() => action);
+            setConfirmDialogOpen(true);
         } else {
             if (confirm(`Update ${ids.length} orders to ${status}?`)) {
-                executeStatusUpdate(ids, status);
+                action();
             }
         }
     };
@@ -822,6 +871,25 @@ function LogisticsContent() {
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
+            {/* Confirmation Dialog */}
+            <AlertDialog open={confirmDialogOpen} onOpenChange={setConfirmDialogOpen}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>{confirmDialogContent.title}</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            {confirmDialogContent.description}
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel onClick={() => { setConfirmDialogOpen(false); setPendingConfirmAction(null); }}>Cancel</AlertDialogCancel>
+                        <AlertDialogAction onClick={() => {
+                            if (pendingConfirmAction) pendingConfirmAction();
+                            setConfirmDialogOpen(false);
+                            setPendingConfirmAction(null);
+                        }}>Confirm</AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </div>
     );
 }

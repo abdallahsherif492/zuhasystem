@@ -243,7 +243,18 @@ export default function OrderDetailsPage() {
                 .select('id, stock_qty, track_inventory')
                 .in('id', variantIds);
 
-            // 3. Inventory Diffing
+            // New State Machine Definition
+            // Pre-Deduction States: Pending, Cancelled (Cancelled before sending)
+            // Post-Deduction States: Prepared, Shipped, Delivered, Collected, Returned (Returned represents physical stock, but logically it was deducted then added back by a transaction. For simple status transitions, moving FROM a pre-state TO a post-state triggers FULL DEDUCTION. Moving FROM a post-state TO a pre-state triggers FULL RESTOCK.)
+            const preStates = ["Pending", "Cancelled"];
+            const oldIsPreState = preStates.includes(order.status);
+            const newIsPreState = preStates.includes(editForm.status);
+
+            const isFullDeduction = oldIsPreState && !newIsPreState;
+            const isFullRestock = !oldIsPreState && newIsPreState;
+            const isDiffUpdate = !oldIsPreState && !newIsPreState; // Editing an already prepared/shipped order
+
+            // 3. Inventory Logic
             // Compare Original Order Items vs Edit Items
             // originalItemsMap: Map<variantId, quantity>
             const originalItems = order.items;
@@ -263,27 +274,46 @@ export default function OrderDetailsPage() {
             const deductionQueue: { variant_id: string, qty: number, track_inventory: boolean }[] = [];
             const restockQueue: { variant_id: string, qty: number, track_inventory: boolean }[] = [];
 
-            for (const vid of Array.from(allInvolvedVariants)) {
-                const oldQty = originalMap.get(vid) || 0;
-                const newQty = newMap.get(vid) || 0;
-                const diff = newQty - oldQty;
+            if (isFullDeduction) {
+                // Deduct EVERYTHING based on the NEW map
+                for (const [vid, qty] of Array.from(newMap.entries())) {
+                    const vInfo = freshVariants?.find(v => v.id === vid);
+                    const trackInv = vInfo?.track_inventory ?? false;
 
-                const vInfo = freshVariants?.find(v => v.id === vid);
-                const trackInv = vInfo?.track_inventory ?? false;
-
-                if (diff > 0) {
-                    // Need more items -> Deduct
-                    // Check stock first
-                    if (trackInv) {
-                        const available = vInfo?.stock_qty || 0;
-                        if (available < diff) {
-                            throw new Error(`Insufficient stock for variant ${vid}. Need ${diff} more, have ${available}.`);
-                        }
+                    if (trackInv && (vInfo?.stock_qty || 0) < qty) {
+                        throw new Error(`Insufficient stock for variant ${vid}. Need ${qty}, have ${vInfo?.stock_qty || 0}.`);
                     }
-                    deductionQueue.push({ variant_id: vid as string, qty: diff, track_inventory: trackInv });
-                } else if (diff < 0) {
-                    // Less items -> Return to stock
-                    restockQueue.push({ variant_id: vid as string, qty: Math.abs(diff), track_inventory: trackInv });
+                    deductionQueue.push({ variant_id: vid as string, qty: qty, track_inventory: trackInv });
+                }
+            } else if (isFullRestock) {
+                // Restock EVERYTHING based on the OLD map (since the order is basically being cancelled/reset)
+                // Wait, if they edit items AND cancel at the same time, we restock what was originally deducted.
+                for (const [vid, qty] of Array.from(originalMap.entries())) {
+                    const vInfo = freshVariants?.find(v => v.id === vid);
+                    const trackInv = vInfo?.track_inventory ?? false;
+                    restockQueue.push({ variant_id: vid as string, qty: qty, track_inventory: trackInv });
+                }
+            } else if (isDiffUpdate) {
+                // Standard Diffing
+                for (const vid of Array.from(allInvolvedVariants)) {
+                    const oldQty = originalMap.get(vid) || 0;
+                    const newQty = newMap.get(vid) || 0;
+                    const diff = newQty - oldQty;
+
+                    const vInfo = freshVariants?.find(v => v.id === vid);
+                    const trackInv = vInfo?.track_inventory ?? false;
+
+                    if (diff > 0) {
+                        if (trackInv) {
+                            const available = vInfo?.stock_qty || 0;
+                            if (available < diff) {
+                                throw new Error(`Insufficient stock for variant ${vid}. Need ${diff} more, have ${available}.`);
+                            }
+                        }
+                        deductionQueue.push({ variant_id: vid as string, qty: diff, track_inventory: trackInv });
+                    } else if (diff < 0) {
+                        restockQueue.push({ variant_id: vid as string, qty: Math.abs(diff), track_inventory: trackInv });
+                    }
                 }
             }
 
@@ -342,58 +372,26 @@ export default function OrderDetailsPage() {
 
             if (rpcError) throw rpcError;
 
-            // 7. Handle Status Change Inventory Logic (Standard Return Logic)
-            // *NOTE*: The above diff logic handles line-item changes.
-            // If the STATUS itself changes (e.g. to Returned), we might double-count if we aren't careful.
-            // The Logic in previous version was:
-            // "If status changes TO Returned -> Restock everything".
-            // "If status changes FROM Returned -> Deduct everything".
-
-            // To be safe: Only run status-based FULL restock/deduct if we assume the line-item diffs handled the quantity changes *within* the current status context.
-            // Actually, blending "Edit Items" and "Change Status" in one go is very risky.
-            // If user changes Qty AND changes Status to Returned:
-            // 1. Diff logic applies Qty change.
-            // 2. Status logic applies Full Restock of NEW quantities?
-
-            // Let's simplify:
-            // If status is changing to/from 'Returned', we should probably rely on the *final* list of items for that bulk operation.
-            // But we already ran diffs.
-
-            const oldStatus = order.status;
-            const newStatus = editForm.status;
-
-            if (oldStatus !== newStatus) {
-                // If moving TO Returned: Restock ALL items (based on the NEW list).
-                // BUT we just did diffs.
-                // Example: Old: 5. New: 3. Diff: Restock 2.
-                // Status Change: Pending -> Returned.
-                // We restocked 2. Now we currently have 3 "sold". We need to restock those 3 too.
-                // So yes, we should restock the *new* quantities.
-
-                if (newStatus === 'Returned' && oldStatus !== 'Returned') {
+            // 7. Status change logic is now handled in the state machine blocks above.
+            // However, the "Returned" status implies the items *came back* to the warehouse physically.
+            // The isFullRestock handles "Pending/Cancelled". 
+            // If new status is "Returned" AND old status was a post-state (e.g. Delivered), we must restock.
+            // But wait, what if they change from Pending to Returned? That shouldn't restock because it never deducted.
+            if (editForm.status === 'Returned' && order.status !== 'Returned') {
+                if (!oldIsPreState) {
+                    // It was deducted previously, now it's returned.
+                    // The Diff logic currently ignores 'Returned' as a special case. 
+                    // Let's manually restock the *final* items here if it wasn't caught by isFullRestock.
                     const finalItems = editItems.map(i => ({
                         variant_id: i.variantId,
                         qty: i.quantity,
                         track_inventory: i.track_inventory
                     }));
                     await restockItems(finalItems, orderId, "Status Change: Returned");
-                    toast.success("Order marked Returned - Stock restored");
                 }
-                // If moving FROM Returned: Deduct ALL items (based on NEW list)
-                else if (oldStatus === 'Returned' && newStatus !== 'Returned') {
-                    // Example: Old: 5 (Returned). New: 3 (Pending).
-                    // Diff: "Removed 2". Restock 2? Wait, if it was returned, we theoretically "have" them.
-                    // This gets complex.
-                    // Simplified approach for User:
-                    // If changing status to/from Returned, recommend doing it separately from editing quantities?
-                    // OR: just handle it blindly.
-
-                    // If it WAS Returned, the "Diff" logic assumes they were "sold" (deducted).
-                    // But in "Returned" state, they are effectively "in stock".
-                    // This edge case is tricky.
-
-                    // Allow me to handle basic status changes.
-                    // If moving FROM Returned, we need to DEDUCT the items represented by the new list.
+            } else if (order.status === 'Returned' && editForm.status !== 'Returned') {
+                if (!newIsPreState) {
+                    // Taking it OUT of returned, back to a deducted state (like Shipped).
                     const finalItems = editItems.map(i => ({
                         variant_id: i.variantId,
                         qty: i.quantity,

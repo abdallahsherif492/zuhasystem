@@ -344,13 +344,7 @@ export default function NewOrderPage() {
             const { error: itemsError } = await supabase.from("order_items").insert(itemsData);
             if (itemsError) throw itemsError;
 
-            // 4. Deduct Stock (Only if track_inventory is true)
-            // The validation step above ensures we don't violate track_inventory=true constraints.
-            await deductStock(cart.map(c => ({
-                variant_id: c.variantId,
-                qty: c.quantity,
-                track_inventory: c.trackInventory
-            })), orderData.id);
+            // 4. Stock Deduction is now handled when status changes to 'Prepared', not on creation.
 
             router.push("/orders");
             router.refresh();
