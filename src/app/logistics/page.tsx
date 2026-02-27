@@ -152,7 +152,8 @@ function LogisticsContent() {
                         )
                     )
                 `)
-                .order("created_at", { ascending: false });
+                .order("created_at", { ascending: false })
+                .limit(100000);
 
             if (fromDate) {
                 query = query.gte("created_at", fromDate);
