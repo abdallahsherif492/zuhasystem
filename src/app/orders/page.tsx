@@ -92,29 +92,47 @@ function OrdersContent() {
     async function fetchOrders() {
         try {
             setLoading(true);
-            let query = supabase
-                .from("orders")
-                .select(`
-                    *,
-                    items:order_items (
-                        variant:variants (
-                            product:products (id, name)
+            let allOrders: any[] = [];
+            let from = 0;
+            const step = 1000;
+            let hasMore = true;
+
+            while (hasMore) {
+                let query = supabase
+                    .from("orders")
+                    .select(`
+                        *,
+                        items:order_items (
+                            variant:variants (
+                                product:products (id, name)
+                            )
                         )
-                    )
-                `)
-                .order("created_at", { ascending: false })
-                .limit(100000);
+                    `)
+                    .order("created_at", { ascending: false })
+                    .range(from, from + step - 1);
 
-            if (fromDate) query = query.gte("created_at", fromDate);
-            if (toDate) {
-                const end = new Date(toDate);
-                end.setHours(23, 59, 59, 999);
-                query = query.lte("created_at", end.toISOString());
+                if (fromDate) query = query.gte("created_at", fromDate);
+                if (toDate) {
+                    const end = new Date(toDate);
+                    end.setHours(23, 59, 59, 999);
+                    query = query.lte("created_at", end.toISOString());
+                }
+
+                const { data, error } = await query;
+                if (error) throw error;
+
+                if (data && data.length > 0) {
+                    allOrders = [...allOrders, ...data];
+                    if (data.length < step) {
+                        hasMore = false;
+                    } else {
+                        from += step;
+                    }
+                } else {
+                    hasMore = false;
+                }
             }
-
-            const { data, error } = await query;
-            if (error) throw error;
-            setOrders(data || []);
+            setOrders(allOrders);
         } catch (error) {
             console.error("Error fetching orders:", error);
             toast.error("Failed to fetch orders");
