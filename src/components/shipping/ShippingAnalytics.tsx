@@ -56,14 +56,34 @@ export function ShippingAnalytics() {
             if (companiesError) throw companiesError;
 
             // 2. Fetch Orders
-            const { data: orders, error: ordersError } = await supabase
-                .from('orders')
-                .select('id, status, shipping_company_id, total_amount, shipping_cost')
-                .gte('created_at', start)
-                .lte('created_at', end)
-                .not('shipping_company_id', 'is', null);
+            let allOrders: any[] = [];
+            let from = 0;
+            const step = 1000;
+            let hasMore = true;
 
-            if (ordersError) throw ordersError;
+            while (hasMore) {
+                const { data: chunk, error: chunkError } = await supabase
+                    .from('orders')
+                    .select('id, status, shipping_company_id, total_amount, shipping_cost')
+                    .gte('created_at', start)
+                    .lte('created_at', end)
+                    .not('shipping_company_id', 'is', null)
+                    .range(from, from + step - 1);
+
+                if (chunkError) throw chunkError;
+
+                if (chunk && chunk.length > 0) {
+                    allOrders = [...allOrders, ...chunk];
+                    if (chunk.length < step) {
+                        hasMore = false;
+                    } else {
+                        from += step;
+                    }
+                } else {
+                    hasMore = false;
+                }
+            }
+            const orders = allOrders;
 
             // 3. Aggregate
             const map = new Map<string, CompanyMetrics>();
