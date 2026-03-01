@@ -46,6 +46,8 @@ function DashboardContent() {
     totalOrders: 0,
     stockValue: 0,
     lowStockCount: 0,
+    salesChange: 0,
+    ordersChange: 0,
   });
 
   // Lists
@@ -80,10 +82,29 @@ function DashboardContent() {
       const start = fromDate ? `${fromDate}T00:00:00` : new Date().toISOString();
       const end = toDate ? `${toDate}T23:59:59` : new Date().toISOString();
 
+      // Calculate Previous Period
+      const startDate = new Date(start);
+      const endDate = new Date(end);
+      // Duration in days (round up to ensure inclusive count)
+      const diffTime = Math.abs(endDate.getTime() - startDate.getTime());
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+      const prevStartDate = new Date(startDate);
+      prevStartDate.setDate(prevStartDate.getDate() - diffDays);
+      const prevStartStr = prevStartDate.toISOString();
+
+      const prevEndDate = new Date(endDate);
+      prevEndDate.setDate(prevEndDate.getDate() - diffDays);
+      const prevEndStr = prevEndDate.toISOString();
+
       // 1. Dashboard Stats (RPC)
       const { data: statsData, error: statsError } = await supabase
         .rpc('get_dashboard_stats', { from_date: start, to_date: end });
       if (statsError) throw statsError;
+
+      const { data: prevStatsData, error: prevStatsError } = await supabase
+        .rpc('get_dashboard_stats', { from_date: prevStartStr, to_date: prevEndStr });
+      if (prevStatsError) throw prevStatsError;
 
       // 2. Daily Sales Chart (RPC)
       const { data: dailyData, error: chartError } = await supabase
@@ -122,11 +143,36 @@ function DashboardContent() {
       // Update State
       if (statsData && statsData.length > 0) {
         const s = statsData[0];
+        const prevS = (prevStatsData && prevStatsData.length > 0) ? prevStatsData[0] : null;
+
+        let sChange = 0;
+        let oChange = 0;
+
+        if (prevS) {
+          const prevSales = prevS.total_sales || 0;
+          const currSales = s.total_sales || 0;
+          if (prevSales === 0) {
+            sChange = currSales > 0 ? 100 : 0;
+          } else {
+            sChange = ((currSales - prevSales) / prevSales) * 100;
+          }
+
+          const prevOrders = prevS.total_orders || 0;
+          const currOrders = s.total_orders || 0;
+          if (prevOrders === 0) {
+            oChange = currOrders > 0 ? 100 : 0;
+          } else {
+            oChange = ((currOrders - prevOrders) / prevOrders) * 100;
+          }
+        }
+
         setStats({
           totalSales: s.total_sales || 0,
           totalOrders: s.total_orders || 0,
           stockValue: s.stock_value || 0,
           lowStockCount: s.low_stock_count || 0,
+          salesChange: sChange,
+          ordersChange: oChange,
         });
       }
 
@@ -183,8 +229,11 @@ function DashboardContent() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{formatCurrency(stats.totalSales)}</div>
-            <p className="text-xs text-muted-foreground">
-              in selected period
+            <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
+              <span className={stats.salesChange >= 0 ? "text-emerald-500" : "text-red-500"}>
+                {stats.salesChange > 0 ? "+" : ""}{stats.salesChange.toFixed(1)}%
+              </span>
+              from previous period
             </p>
           </CardContent>
         </Card>
@@ -195,8 +244,11 @@ function DashboardContent() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{stats.totalOrders}</div>
-            <p className="text-xs text-muted-foreground">
-              processed orders
+            <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
+              <span className={stats.ordersChange >= 0 ? "text-emerald-500" : "text-red-500"}>
+                {stats.ordersChange > 0 ? "+" : ""}{stats.ordersChange.toFixed(1)}%
+              </span>
+              from previous period
             </p>
           </CardContent>
         </Card>
