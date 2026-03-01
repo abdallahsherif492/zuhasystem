@@ -31,7 +31,7 @@ const GOVERNORATES = [
     "Kafr Al Sheikh", "Matrouh", "Luxor", "Qena", "North Sinai", "Sohag"
 ];
 
-const CHANNELS = ["Facebook", "Instagram", "Tiktok", "Website"];
+const CHANNELS = ["Facebook", "Instagram", "Tiktok", "Tiktok Website", "Website", "Whatsapp"];
 
 interface Order {
     id: string;
