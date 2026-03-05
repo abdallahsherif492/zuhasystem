@@ -40,6 +40,14 @@ import {
     PopoverContent,
     PopoverTrigger,
 } from "@/components/ui/popover";
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -93,6 +101,12 @@ export default function OrderDetailsPage() {
     // Items Editing State
     // We map existing items to this structure and allow adding new ones.
     const [editItems, setEditItems] = useState<any[]>([]);
+
+    // Transaction UI State
+    const [showTransactionDialog, setShowTransactionDialog] = useState(false);
+    const [completedOrder, setCompletedOrder] = useState<{ id: string, amount: number, cName: string, cPhone: string } | null>(null);
+    const [transactionAccount, setTransactionAccount] = useState<string>("");
+    const [transactionLoading, setTransactionLoading] = useState(false);
 
     useEffect(() => {
         fetchOrderDetails();
@@ -399,6 +413,17 @@ export default function OrderDetailsPage() {
                     }));
                     await deductStock(finalItems, orderId, "Status Change: Un-returned");
                 }
+            }
+
+            if (editForm.paymentStatus === "Paid" || editForm.paymentStatus === "Partially Paid") {
+                const pAmount = editForm.paymentStatus === "Paid" ? newTotal : editForm.paidAmount;
+                setCompletedOrder({
+                    id: orderId,
+                    amount: pAmount,
+                    cName: editForm.customerName,
+                    cPhone: editForm.customerPhone
+                });
+                setShowTransactionDialog(true);
             }
 
             toast.success("Order updated successfully");
@@ -800,8 +825,71 @@ export default function OrderDetailsPage() {
                         )}
                     </CardFooter>
                 </Card>
-
             </div>
-        </div>
+
+            {/* Transaction Dialog */}
+            <Dialog open={showTransactionDialog} onOpenChange={setShowTransactionDialog}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Add Payment to Revenue?</DialogTitle>
+                        <DialogDescription>
+                            This order has a paid amount of {formatCurrency(completedOrder?.amount || 0)}.
+                            Would you like to automatically record this as a Revenue (Deposit) transaction?
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4 py-4">
+                        <div className="space-y-2">
+                            <Label>Select Account</Label>
+                            <Select value={transactionAccount} onValueChange={setTransactionAccount}>
+                                <SelectTrigger><SelectValue placeholder="Choose Account" /></SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="Mohamed Adel">Mohamed Adel</SelectItem>
+                                    <SelectItem value="Abdallah Sherif">Abdallah Sherif</SelectItem>
+                                    <SelectItem value="Split">Split (50/50)</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setShowTransactionDialog(false)}>Skip</Button>
+                        <Button disabled={!transactionAccount || transactionLoading} onClick={async () => {
+                            setTransactionLoading(true);
+                            try {
+                                const payload = {
+                                    transaction_date: new Date().toISOString(),
+                                    type: "revenue",
+                                    category: "Deposits",
+                                    description: `Order #${completedOrder?.id} - ${completedOrder?.cName} - ${completedOrder?.cPhone}`,
+                                };
+
+                                if (transactionAccount === "Split") {
+                                    const half = (completedOrder?.amount || 0) / 2;
+                                    await supabase.from("transactions").insert([
+                                        { ...payload, amount: half, account_name: "Mohamed Adel" },
+                                        { ...payload, amount: half, account_name: "Abdallah Sherif" },
+                                    ]);
+                                } else {
+                                    await supabase.from("transactions").insert({
+                                        ...payload,
+                                        amount: completedOrder?.amount || 0,
+                                        account_name: transactionAccount
+                                    });
+                                }
+                                toast.success("Transaction added successfully!");
+                                setShowTransactionDialog(false);
+                            } catch (e) {
+                                console.error(e);
+                                toast.error("Failed to add transaction");
+                            } finally {
+                                setTransactionLoading(false);
+                            }
+                        }}>
+                            {transactionLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                            Add Transaction
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+        </div >
     );
 }

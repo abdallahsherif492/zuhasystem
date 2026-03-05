@@ -14,6 +14,14 @@ import {
     CardHeader,
     CardTitle,
 } from "@/components/ui/card";
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from "@/components/ui/dialog";
 
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -88,6 +96,12 @@ export default function NewOrderPage() {
     const [isNewCustomer, setIsNewCustomer] = useState(true);
     const [existingCustomers, setExistingCustomers] = useState<any[]>([]);
     const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
+
+    // Transaction Integration
+    const [showTransactionDialog, setShowTransactionDialog] = useState(false);
+    const [completedOrder, setCompletedOrder] = useState<{ id: string, amount: number, cName: string, cPhone: string } | null>(null);
+    const [transactionAccount, setTransactionAccount] = useState<string>("");
+    const [transactionLoading, setTransactionLoading] = useState(false);
 
     // Order Details State
     const [channel, setChannel] = useState("Facebook");
@@ -346,12 +360,23 @@ export default function NewOrderPage() {
 
             // 4. Stock Deduction is now handled when status changes to 'Prepared', not on creation.
 
-            router.push("/orders");
-            router.refresh();
+            if (paymentStatus === "Paid" || paymentStatus === "Partially Paid") {
+                const pAmount = paymentStatus === "Paid" ? calculateTotal() : paidAmount;
+                setCompletedOrder({
+                    id: orderData.id,
+                    amount: pAmount,
+                    cName: customerName,
+                    cPhone: customerPhone
+                });
+                setSubmitting(false); // Stop submitting spinner
+                setShowTransactionDialog(true);
+            } else {
+                router.push("/orders");
+                router.refresh();
+            }
         } catch (error: any) {
             console.error("Error processing order:", error);
             alert("Failed to place order: " + error.message);
-        } finally {
             setSubmitting(false);
         }
     };
