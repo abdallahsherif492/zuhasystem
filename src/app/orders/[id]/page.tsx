@@ -415,7 +415,11 @@ export default function OrderDetailsPage() {
                 }
             }
 
-            if (editForm.paymentStatus === "Paid" || editForm.paymentStatus === "Partially Paid") {
+            const paymentStatusChanged = editForm.paymentStatus !== order.payment_status;
+            const paidAmountChanged = editForm.paidAmount !== order.paid_amount;
+            const isPaidNow = editForm.paymentStatus === "Paid" || editForm.paymentStatus === "Partially Paid";
+
+            if (isPaidNow && (paymentStatusChanged || paidAmountChanged)) {
                 const pAmount = editForm.paymentStatus === "Paid" ? newTotal : editForm.paidAmount;
                 setCompletedOrder({
                     id: orderId,

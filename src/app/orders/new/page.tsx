@@ -816,6 +816,76 @@ export default function NewOrderPage() {
                     </CardFooter>
                 </Card>
             </div>
+
+            {/* Transaction Dialog */}
+            <Dialog open={showTransactionDialog} onOpenChange={(open) => {
+                if (!open) {
+                    router.push("/orders");
+                    router.refresh();
+                }
+            }}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Add Payment to Revenue?</DialogTitle>
+                        <DialogDescription>
+                            This order has a paid amount of {formatCurrency(completedOrder?.amount || 0)}.
+                            Would you like to automatically record this as a Revenue (Deposit) transaction?
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4 py-4">
+                        <div className="space-y-2">
+                            <Label>Select Account</Label>
+                            <Select value={transactionAccount} onValueChange={setTransactionAccount}>
+                                <SelectTrigger><SelectValue placeholder="Choose Account" /></SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="Mohamed Adel">Mohamed Adel</SelectItem>
+                                    <SelectItem value="Abdallah Sherif">Abdallah Sherif</SelectItem>
+                                    <SelectItem value="Split">Split (50/50)</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => {
+                            router.push("/orders");
+                            router.refresh();
+                        }}>Skip</Button>
+                        <Button disabled={!transactionAccount || transactionLoading} onClick={async () => {
+                            setTransactionLoading(true);
+                            try {
+                                const payload = {
+                                    transaction_date: new Date().toISOString(),
+                                    type: "revenue",
+                                    category: "Deposits",
+                                    description: `Order #${completedOrder?.id} - ${completedOrder?.cName} - ${completedOrder?.cPhone}`,
+                                };
+
+                                if (transactionAccount === "Split") {
+                                    const half = (completedOrder?.amount || 0) / 2;
+                                    await supabase.from("transactions").insert([
+                                        { ...payload, amount: half, account_name: "Mohamed Adel" },
+                                        { ...payload, amount: half, account_name: "Abdallah Sherif" },
+                                    ]);
+                                } else {
+                                    await supabase.from("transactions").insert({
+                                        ...payload,
+                                        amount: completedOrder?.amount || 0,
+                                        account_name: transactionAccount
+                                    });
+                                }
+                                router.push("/orders");
+                                router.refresh();
+                            } catch (e) {
+                                console.error(e);
+                                alert("Failed to add transaction");
+                            }
+                        }}>
+                            {transactionLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                            Add Transaction
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }
