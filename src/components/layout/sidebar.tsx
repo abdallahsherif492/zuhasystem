@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { LayoutDashboard, Package, ShoppingCart, Settings, Users, Truck, Banknote, LineChart, ShoppingBag, Megaphone, Box } from "lucide-react";
+import { LayoutDashboard, Package, ShoppingCart, Settings, Users, Truck, Banknote, LineChart, ShoppingBag, Megaphone, Box, DollarSign } from "lucide-react";
 
 import Image from "next/image";
 
@@ -142,6 +142,16 @@ export function SidebarContent() {
                     Detailed Analytics
                 </h4>
                 <div className="grid grid-flow-row auto-rows-max text-sm gap-1">
+                    <Link href="/insights/actual-returns">
+                        <Button
+                            variant={pathname.startsWith("/insights/actual-returns") ? "secondary" : "ghost"}
+                            className="w-full justify-start h-8"
+                            size="sm"
+                        >
+                            <DollarSign className="mr-2 h-3 w-3" />
+                            Actual Returns
+                        </Button>
+                    </Link>
                     <Link href="/insights/expenses">
                         <Button
                             variant={pathname.startsWith("/insights/expenses") ? "secondary" : "ghost"}
