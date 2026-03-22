@@ -58,11 +58,11 @@ function ActualReturnsContent() {
             const start = fromDate || defaultStart;
             const end = toDate || defaultEnd;
 
-            // 1. Fetch Delivered Orders
+            // 1. Fetch Collected Orders
             const { data: orders, error: ordersError } = await supabase
                 .from('orders')
                 .select('created_at, total_amount, total_cost, shipping_cost, status')
-                .eq('status', 'Delivered')
+                .eq('status', 'Collected')
                 .gte('created_at', start)
                 .lte('created_at', end);
 
@@ -112,7 +112,8 @@ function ActualReturnsContent() {
             const opexByDate: Record<string, number> = {};
 
             (transactions || []).forEach(t => {
-                if (t.category?.toLowerCase() === 'ads') return; // Exclude Ads if recorded here
+                const cat = t.category?.toLowerCase() || '';
+                if (cat === 'ads' || cat === 'purchases') return; // Exclude Ads and Purchases
                 const dateKey = new Date(t.transaction_date).toLocaleDateString('en-GB');
                 const amt = Math.abs(Number(t.amount)) || 0;
                 opex += amt;
@@ -204,17 +205,17 @@ function ActualReturnsContent() {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between pb-2">
-                        <CardTitle className="text-sm font-medium">Delivered Revenue</CardTitle>
+                        <CardTitle className="text-sm font-medium">Collected Revenue</CardTitle>
                         <DollarSign className="h-4 w-4 text-green-500" />
                     </CardHeader>
                     <CardContent>
                         <div className="text-2xl font-bold text-green-600">{formatCurrency(metrics.deliveredRevenue)}</div>
-                        <p className="text-xs text-muted-foreground mt-1">From Delivered orders only</p>
+                        <p className="text-xs text-muted-foreground mt-1">From Collected orders only</p>
                     </CardContent>
                 </Card>
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between pb-2">
-                        <CardTitle className="text-sm font-medium">Delivered COGS</CardTitle>
+                        <CardTitle className="text-sm font-medium">Collected COGS</CardTitle>
                         <Package className="h-4 w-4 text-destructive" />
                     </CardHeader>
                     <CardContent>
@@ -316,11 +317,11 @@ function ActualReturnsContent() {
                 <CardContent>
                     <div className="space-y-4 max-w-2xl mx-auto">
                         <div className="flex justify-between items-center py-2 border-b">
-                            <span className="font-medium">Total Delivered Revenue</span>
+                            <span className="font-medium">Total Collected Revenue</span>
                             <span className="text-green-600 font-bold">{formatCurrency(metrics.deliveredRevenue)}</span>
                         </div>
                         <div className="flex justify-between items-center py-2 border-b">
-                            <span className="font-medium text-muted-foreground">- Delivered COGS</span>
+                            <span className="font-medium text-muted-foreground">- Collected COGS</span>
                             <span className="text-destructive font-semibold">-{formatCurrency(metrics.deliveredCogs)}</span>
                         </div>
                         <div className="flex justify-between items-center py-2 border-b">
