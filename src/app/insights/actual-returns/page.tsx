@@ -23,7 +23,7 @@ import {
 
 import { Suspense } from "react";
 
-const COLORS = ['#10b981', '#ef4444', '#f59e0b', '#3b82f6'];
+const COLORS = ['#10b981', '#ef4444', '#f59e0b', '#3b82f6', '#8b5cf6'];
 
 function ActualReturnsContent() {
     const searchParams = useSearchParams();
@@ -34,6 +34,9 @@ function ActualReturnsContent() {
         deliveredCogs: 0,
         operationalExpenses: 0,
         adsExpenses: 0,
+        netProfit: 0,
+        adsExpenses: 0,
+        courierShippingCost: 0,
         netProfit: 0,
         profitMargin: 0,
         totalShippingCost: 0
@@ -61,7 +64,7 @@ function ActualReturnsContent() {
             // 1. Fetch Collected Orders
             const { data: orders, error: ordersError } = await supabase
                 .from('orders')
-                .select('created_at, total_amount, total_cost, shipping_cost, status')
+                .select('created_at, total_amount, total_cost, shipping_cost, status, customer_info')
                 .eq('status', 'Collected')
                 .gte('created_at', start)
                 .lte('created_at', end);
@@ -91,21 +94,28 @@ function ActualReturnsContent() {
             let rev = 0;
             let cogs = 0;
             let ship = 0;
+            let courierTotal = 0;
 
-            const ordersByDate: Record<string, { rev: number, cogs: number }> = {};
+            const ordersByDate: Record<string, { rev: number, cogs: number, courier: number }> = {};
 
             (orders || []).forEach(o => {
                 const dateKey = new Date(o.created_at).toLocaleDateString('en-GB'); // DD/MM/YYYY
                 const r = Number(o.total_amount) || 0;
                 const c = Number(o.total_cost) || 0;
 
+                const gov = String(o.customer_info?.governorate || '');
+                const isCairoGiza = gov === 'Cairo' || gov === 'Giza' || gov === 'New Cairo' || gov === 'القاهرة' || gov === 'الجيزة';
+                const courierRate = isCairoGiza ? 65 : 75;
+
                 rev += r;
                 cogs += c;
+                courierTotal += courierRate;
                 ship += Number(o.shipping_cost) || 0;
 
-                if (!ordersByDate[dateKey]) ordersByDate[dateKey] = { rev: 0, cogs: 0 };
+                if (!ordersByDate[dateKey]) ordersByDate[dateKey] = { rev: 0, cogs: 0, courier: 0 };
                 ordersByDate[dateKey].rev += r;
                 ordersByDate[dateKey].cogs += c;
+                ordersByDate[dateKey].courier += courierRate;
             });
 
             let opex = 0;
@@ -134,7 +144,7 @@ function ActualReturnsContent() {
                 adsByDate[dateKey] += amt;
             });
 
-            const netProfit = rev - cogs - opex - adsSpent;
+            const netProfit = rev - cogs - opex - adsSpent - courierTotal;
             const profitMargin = rev > 0 ? (netProfit / rev) * 100 : 0;
 
             setMetrics({
@@ -142,6 +152,7 @@ function ActualReturnsContent() {
                 deliveredCogs: cogs,
                 operationalExpenses: opex,
                 adsExpenses: adsSpent,
+                courierShippingCost: courierTotal,
                 netProfit,
                 profitMargin,
                 totalShippingCost: ship
@@ -160,6 +171,7 @@ function ActualReturnsContent() {
             allDates.forEach(date => {
                 const r = ordersByDate[date]?.rev || 0;
                 const c = ordersByDate[date]?.cogs || 0;
+                const courierRate = ordersByDate[date]?.courier || 0;
                 const o = opexByDate[date] || 0;
                 const a = adsByDate[date] || 0;
 
@@ -169,7 +181,8 @@ function ActualReturnsContent() {
                     COGS: c,
                     OpEx: o,
                     Ads: a,
-                    NetProfit: r - c - o - a
+                    CourierCost: courierRate,
+                    NetProfit: r - c - o - a - courierRate
                 };
             });
 
@@ -197,12 +210,13 @@ function ActualReturnsContent() {
         { name: 'Net Profit', value: Math.max(0, metrics.netProfit) }, // Hide if negative
         { name: 'COGS', value: metrics.deliveredCogs },
         { name: 'OpEx', value: metrics.operationalExpenses },
-        { name: 'Ads', value: metrics.adsExpenses }
+        { name: 'Ads', value: metrics.adsExpenses },
+        { name: 'Courier', value: metrics.courierShippingCost }
     ];
 
     return (
         <div className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between pb-2">
                         <CardTitle className="text-sm font-medium">Collected Revenue</CardTitle>
@@ -243,6 +257,16 @@ function ActualReturnsContent() {
                         <p className="text-xs text-muted-foreground mt-1">Marketing spend</p>
                     </CardContent>
                 </Card>
+                <Card>
+                    <CardHeader className="flex flex-row items-center justify-between pb-2">
+                        <CardTitle className="text-sm font-medium">Courier Cost</CardTitle>
+                        <Truck className="h-4 w-4 text-purple-500" />
+                    </CardHeader>
+                    <CardContent>
+                        <div className="text-2xl font-bold text-purple-500">-{formatCurrency(metrics.courierShippingCost)}</div>
+                        <p className="text-xs text-muted-foreground mt-1">Delivery fees on store</p>
+                    </CardContent>
+                </Card>
                 <Card className="bg-primary/5 border-primary/20">
                     <CardHeader className="flex flex-row items-center justify-between pb-2">
                         <CardTitle className="text-sm font-medium text-primary">Actual Net Profit</CardTitle>
@@ -274,7 +298,8 @@ function ActualReturnsContent() {
                                 <Bar yAxisId="left" dataKey="Revenue" fill="#10b981" radius={[4, 4, 0, 0]} />
                                 <Bar yAxisId="left" dataKey="COGS" fill="#ef4444" stackId="costs" radius={[0, 0, 0, 0]} />
                                 <Bar yAxisId="left" dataKey="OpEx" fill="#f59e0b" stackId="costs" radius={[0, 0, 0, 0]} />
-                                <Bar yAxisId="left" dataKey="Ads" fill="#3b82f6" stackId="costs" radius={[4, 4, 0, 0]} />
+                                <Bar yAxisId="left" dataKey="Ads" fill="#3b82f6" stackId="costs" radius={[0, 0, 0, 0]} />
+                                <Bar yAxisId="left" dataKey="CourierCost" fill="#8b5cf6" stackId="costs" radius={[4, 4, 0, 0]} />
                             </BarChart>
                         </ResponsiveContainer>
                     </CardContent>
@@ -331,6 +356,10 @@ function ActualReturnsContent() {
                         <div className="flex justify-between items-center py-2 border-b">
                             <span className="font-medium text-muted-foreground">- Ad Spends</span>
                             <span className="text-blue-500 font-semibold">-{formatCurrency(metrics.adsExpenses)}</span>
+                        </div>
+                        <div className="flex justify-between items-center py-2 border-b">
+                            <span className="font-medium text-muted-foreground">- Courier Fees (65/75 EGP per order)</span>
+                            <span className="text-purple-500 font-semibold">-{formatCurrency(metrics.courierShippingCost)}</span>
                         </div>
                         <div className="flex justify-between items-center py-4 bg-primary/5 rounded-lg px-4 mt-4">
                             <span className="font-bold text-lg text-primary">Actual Net Profit</span>
