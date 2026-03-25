@@ -84,11 +84,11 @@ function RevenuesContent() {
                     chartDataMap[dateKey] = { date: dateKey, Deposits: 0, Collections: 0, Others: 0 };
                 }
 
-                if (cat === 'deposit') {
+                if (cat === 'deposit' || cat === 'deposits') {
                     dVal += amt;
                     dCount++;
                     chartDataMap[dateKey].Deposits += amt;
-                } else if (cat === 'orders_collection') {
+                } else if (cat === 'orders_collection' || cat === 'orders collection') {
                     cVal += amt;
                     cCount++;
                     chartDataMap[dateKey].Collections += amt;
