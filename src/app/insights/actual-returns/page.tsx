@@ -5,7 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { formatCurrency } from "@/lib/utils";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Loader2, DollarSign, ArrowDownRight, ArrowUpRight, Percent, Package, Wallet, TrendingDown } from "lucide-react";
+import { Loader2, DollarSign, ArrowDownRight, ArrowUpRight, Percent, Package, Wallet, TrendingDown, Truck } from "lucide-react";
 import { DateRangePicker } from "@/components/date-range-picker";
 import {
     BarChart,
