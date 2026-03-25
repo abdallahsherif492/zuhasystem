@@ -34,8 +34,6 @@ function ActualReturnsContent() {
         deliveredCogs: 0,
         operationalExpenses: 0,
         adsExpenses: 0,
-        netProfit: 0,
-        adsExpenses: 0,
         courierShippingCost: 0,
         netProfit: 0,
         profitMargin: 0,
