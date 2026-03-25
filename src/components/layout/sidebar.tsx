@@ -142,6 +142,16 @@ export function SidebarContent() {
                     Detailed Analytics
                 </h4>
                 <div className="grid grid-flow-row auto-rows-max text-sm gap-1">
+                    <Link href="/insights/revenues">
+                        <Button
+                            variant={pathname.startsWith("/insights/revenues") ? "secondary" : "ghost"}
+                            className="w-full justify-start h-8"
+                            size="sm"
+                        >
+                            <DollarSign className="mr-2 h-3 w-3" />
+                            Revenues
+                        </Button>
+                    </Link>
                     <Link href="/insights/actual-returns">
                         <Button
                             variant={pathname.startsWith("/insights/actual-returns") ? "secondary" : "ghost"}
