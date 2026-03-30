@@ -164,13 +164,16 @@ export default function NewOrderPage() {
     }
 
     async function searchCustomers(query: string) {
-        // Simple fetch all (assuming small DB), ideal is server-side search
-
-        const { data } = await supabase
+        let req = supabase
             .from("customers")
             .select("id, name, phone, phone2, address, governorate")
-            .ilike("name", `%${query}%`)
             .limit(10);
+
+        if (query) {
+            req = req.or(`name.ilike.%${query}%,phone.ilike.%${query}%`);
+        }
+
+        const { data } = await req;
         setExistingCustomers(data || []);
     }
 
@@ -417,7 +420,7 @@ export default function NewOrderPage() {
                                     </PopoverTrigger>
                                     <PopoverContent className="w-[400px] p-0">
                                         <Command>
-                                            <CommandInput placeholder="Search customer name..." onValueChange={searchCustomers} />
+                                            <CommandInput placeholder="Search name or phone..." onValueChange={searchCustomers} />
                                             <CommandList>
                                                 <CommandEmpty>No customer found.</CommandEmpty>
                                                 <CommandGroup>
@@ -431,7 +434,7 @@ export default function NewOrderPage() {
                                                     {existingCustomers.map((customer) => (
                                                         <CommandItem
                                                             key={customer.id}
-                                                            value={customer.name}
+                                                            value={`${customer.name} ${customer.phone}`}
                                                             onSelect={() => handleCustomerSelect(customer.id)}
                                                         >
                                                             <Check
