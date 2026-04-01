@@ -77,6 +77,38 @@ export async function middleware(request: NextRequest) {
             return NextResponse.redirect(dashboardUrl)
         }
 
+        // --- RBAC: Role-Based Access Control ---
+        if (user && !isLoginPage && !isAuthCallback && !isStatic) {
+            const pathname = request.nextUrl.pathname;
+
+            // Unrestricted routes explicitly opened for authenticated users
+            if (pathname !== '/' && pathname !== '/unauthorized') {
+                const { data: userPerms, error } = await supabase
+                    .from('user_permissions')
+                    .select('super_admin, permissions')
+                    .eq('id', user.id)
+                    .single();
+
+                if (!userPerms || !userPerms.super_admin) {
+                    const perms = userPerms?.permissions || {};
+                    // Extract root section namespace: e.g. /orders/new -> /orders
+                    const basePath = `/${pathname.split('/')[1]}`;
+
+                    if (basePath === '/users') {
+                        // Strict Block: Users Page is Super Admin Only
+                        const unauthUrl = request.nextUrl.clone();
+                        unauthUrl.pathname = '/unauthorized';
+                        return NextResponse.redirect(unauthUrl);
+                    } else if (perms[basePath] !== true) {
+                        // Strict Block: Any defined section explicitly marked false or undefined
+                        const unauthUrl = request.nextUrl.clone();
+                        unauthUrl.pathname = '/unauthorized';
+                        return NextResponse.redirect(unauthUrl);
+                    }
+                }
+            }
+        }
+
         return response
     } catch (e) {
         console.error("Middleware Error:", e);

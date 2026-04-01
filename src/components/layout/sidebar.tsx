@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { LayoutDashboard, Package, ShoppingCart, Settings, Users, Truck, Banknote, LineChart, ShoppingBag, Megaphone, Box, DollarSign } from "lucide-react";
+import { LayoutDashboard, Package, ShoppingCart, Settings, Users, Truck, Banknote, LineChart, ShoppingBag, Megaphone, Box, DollarSign, ShieldCheck } from "lucide-react";
 
 import Image from "next/image";
 
@@ -190,6 +190,24 @@ export function SidebarContent() {
                         >
                             <Package className="mr-2 h-3 w-3" />
                             Products
+                        </Button>
+                    </Link>
+                </div>
+            </div>
+
+            <div className="pt-4 pb-2 border-t mt-4">
+                <h4 className="mb-1 rounded-md px-2 py-1 text-sm font-semibold">
+                    Administration
+                </h4>
+                <div className="grid grid-flow-row auto-rows-max text-sm gap-1">
+                    <Link href="/users">
+                        <Button
+                            variant={pathname.startsWith("/users") ? "secondary" : "ghost"}
+                            className="w-full justify-start h-8"
+                            size="sm"
+                        >
+                            <ShieldCheck className="mr-2 h-3 w-3" />
+                            Users & Permissions
                         </Button>
                     </Link>
                 </div>
