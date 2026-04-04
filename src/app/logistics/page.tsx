@@ -64,6 +64,7 @@ const GOV_OPTIONS: Option[] = [
 
 const STATUSES = [
     "Pending",
+    "Processing",
     "Prepared",
     "Shipped",
     "Delivered",
@@ -599,6 +600,7 @@ function LogisticsContent() {
                                 </SelectTrigger>
                                 <SelectContent>
                                     <SelectItem value="Pending">Mark Pending</SelectItem>
+                                    <SelectItem value="Processing">Mark Processing</SelectItem>
                                     <SelectItem value="Prepared">Mark Prepared</SelectItem>
                                     <SelectItem value="Shipped">Mark Shipped</SelectItem>
                                     <SelectItem value="Delivered">Mark Delivered</SelectItem>
