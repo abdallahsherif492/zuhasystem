@@ -14,6 +14,7 @@ const SECTIONS = [
     { key: "/inventory", label: "Inventory" },
     { key: "/products", label: "Products" },
     { key: "/customers", label: "Customers" },
+    { key: "/payable", label: "Accounts Payable" },
     { key: "/logistics", label: "Logistics" },
     { key: "/shipping", label: "Shipping" },
     { key: "/accounting", label: "Accounting" },

@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { LayoutDashboard, Package, ShoppingCart, Settings, Users, Truck, Banknote, LineChart, ShoppingBag, Megaphone, Box, DollarSign, ShieldCheck } from "lucide-react";
+import { LayoutDashboard, Package, ShoppingCart, Settings, Users, Truck, Banknote, LineChart, ShoppingBag, Megaphone, Box, DollarSign, ShieldCheck, FileText } from "lucide-react";
 
 import Image from "next/image";
 
@@ -135,6 +135,15 @@ export function SidebarContent() {
                 >
                     <Megaphone className="mr-2 h-4 w-4" />
                     Ads Spent
+                </Button>
+            </Link>
+            <Link href="/payable">
+                <Button
+                    variant={pathname.startsWith("/payable") ? "secondary" : "ghost"}
+                    className="w-full justify-start"
+                >
+                    <FileText className="mr-2 h-4 w-4" />
+                    Accounts Payable
                 </Button>
             </Link>
             <div className="pt-4 pb-2">

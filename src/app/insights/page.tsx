@@ -69,6 +69,7 @@ function InsightsContent() {
         stockValue: 0,
         treasuryAbdallah: 0,
         treasuryMohamed: 0,
+        totalDebts: 0,
         estimatedBusinessValue: 0,
         investmentGrowthRatio: 0
     });
@@ -192,17 +193,20 @@ function InsightsContent() {
                 { data: pendingData },
                 { data: treasuryAbdallahData },
                 { data: treasuryMohamedData },
-                { data: stockData }
+                { data: stockData },
+                { data: supplierInvoicesData }
             ] = await Promise.all([
                 // 1. Total Investment
                 supabase.from('transactions').select('amount').eq('type', 'investment'),
-                // 2. Pending Orders (Pending + Prepared + Shipped)
-                supabase.from('orders').select('total_amount').in('status', ['Pending', 'Prepared', 'Shipped']),
+                // 2. Pending Orders (Prepared + Shipped Only)
+                supabase.from('orders').select('total_amount').in('status', ['Prepared', 'Shipped']),
                 // 3. Treasury Balances
                 supabase.from('transactions').select('amount').eq('account_name', 'Abdallah Sherif'),
                 supabase.from('transactions').select('amount').eq('account_name', 'Mohamed Adel'),
                 // 4. Stock Value
-                supabase.from('variants').select('cost_price, stock_qty')
+                supabase.from('variants').select('cost_price, stock_qty'),
+                // 5. Total Debts
+                supabase.from('supplier_invoices').select('total_amount, paid_amount').neq('status', 'Fully Paid')
             ]);
 
             const investVal = investData?.reduce((sum, row) => sum + (Number(row.amount) || 0), 0) || 0;
@@ -210,8 +214,9 @@ function InsightsContent() {
             const treasuryAbdallahVal = treasuryAbdallahData?.reduce((sum, row) => sum + (Number(row.amount) || 0), 0) || 0;
             const treasuryMohamedVal = treasuryMohamedData?.reduce((sum, row) => sum + (Number(row.amount) || 0), 0) || 0;
             const stockVal = stockData?.reduce((sum, row) => sum + ((Number(row.cost_price) || 0) * (Number(row.stock_qty) || 0)), 0) || 0;
+            const totalDebtsVal = supplierInvoicesData?.reduce((sum, row) => sum + ((Number(row.total_amount) || 0) - (Number(row.paid_amount) || 0)), 0) || 0;
 
-            const estimatedVal = treasuryAbdallahVal + treasuryMohamedVal + stockVal + pendingVal;
+            const estimatedVal = treasuryAbdallahVal + treasuryMohamedVal + stockVal + pendingVal - totalDebtsVal;
             const growthRatio = investVal ? ((estimatedVal - investVal) / investVal) * 100 : 0;
 
             setBusinessValue({
@@ -220,6 +225,7 @@ function InsightsContent() {
                 stockValue: stockVal,
                 treasuryAbdallah: treasuryAbdallahVal,
                 treasuryMohamed: treasuryMohamedVal,
+                totalDebts: totalDebtsVal,
                 estimatedBusinessValue: estimatedVal,
                 investmentGrowthRatio: growthRatio
             });
@@ -277,10 +283,11 @@ function InsightsContent() {
                             <MetricCard title="Total Investment" value={formatCurrency(businessValue.totalInvestment)} sub="All Time" />
                             <MetricCard title="Stock Value" value={formatCurrency(businessValue.stockValue)} sub="Cost * Qty" />
                         </div>
-                        <div className="grid grid-cols-3 gap-4">
-                            <MetricCard title="Pending Orders Value" value={formatCurrency(businessValue.pendingOrdersValue)} sub="Pending + Prepared + Shipped" />
+                        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                            <MetricCard title="Pending Orders Value" value={formatCurrency(businessValue.pendingOrdersValue)} sub="Prepared + Shipped only" />
                             <MetricCard title="Treasury: Abdallah" value={formatCurrency(businessValue.treasuryAbdallah)} sub="Cash Balance" />
                             <MetricCard title="Treasury: Mohamed" value={formatCurrency(businessValue.treasuryMohamed)} sub="Cash Balance" />
+                            <MetricCard title="Total Debts" value={formatCurrency(businessValue.totalDebts)} sub="Unpaid Supplier Invoices" neg className="bg-red-50/50" />
                         </div>
                     </div>
                 </TabsContent>
