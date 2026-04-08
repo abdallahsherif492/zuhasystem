@@ -59,7 +59,7 @@ function AccountingContent() {
             const newBalances = { "Mohamed Adel": 0, "Abdallah Sherif": 0 };
             data.forEach((t: any) => {
                 if (newBalances[t.account_name as keyof typeof newBalances] !== undefined) {
-                    newBalances[t.account_name as keyof typeof newBalances] += (t.amount || 0);
+                    newBalances[t.account_name as keyof typeof newBalances] += (Number(t.amount) || 0);
                 }
             });
             setBalances(newBalances);
