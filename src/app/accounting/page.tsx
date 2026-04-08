@@ -56,13 +56,15 @@ function AccountingContent() {
         // In a real app, this should be a DB view or cached value.
         const { data, error } = await supabase.from("transactions").select("amount, account_name");
         if (data) {
-            const newBalances = { "Mohamed Adel": 0, "Abdallah Sherif": 0 };
+            const newBalances: Record<string, number> = { "Mohamed Adel": 0, "Abdallah Sherif": 0, "Safe": 0 };
             data.forEach((t: any) => {
-                if (newBalances[t.account_name as keyof typeof newBalances] !== undefined) {
-                    newBalances[t.account_name as keyof typeof newBalances] += (Number(t.amount) || 0);
+                if (!t.account_name) return;
+                if (newBalances[t.account_name] === undefined) {
+                    newBalances[t.account_name] = 0;
                 }
+                newBalances[t.account_name] += (Number(t.amount) || 0);
             });
-            setBalances(newBalances);
+            setBalances(newBalances as any);
         }
     }
 
