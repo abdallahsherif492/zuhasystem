@@ -18,9 +18,17 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Loader2, ArrowUpCircle, ArrowDownCircle, Wallet, Trash2 } from "lucide-react";
+import { Loader2, ArrowUpCircle, ArrowDownCircle, Wallet, Trash2, Search, Filter } from "lucide-react";
 import { DateRangePicker } from "@/components/date-range-picker";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select";
 import {
     AlertDialog,
     AlertDialogAction,
@@ -42,6 +50,14 @@ function AccountingContent() {
         "Mohamed Adel": 0,
         "Abdallah Sherif": 0,
     });
+
+    // Smart Filters
+    const [searchQuery, setSearchQuery] = useState("");
+    const [filterAccount, setFilterAccount] = useState("all");
+    const [filterCategory, setFilterCategory] = useState("all");
+
+    const uniqueAccounts = Array.from(new Set(transactions.map(t => t.account_name).filter(Boolean)));
+    const uniqueCategories = Array.from(new Set(transactions.map(t => t.category).filter(Boolean)));
 
     const fromDate = searchParams.get("from");
     const toDate = searchParams.get("to");
@@ -135,6 +151,43 @@ function AccountingContent() {
                 <TransferDialog onSuccess={refresh} />
             </div>
 
+            {/* Filtering & Search */}
+            <div className="flex flex-col sm:flex-row gap-4 bg-muted/50 p-4 rounded-lg border">
+                <div className="relative flex-1">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                        placeholder="Search descriptions, categories, or accounts..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="pl-9 bg-background"
+                    />
+                </div>
+                <div className="flex flex-wrap gap-4">
+                    <Select value={filterAccount} onValueChange={setFilterAccount}>
+                        <SelectTrigger className="w-[180px] bg-background">
+                            <SelectValue placeholder="All Accounts" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all">All Accounts</SelectItem>
+                            {uniqueAccounts.map(acc => typeof acc === 'string' && (
+                                <SelectItem key={acc} value={acc}>{acc}</SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                    <Select value={filterCategory} onValueChange={setFilterCategory}>
+                        <SelectTrigger className="w-[180px] bg-background">
+                            <SelectValue placeholder="All Categories" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all">All Categories</SelectItem>
+                            {uniqueCategories.map(cat => typeof cat === 'string' && (
+                                <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                </div>
+            </div>
+
             {/* Lists */}
             <Tabs defaultValue="all" className="space-y-4">
                 <TabsList>
@@ -167,12 +220,33 @@ function AccountingContent() {
                                             </TableCell>
                                         </TableRow>
                                     ) : (
-                                        transactions
-                                            .filter(t => {
-                                                if (tab === 'all') return true;
-                                                return t.type === tab;
-                                            })
-                                            .map((t) => (
+                                        (() => {
+                                            const filteredTransactions = transactions.filter(t => {
+                                                if (tab !== 'all' && t.type !== tab) return false;
+
+                                                const matchesSearch = !searchQuery ||
+                                                    t.description?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                                                    t.category?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                                                    t.account_name?.toLowerCase().includes(searchQuery.toLowerCase());
+
+                                                if (!matchesSearch) return false;
+                                                if (filterAccount !== 'all' && t.account_name !== filterAccount) return false;
+                                                if (filterCategory !== 'all' && t.category !== filterCategory) return false;
+
+                                                return true;
+                                            });
+
+                                            if (filteredTransactions.length === 0) {
+                                                return (
+                                                    <TableRow>
+                                                        <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                                                            No transactions found matching your filters.
+                                                        </TableCell>
+                                                    </TableRow>
+                                                );
+                                            }
+
+                                            return filteredTransactions.map((t) => (
                                                 <TableRow key={t.id}>
                                                     <TableCell>{format(new Date(t.transaction_date), "PPP")}</TableCell>
                                                     <TableCell>
@@ -213,14 +287,8 @@ function AccountingContent() {
                                                         </AlertDialog>
                                                     </TableCell>
                                                 </TableRow>
-                                            ))
-                                    )}
-                                    {!loading && transactions.filter(t => tab === 'all' || t.type === tab).length === 0 && (
-                                        <TableRow>
-                                            <TableCell colSpan={6} className="h-24 text-center">
-                                                No transactions found.
-                                            </TableCell>
-                                        </TableRow>
+                                            ));
+                                        })()
                                     )}
                                 </TableBody>
                             </Table>
