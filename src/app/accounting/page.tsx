@@ -52,17 +52,13 @@ function AccountingContent() {
     }, [fromDate, toDate]);
 
     async function fetchBalances() {
-        // Fetch ALL transactions to calculate current balance
-        // In a real app, this should be a DB view or cached value.
-        const { data, error } = await supabase.from("transactions").select("amount, account_name");
+        // Fetch aggregated balances directly from Postgres via RPC
+        const { data, error } = await supabase.rpc("get_treasury_balances");
         if (data) {
             const newBalances: Record<string, number> = { "Mohamed Adel": 0, "Abdallah Sherif": 0, "Safe": 0 };
             data.forEach((t: any) => {
                 if (!t.account_name) return;
-                if (newBalances[t.account_name] === undefined) {
-                    newBalances[t.account_name] = 0;
-                }
-                newBalances[t.account_name] += (Number(t.amount) || 0);
+                newBalances[t.account_name] = Number(t.balance) || 0;
             });
             setBalances(newBalances as any);
         }
