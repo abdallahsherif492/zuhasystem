@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { formatCurrency } from "@/lib/utils";
 import { restockItems, deductStock } from "@/lib/inventory";
@@ -94,6 +94,7 @@ function LogisticsDashboard() {
 
 function LogisticsContent() {
     const searchParams = useSearchParams();
+    const router = useRouter();
     const [orders, setOrders] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
 
@@ -123,10 +124,17 @@ function LogisticsContent() {
     const toDate = searchParams.get("to");
 
     useEffect(() => {
+        if (!fromDate || !toDate) {
+            const end = new Date();
+            const start = subDays(end, 30);
+            router.replace(`?from=${format(start, "yyyy-MM-dd")}&to=${format(end, "yyyy-MM-dd")}`);
+            return;
+        }
+
         fetchOrders();
         fetchProducts();
         fetchShippingCompanies();
-    }, [fromDate, toDate]);
+    }, [fromDate, toDate, router]);
 
     async function fetchProducts() {
         const { data } = await supabase.from('products').select('id, name').order('name');
