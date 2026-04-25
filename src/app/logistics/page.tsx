@@ -217,7 +217,7 @@ function LogisticsContent() {
         };
 
         const order = orders.find(o => o.id === orderId);
-        const preStates = ["Pending", "Cancelled"];
+        const preStates = ["Pending", "Processing", "Cancelled"];
         const isDeductingAction = order && preStates.includes(order.status) && !preStates.includes(newStatus);
 
         if (isDeductingAction) {
@@ -246,7 +246,7 @@ function LogisticsContent() {
 
             // Handle Inventory Logic for each order (simplified loop)
             // Note: Ideally this should be a batch RPC for performance, but loop is acceptable for typical usage
-            const preStates = ["Pending", "Cancelled"];
+            const preStates = ["Pending", "Processing", "Cancelled"];
             const newIsPreState = preStates.includes(newStatus);
 
             for (const oid of orderIds) {
@@ -331,14 +331,17 @@ function LogisticsContent() {
             }
         };
 
-        const hasPendingOrders = ids.some(id => orders.find(o => o.id === id)?.status === "Pending");
-        const preStates = ["Pending", "Cancelled"];
+        const preStates = ["Pending", "Processing", "Cancelled"];
+        const hasPendingOrders = ids.some(id => {
+            const status = orders.find(o => o.id === id)?.status;
+            return status && preStates.includes(status);
+        });
         const isDeductingAction = hasPendingOrders && !preStates.includes(status);
 
         if (isDeductingAction) {
             setConfirmDialogContent({
                 title: "Deduct Stock?",
-                description: `Moving ${ids.length} orders from Pending/Cancelled to ${status} will permanently deduct stock from the system. Do you want to proceed?`
+                description: `Moving ${ids.length} orders from Pending/Processing/Cancelled to ${status} will permanently deduct stock from the system. Do you want to proceed?`
             });
             setPendingConfirmAction(() => action);
             setConfirmDialogOpen(true);
