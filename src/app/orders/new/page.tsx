@@ -272,6 +272,17 @@ export default function NewOrderPage() {
             return;
         }
 
+        // Validate Phone Format (11 digits, starts with 01, english numbers)
+        const phoneRegex = /^01[0125][0-9]{8}$/;
+        if (!phoneRegex.test(customerPhone)) {
+            alert("Phone number must be exactly 11 English digits and start with 01 (e.g. 01012345678).");
+            return;
+        }
+        if (customerPhone2 && !phoneRegex.test(customerPhone2)) {
+            alert("Second phone number must be exactly 11 English digits and start with 01 (e.g. 01012345678).");
+            return;
+        }
+
         setSubmitting(true);
 
         try {
