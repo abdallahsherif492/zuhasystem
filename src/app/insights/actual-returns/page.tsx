@@ -79,14 +79,7 @@ function ActualReturnsContent() {
 
             if (transError) throw transError;
 
-            // 3. Fetch Ads Expenses
-            const { data: ads, error: adsError } = await supabase
-                .from('ads_expenses')
-                .select('ad_date, amount')
-                .gte('ad_date', start)
-                .lte('ad_date', end);
-
-            if (adsError) throw adsError;
+            // 3. (Removed ads_expenses fetch)
 
             // Aggregation
             let rev = 0;
@@ -118,28 +111,24 @@ function ActualReturnsContent() {
 
             let opex = 0;
             const opexByDate: Record<string, number> = {};
-
-            (transactions || []).forEach(t => {
-                const cat = t.category?.toLowerCase() || '';
-                if (cat === 'ads' || cat === 'purchases') return; // Exclude Ads and Purchases
-                const dateKey = new Date(t.transaction_date).toLocaleDateString('en-GB');
-                const amt = Math.abs(Number(t.amount)) || 0;
-                opex += amt;
-
-                if (!opexByDate[dateKey]) opexByDate[dateKey] = 0;
-                opexByDate[dateKey] += amt;
-            });
-
             let adsSpent = 0;
             const adsByDate: Record<string, number> = {};
 
-            (ads || []).forEach(a => {
-                const dateKey = new Date(a.ad_date).toLocaleDateString('en-GB');
-                const amt = Math.abs(Number(a.amount)) || 0;
-                adsSpent += amt;
+            (transactions || []).forEach(t => {
+                const cat = t.category?.toLowerCase() || '';
+                if (cat === 'purchases') return; // Exclude Purchases from opex
+                const dateKey = new Date(t.transaction_date).toLocaleDateString('en-GB');
+                const amt = Math.abs(Number(t.amount)) || 0;
 
-                if (!adsByDate[dateKey]) adsByDate[dateKey] = 0;
-                adsByDate[dateKey] += amt;
+                if (cat === 'ads') {
+                    adsSpent += amt;
+                    if (!adsByDate[dateKey]) adsByDate[dateKey] = 0;
+                    adsByDate[dateKey] += amt;
+                } else {
+                    opex += amt;
+                    if (!opexByDate[dateKey]) opexByDate[dateKey] = 0;
+                    opexByDate[dateKey] += amt;
+                }
             });
 
             const netProfit = rev - cogs - opex - adsSpent - courierTotal;
