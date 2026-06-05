@@ -3,12 +3,32 @@ import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { CheckCircle2, Package, TrendingUp, Users, ShieldCheck } from "lucide-react";
 
-export default function MarketingLandingPage() {
+import { createServerClient } from '@supabase/ssr';
+import { cookies } from 'next/headers';
+
+export default async function MarketingLandingPage() {
+  const cookieStore = await cookies();
+  
+  const FALLBACK_URL = "https://telkkknuygjejmqcvyev.supabase.co";
+  const FALLBACK_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRlbGtra251eWdqZWptcWN2eWV2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjY1MTU5NDAsImV4cCI6MjA4MjA5MTk0MH0.7q4Vyfz0CxAHCy49bKU6iy9xay0IxsqtMe4UATcg_cU";
+  
+  const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL || FALLBACK_URL,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || FALLBACK_KEY,
+      {
+          cookies: {
+              getAll() { return cookieStore.getAll() }
+          }
+      }
+  );
+
+  const { data: { user } } = await supabase.auth.getUser();
+
   return (
     <div className="flex flex-col min-h-screen">
       {/* Header */}
       <header className="px-4 lg:px-6 h-16 flex items-center border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-0 z-50">
-        <Link className="flex items-center justify-center" href="#">
+        <Link className="flex items-center justify-center" href="/">
           <div className="relative h-10 w-24">
             <Image src="/logo.png" alt="Zuha Logo" fill className="object-contain object-left" />
           </div>
@@ -21,12 +41,20 @@ export default function MarketingLandingPage() {
             Pricing
           </Link>
           <div className="flex items-center gap-2 ml-4">
-            <Button variant="ghost" asChild>
-              <Link href="/login">Log in</Link>
-            </Button>
-            <Button asChild>
-              <Link href="/register">Start Free Trial</Link>
-            </Button>
+            {user ? (
+              <Button asChild>
+                <Link href="/dashboard">Go to Dashboard</Link>
+              </Button>
+            ) : (
+              <>
+                <Button variant="ghost" asChild>
+                  <Link href="/login">Log in</Link>
+                </Button>
+                <Button asChild>
+                  <Link href="/register">Start Free Trial</Link>
+                </Button>
+              </>
+            )}
           </div>
         </nav>
       </header>
@@ -46,12 +74,20 @@ export default function MarketingLandingPage() {
                 </p>
               </div>
               <div className="flex flex-col sm:flex-row gap-4 w-full sm:w-auto">
-                <Button size="lg" className="h-14 px-8 text-lg rounded-full" asChild>
-                  <Link href="/register">Start your 14-day free trial</Link>
-                </Button>
-                <Button size="lg" variant="outline" className="h-14 px-8 text-lg rounded-full">
-                  Book a Demo
-                </Button>
+                {user ? (
+                  <Button size="lg" className="h-14 px-8 text-lg rounded-full" asChild>
+                    <Link href="/dashboard">Go to Dashboard</Link>
+                  </Button>
+                ) : (
+                  <>
+                    <Button size="lg" className="h-14 px-8 text-lg rounded-full" asChild>
+                      <Link href="/register">Start your 14-day free trial</Link>
+                    </Button>
+                    <Button size="lg" variant="outline" className="h-14 px-8 text-lg rounded-full">
+                      Book a Demo
+                    </Button>
+                  </>
+                )}
               </div>
               <p className="text-sm text-muted-foreground">No credit card required. Cancel anytime.</p>
             </div>

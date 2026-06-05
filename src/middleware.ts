@@ -75,7 +75,7 @@ export async function middleware(request: NextRequest) {
         // If user IS logged in AND trying to access login/register/forgot page
         if (user && (isLoginPage || isRegisterPage || isForgotPage)) {
             const dashboardUrl = request.nextUrl.clone()
-            dashboardUrl.pathname = '/'
+            dashboardUrl.pathname = '/dashboard'
             return NextResponse.redirect(dashboardUrl)
         }
 
@@ -83,8 +83,20 @@ export async function middleware(request: NextRequest) {
         if (user && !isLoginPage && !isRegisterPage && !isForgotPage && !isUpdatePasswordPage && !isAuthCallback && !isStatic) {
             const pathname = request.nextUrl.pathname;
 
-            // Unrestricted routes explicitly opened for authenticated users
-            if (pathname !== '/' && pathname !== '/unauthorized' && pathname !== '/onboarding' && !pathname.startsWith('/system-admin')) {
+            if (pathname.startsWith('/system-admin')) {
+                // Explicit check for system-admin route
+                const { data: sysAdmin } = await supabase
+                    .from('system_admins')
+                    .select('id')
+                    .eq('user_email', user.email)
+                    .single();
+                
+                if (!sysAdmin) {
+                    const unauthUrl = request.nextUrl.clone();
+                    unauthUrl.pathname = '/unauthorized';
+                    return NextResponse.redirect(unauthUrl);
+                }
+            } else if (pathname !== '/' && pathname !== '/unauthorized' && pathname !== '/onboarding') {
                 const { data: userPerms, error } = await supabase
                     .from('user_permissions')
                     .select('super_admin, permissions')
