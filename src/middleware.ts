@@ -55,6 +55,7 @@ export async function middleware(request: NextRequest) {
 
         // 3. Define Protected Logic
         const isLoginPage = request.nextUrl.pathname.startsWith('/login')
+        const isRegisterPage = request.nextUrl.pathname.startsWith('/register')
         const isAuthCallback = request.nextUrl.pathname.startsWith('/auth')
         const isStatic = request.nextUrl.pathname.startsWith('/_next') ||
             request.nextUrl.pathname.includes('.') ||
@@ -64,25 +65,25 @@ export async function middleware(request: NextRequest) {
 
         // If user is NOT logged in AND trying to access a protected page
         // "Fail Closed": If we have no user (due to no session OR missing envs), BLOCK access.
-        if (!user && !isLoginPage && !isAuthCallback && !request.nextUrl.pathname.includes('.')) {
+        if (!user && !isLoginPage && !isRegisterPage && !isAuthCallback && !request.nextUrl.pathname.includes('.')) {
             const loginUrl = request.nextUrl.clone()
             loginUrl.pathname = '/login'
             return NextResponse.redirect(loginUrl)
         }
 
-        // If user IS logged in AND trying to access login page
-        if (user && isLoginPage) {
+        // If user IS logged in AND trying to access login/register page
+        if (user && (isLoginPage || isRegisterPage)) {
             const dashboardUrl = request.nextUrl.clone()
             dashboardUrl.pathname = '/'
             return NextResponse.redirect(dashboardUrl)
         }
 
         // --- RBAC: Role-Based Access Control ---
-        if (user && !isLoginPage && !isAuthCallback && !isStatic) {
+        if (user && !isLoginPage && !isRegisterPage && !isAuthCallback && !isStatic) {
             const pathname = request.nextUrl.pathname;
 
             // Unrestricted routes explicitly opened for authenticated users
-            if (pathname !== '/' && pathname !== '/unauthorized') {
+            if (pathname !== '/' && pathname !== '/unauthorized' && pathname !== '/onboarding' && !pathname.startsWith('/system-admin')) {
                 const { data: userPerms, error } = await supabase
                     .from('user_permissions')
                     .select('super_admin, permissions')
@@ -116,7 +117,7 @@ export async function middleware(request: NextRequest) {
         // But safeguard against infinite loop if Login itself causes error?
         // Login page should be excluded from logic or handled above.
         // If we are already on Login page, return response (to allow rendering error)
-        if (request.nextUrl.pathname.startsWith('/login')) {
+        if (request.nextUrl.pathname.startsWith('/login') || request.nextUrl.pathname.startsWith('/register')) {
             return NextResponse.next();
         }
 
