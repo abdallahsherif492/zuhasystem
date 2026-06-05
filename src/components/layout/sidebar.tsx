@@ -36,13 +36,16 @@ export function Sidebar({ className }: SidebarProps) {
 
 export function SidebarContent() {
     const pathname = usePathname();
-    const { userRole, allowedPages, isSystemAdmin } = useBusiness();
+    const { userRole, allowedPages, isSystemAdmin, loading } = useBusiness();
 
-    const role = userRole?.toLowerCase() || "";
+    const role = userRole?.toLowerCase().trim() || "";
 
     const canAccess = (path: string) => {
         if (isSystemAdmin) return true;
         if (role === "owner" || role === "admin" || role === "platform admin") return true;
+        
+        // Always allow everyone to see the dashboard home
+        if (path === "/dashboard") return true;
         
         // If they have explicit allowed pages
         if (allowedPages && allowedPages.length > 0) {
@@ -53,6 +56,18 @@ export function SidebarContent() {
         // Default viewer access (if not explicitly restricted)
         return false;
     };
+
+    if (loading) {
+        return (
+            <div className="space-y-2 p-4">
+                <div className="h-8 bg-muted rounded w-full animate-pulse"></div>
+                <div className="h-8 bg-muted rounded w-full animate-pulse"></div>
+                <div className="h-8 bg-muted rounded w-full animate-pulse"></div>
+                <div className="h-8 bg-muted rounded w-full animate-pulse"></div>
+                <div className="h-8 bg-muted rounded w-full animate-pulse"></div>
+            </div>
+        );
+    }
 
     return (
         <div className="space-y-1">
