@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useBusiness } from "@/contexts/BusinessContext";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { LayoutDashboard, Package, ShoppingCart, Settings, Users, Truck, Banknote, LineChart, ShoppingBag, Megaphone, Box, DollarSign, ShieldCheck, FileText, Ticket, CreditCard } from "lucide-react";
@@ -35,211 +36,263 @@ export function Sidebar({ className }: SidebarProps) {
 
 export function SidebarContent() {
     const pathname = usePathname();
+    const { userRole, allowedPages, isSystemAdmin } = useBusiness();
+
+    const role = userRole?.toLowerCase() || "";
+
+    const canAccess = (path: string) => {
+        if (isSystemAdmin) return true;
+        if (role === "owner" || role === "admin" || role === "platform admin") return true;
+        
+        // If they have explicit allowed pages
+        if (allowedPages && allowedPages.length > 0) {
+            // Dashboard is usually allowed by default or specifically, let's strictly check if the path starts with any allowed page
+            return allowedPages.some(allowed => pathname.startsWith(allowed) || path.startsWith(allowed));
+        }
+        
+        // Default viewer access (if not explicitly restricted)
+        return false;
+    };
 
     return (
         <div className="space-y-1">
-            <Link href="/dashboard">
-                <Button
-                    variant={pathname === "/dashboard" ? "secondary" : "ghost"}
-                    className="w-full justify-start"
-                >
-                    <LayoutDashboard className="mr-2 h-4 w-4" />
-                    Dashboard
-                </Button>
-            </Link>
-            <Link href="/products">
-                <Button
-                    variant={pathname.startsWith("/products") ? "secondary" : "ghost"}
-                    className="w-full justify-start"
-                >
-                    <Package className="mr-2 h-4 w-4" />
-                    Products
-                </Button>
-            </Link>
-            <Link href="/inventory">
-                <Button
-                    variant={pathname.startsWith("/inventory") ? "secondary" : "ghost"}
-                    className="w-full justify-start"
-                >
-                    <Box className="mr-2 h-4 w-4" />
-                    Inventory
-                </Button>
-            </Link>
-            <Link href="/orders">
-                <Button
-                    variant={pathname.startsWith("/orders") ? "secondary" : "ghost"}
-                    className="w-full justify-start"
-                >
-                    <ShoppingCart className="mr-2 h-4 w-4" />
-                    Orders
-                </Button>
-            </Link>
-            <Link href="/purchases">
-                <Button
-                    variant={pathname.startsWith("/purchases") ? "secondary" : "ghost"}
-                    className="w-full justify-start"
-                >
-                    <ShoppingBag className="mr-2 h-4 w-4" />
-                    Purchases
-                </Button>
-            </Link>
-            <Link href="/customers">
-                <Button
-                    variant={pathname.startsWith("/customers") ? "secondary" : "ghost"}
-                    className="w-full justify-start"
-                >
-                    <Users className="mr-2 h-4 w-4" />
-                    Customers
-                </Button>
-            </Link>
-            <Link href="/logistics">
-                <Button
-                    variant={pathname.startsWith("/logistics") ? "secondary" : "ghost"}
-                    className="w-full justify-start"
-                >
-                    <Truck className="mr-2 h-4 w-4" />
-                    Logistics
-                </Button>
-            </Link>
-            <Link href="/support">
-                <Button
-                    variant={pathname.startsWith("/support") ? "secondary" : "ghost"}
-                    className="w-full justify-start text-blue-600 hover:text-blue-700 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-950"
-                >
-                    <Ticket className="mr-2 h-4 w-4" />
-                    Support
-                </Button>
-            </Link>
-            <Link href="/accounting">
-                <Button
-                    variant={pathname.startsWith("/accounting") ? "secondary" : "ghost"}
-                    className="w-full justify-start"
-                >
-                    <Banknote className="mr-2 h-4 w-4" />
-                    Accounting
-                </Button>
-            </Link>
-            <Link href="/insights">
-                <Button
-                    variant={pathname.startsWith("/insights") ? "secondary" : "ghost"}
-                    className="w-full justify-start"
-                >
-                    <LineChart className="mr-2 h-4 w-4" />
-                    Insights
-                </Button>
-            </Link>
-            <Link href="/shipping">
-                <Button
-                    variant={pathname.startsWith("/shipping") ? "secondary" : "ghost"}
-                    className="w-full justify-start"
-                >
-                    <Truck className="mr-2 h-4 w-4" />
-                    Shipping
-                </Button>
-            </Link>
-            <Link href="/ads">
-                <Button
-                    variant={pathname.startsWith("/ads") ? "secondary" : "ghost"}
-                    className="w-full justify-start"
-                >
-                    <Megaphone className="mr-2 h-4 w-4" />
-                    Ads Spent
-                </Button>
-            </Link>
-            <Link href="/payable">
-                <Button
-                    variant={pathname.startsWith("/payable") ? "secondary" : "ghost"}
-                    className="w-full justify-start"
-                >
-                    <FileText className="mr-2 h-4 w-4" />
-                    Accounts Payable
-                </Button>
-            </Link>
-            <div className="pt-4 pb-2">
-                <h4 className="mb-1 rounded-md px-2 py-1 text-sm font-semibold">
-                    Detailed Analytics
-                </h4>
-                <div className="grid grid-flow-row auto-rows-max text-sm gap-1">
-                    <Link href="/insights/revenues">
-                        <Button
-                            variant={pathname.startsWith("/insights/revenues") ? "secondary" : "ghost"}
-                            className="w-full justify-start h-8"
-                            size="sm"
-                        >
-                            <DollarSign className="mr-2 h-3 w-3" />
-                            Revenues
-                        </Button>
-                    </Link>
-                    <Link href="/insights/actual-returns">
-                        <Button
-                            variant={pathname.startsWith("/insights/actual-returns") ? "secondary" : "ghost"}
-                            className="w-full justify-start h-8"
-                            size="sm"
-                        >
-                            <DollarSign className="mr-2 h-3 w-3" />
-                            Actual Returns
-                        </Button>
-                    </Link>
-                    <Link href="/insights/expenses">
-                        <Button
-                            variant={pathname.startsWith("/insights/expenses") ? "secondary" : "ghost"}
-                            className="w-full justify-start h-8"
-                            size="sm"
-                        >
-                            <Banknote className="mr-2 h-3 w-3" />
-                            Expenses
-                        </Button>
-                    </Link>
-                    <Link href="/insights/channel-analytics">
-                        <Button
-                            variant={pathname.startsWith("/insights/channel-analytics") ? "secondary" : "ghost"}
-                            className="w-full justify-start h-8"
-                            size="sm"
-                        >
-                            <Megaphone className="mr-2 h-3 w-3" />
-                            Channels
-                        </Button>
-                    </Link>
-                    <Link href="/insights/products-analysis">
-                        <Button
-                            variant={pathname.startsWith("/insights/products-analysis") ? "secondary" : "ghost"}
-                            className="w-full justify-start h-8"
-                            size="sm"
-                        >
-                            <Package className="mr-2 h-3 w-3" />
-                            Products
-                        </Button>
-                    </Link>
+            {canAccess("/dashboard") && (
+                <Link href="/dashboard">
+                    <Button
+                        variant={pathname === "/dashboard" ? "secondary" : "ghost"}
+                        className="w-full justify-start"
+                    >
+                        <LayoutDashboard className="mr-2 h-4 w-4" />
+                        Dashboard
+                    </Button>
+                </Link>
+            )}
+            {canAccess("/products") && (
+                <Link href="/products">
+                    <Button
+                        variant={pathname.startsWith("/products") ? "secondary" : "ghost"}
+                        className="w-full justify-start"
+                    >
+                        <Package className="mr-2 h-4 w-4" />
+                        Products
+                    </Button>
+                </Link>
+            )}
+            {canAccess("/inventory") && (
+                <Link href="/inventory">
+                    <Button
+                        variant={pathname.startsWith("/inventory") ? "secondary" : "ghost"}
+                        className="w-full justify-start"
+                    >
+                        <Box className="mr-2 h-4 w-4" />
+                        Inventory
+                    </Button>
+                </Link>
+            )}
+            {canAccess("/orders") && (
+                <Link href="/orders">
+                    <Button
+                        variant={pathname.startsWith("/orders") ? "secondary" : "ghost"}
+                        className="w-full justify-start"
+                    >
+                        <ShoppingCart className="mr-2 h-4 w-4" />
+                        Orders
+                    </Button>
+                </Link>
+            )}
+            {canAccess("/purchases") && (
+                <Link href="/purchases">
+                    <Button
+                        variant={pathname.startsWith("/purchases") ? "secondary" : "ghost"}
+                        className="w-full justify-start"
+                    >
+                        <ShoppingBag className="mr-2 h-4 w-4" />
+                        Purchases
+                    </Button>
+                </Link>
+            )}
+            {canAccess("/customers") && (
+                <Link href="/customers">
+                    <Button
+                        variant={pathname.startsWith("/customers") ? "secondary" : "ghost"}
+                        className="w-full justify-start"
+                    >
+                        <Users className="mr-2 h-4 w-4" />
+                        Customers
+                    </Button>
+                </Link>
+            )}
+            {canAccess("/logistics") && (
+                <Link href="/logistics">
+                    <Button
+                        variant={pathname.startsWith("/logistics") ? "secondary" : "ghost"}
+                        className="w-full justify-start"
+                    >
+                        <Truck className="mr-2 h-4 w-4" />
+                        Logistics
+                    </Button>
+                </Link>
+            )}
+            {canAccess("/support") && (
+                <Link href="/support">
+                    <Button
+                        variant={pathname.startsWith("/support") ? "secondary" : "ghost"}
+                        className="w-full justify-start text-blue-600 hover:text-blue-700 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-950"
+                    >
+                        <Ticket className="mr-2 h-4 w-4" />
+                        Support
+                    </Button>
+                </Link>
+            )}
+            {canAccess("/accounting") && (
+                <Link href="/accounting">
+                    <Button
+                        variant={pathname.startsWith("/accounting") ? "secondary" : "ghost"}
+                        className="w-full justify-start"
+                    >
+                        <Banknote className="mr-2 h-4 w-4" />
+                        Accounting
+                    </Button>
+                </Link>
+            )}
+            {canAccess("/insights") && (
+                <Link href="/insights">
+                    <Button
+                        variant={pathname.startsWith("/insights") && !pathname.startsWith("/insights/") ? "secondary" : "ghost"}
+                        className="w-full justify-start"
+                    >
+                        <LineChart className="mr-2 h-4 w-4" />
+                        Insights
+                    </Button>
+                </Link>
+            )}
+            {canAccess("/shipping") && (
+                <Link href="/shipping">
+                    <Button
+                        variant={pathname.startsWith("/shipping") ? "secondary" : "ghost"}
+                        className="w-full justify-start"
+                    >
+                        <Truck className="mr-2 h-4 w-4" />
+                        Shipping
+                    </Button>
+                </Link>
+            )}
+            {canAccess("/ads") && (
+                <Link href="/ads">
+                    <Button
+                        variant={pathname.startsWith("/ads") ? "secondary" : "ghost"}
+                        className="w-full justify-start"
+                    >
+                        <Megaphone className="mr-2 h-4 w-4" />
+                        Ads Spent
+                    </Button>
+                </Link>
+            )}
+            {canAccess("/payable") && (
+                <Link href="/payable">
+                    <Button
+                        variant={pathname.startsWith("/payable") ? "secondary" : "ghost"}
+                        className="w-full justify-start"
+                    >
+                        <FileText className="mr-2 h-4 w-4" />
+                        Accounts Payable
+                    </Button>
+                </Link>
+            )}
+            
+            {canAccess("/insights") && (
+                <div className="pt-4 pb-2">
+                    <h4 className="mb-1 rounded-md px-2 py-1 text-sm font-semibold">
+                        Detailed Analytics
+                    </h4>
+                    <div className="grid grid-flow-row auto-rows-max text-sm gap-1">
+                        <Link href="/insights/revenues">
+                            <Button
+                                variant={pathname.startsWith("/insights/revenues") ? "secondary" : "ghost"}
+                                className="w-full justify-start h-8"
+                                size="sm"
+                            >
+                                <DollarSign className="mr-2 h-3 w-3" />
+                                Revenues
+                            </Button>
+                        </Link>
+                        <Link href="/insights/actual-returns">
+                            <Button
+                                variant={pathname.startsWith("/insights/actual-returns") ? "secondary" : "ghost"}
+                                className="w-full justify-start h-8"
+                                size="sm"
+                            >
+                                <DollarSign className="mr-2 h-3 w-3" />
+                                Actual Returns
+                            </Button>
+                        </Link>
+                        <Link href="/insights/expenses">
+                            <Button
+                                variant={pathname.startsWith("/insights/expenses") ? "secondary" : "ghost"}
+                                className="w-full justify-start h-8"
+                                size="sm"
+                            >
+                                <Banknote className="mr-2 h-3 w-3" />
+                                Expenses
+                            </Button>
+                        </Link>
+                        <Link href="/insights/channel-analytics">
+                            <Button
+                                variant={pathname.startsWith("/insights/channel-analytics") ? "secondary" : "ghost"}
+                                className="w-full justify-start h-8"
+                                size="sm"
+                            >
+                                <Megaphone className="mr-2 h-3 w-3" />
+                                Channels
+                            </Button>
+                        </Link>
+                        <Link href="/insights/products-analysis">
+                            <Button
+                                variant={pathname.startsWith("/insights/products-analysis") ? "secondary" : "ghost"}
+                                className="w-full justify-start h-8"
+                                size="sm"
+                            >
+                                <Package className="mr-2 h-3 w-3" />
+                                Products
+                            </Button>
+                        </Link>
+                    </div>
                 </div>
-            </div>
+            )}
 
-            <div className="pt-4 pb-2 border-t mt-4">
-                <h4 className="mb-1 rounded-md px-2 py-1 text-sm font-semibold">
-                    Administration
-                </h4>
-                <div className="grid grid-flow-row auto-rows-max text-sm gap-1">
-                    <Link href="/team">
-                        <Button
-                            variant={pathname.startsWith("/team") ? "secondary" : "ghost"}
-                            className="w-full justify-start h-8"
-                            size="sm"
-                        >
-                            <Users className="mr-2 h-3 w-3" />
-                            Team
-                        </Button>
-                    </Link>
-                    <Link href="/users">
-                        <Button
-                            variant={pathname.startsWith("/users") ? "secondary" : "ghost"}
-                            className="w-full justify-start h-8"
-                            size="sm"
-                        >
-                            <ShieldCheck className="mr-2 h-3 w-3" />
-                            Users & Permissions
-                        </Button>
-                    </Link>
+            {(role === "owner" || role === "admin" || role === "platform admin" || isSystemAdmin || canAccess("/team") || canAccess("/users")) && (
+                <div className="pt-4 pb-2 border-t mt-4">
+                    <h4 className="mb-1 rounded-md px-2 py-1 text-sm font-semibold">
+                        Administration
+                    </h4>
+                    <div className="grid grid-flow-row auto-rows-max text-sm gap-1">
+                        {(role === "owner" || role === "admin" || role === "platform admin" || isSystemAdmin || canAccess("/team")) && (
+                            <Link href="/team">
+                                <Button
+                                    variant={pathname.startsWith("/team") ? "secondary" : "ghost"}
+                                    className="w-full justify-start h-8"
+                                    size="sm"
+                                >
+                                    <Users className="mr-2 h-3 w-3" />
+                                    Team
+                                </Button>
+                            </Link>
+                        )}
+                        {(role === "owner" || role === "admin" || role === "platform admin" || isSystemAdmin || canAccess("/users")) && (
+                            <Link href="/users">
+                                <Button
+                                    variant={pathname.startsWith("/users") ? "secondary" : "ghost"}
+                                    className="w-full justify-start h-8"
+                                    size="sm"
+                                >
+                                    <ShieldCheck className="mr-2 h-3 w-3" />
+                                    Users & Permissions
+                                </Button>
+                            </Link>
+                        )}
+                    </div>
                 </div>
-            </div>
+            )}
         </div>
     );
 }

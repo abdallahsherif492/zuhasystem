@@ -5,6 +5,9 @@ import { supabase } from "@/lib/supabase";
 import { useBusiness } from "@/contexts/BusinessContext";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,6 +20,10 @@ type BusinessUser = {
     id: string;
     user_email: string;
     role: string;
+    allowed_pages: string[];
+    shift_start: string | null;
+    shift_end: string | null;
+    weekend_days: string[];
     created_at: string;
 };
 
@@ -26,10 +33,33 @@ export default function TeamManagementPage() {
     const [loading, setLoading] = useState(true);
     
     // Add user state
+    
     const [isAddOpen, setIsAddOpen] = useState(false);
     const [newEmail, setNewEmail] = useState("");
     const [newRole, setNewRole] = useState("staff");
+    const [newAllowedPages, setNewAllowedPages] = useState<string[]>([]);
+    const [newShiftStart, setNewShiftStart] = useState("09:00");
+    const [newShiftEnd, setNewShiftEnd] = useState("17:00");
+    const [newWeekendDays, setNewWeekendDays] = useState<string[]>(["Friday"]);
     const [saving, setSaving] = useState(false);
+
+    const availablePages = [
+        { id: "/dashboard", label: "Dashboard" },
+        { id: "/orders", label: "Orders" },
+        { id: "/products", label: "Products" },
+        { id: "/inventory", label: "Inventory" },
+        { id: "/customers", label: "Customers" },
+        { id: "/purchases", label: "Purchases" },
+        { id: "/accounting", label: "Accounting" },
+        { id: "/shipping", label: "Shipping" },
+        { id: "/logistics", label: "Logistics" },
+        { id: "/payable", label: "Accounts Payable" },
+        { id: "/ads", label: "Ads Spent" },
+        { id: "/insights", label: "Insights" }
+    ];
+
+    const weekDays = ["Saturday", "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
+
 
     useEffect(() => {
         if (activeBusiness) {
@@ -58,13 +88,19 @@ export default function TeamManagementPage() {
         if (!activeBusiness) return;
         setSaving(true);
 
+        
         const { error } = await supabase
             .from("business_users")
             .insert({
                 business_id: activeBusiness.id,
                 user_email: newEmail.toLowerCase().trim(),
-                role: newRole
+                role: newRole,
+                allowed_pages: newRole === 'owner' || newRole === 'admin' ? [] : newAllowedPages,
+                shift_start: newShiftStart,
+                shift_end: newShiftEnd,
+                weekend_days: newWeekendDays
             });
+
 
         setSaving(false);
         if (error) {
@@ -162,6 +198,7 @@ export default function TeamManagementPage() {
                                     required 
                                 />
                             </div>
+                            
                             <div className="space-y-2">
                                 <label className="text-sm font-medium">Role</label>
                                 <Select value={newRole} onValueChange={setNewRole}>
@@ -176,6 +213,63 @@ export default function TeamManagementPage() {
                                     </SelectContent>
                                 </Select>
                             </div>
+                            
+                            {newRole !== 'owner' && newRole !== 'admin' && (
+                                <div className="space-y-4 border p-4 rounded-md">
+                                    <h4 className="text-sm font-semibold">Permissions (Allowed Pages)</h4>
+                                    <div className="grid grid-cols-2 gap-2">
+                                        {availablePages.map(page => (
+                                            <div key={page.id} className="flex items-center space-x-2">
+                                                <Checkbox 
+                                                    id={page.id} 
+                                                    checked={newAllowedPages.includes(page.id)}
+                                                    onCheckedChange={(checked) => {
+                                                        if (checked) {
+                                                            setNewAllowedPages([...newAllowedPages, page.id]);
+                                                        } else {
+                                                            setNewAllowedPages(newAllowedPages.filter(p => p !== page.id));
+                                                        }
+                                                    }}
+                                                />
+                                                <Label htmlFor={page.id} className="text-xs">{page.label}</Label>
+                                            </div>
+                                        ))}
+                                    </div>
+                                    
+                                    <h4 className="text-sm font-semibold mt-4">Shift & Working Hours</h4>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div className="space-y-1">
+                                            <Label className="text-xs">Start Time</Label>
+                                            <Input type="time" value={newShiftStart} onChange={e => setNewShiftStart(e.target.value)} />
+                                        </div>
+                                        <div className="space-y-1">
+                                            <Label className="text-xs">End Time</Label>
+                                            <Input type="time" value={newShiftEnd} onChange={e => setNewShiftEnd(e.target.value)} />
+                                        </div>
+                                    </div>
+                                    
+                                    <h4 className="text-sm font-semibold mt-4">Weekend Days (Holidays)</h4>
+                                    <div className="grid grid-cols-3 gap-2">
+                                        {weekDays.map(day => (
+                                            <div key={day} className="flex items-center space-x-2">
+                                                <Checkbox 
+                                                    id={day} 
+                                                    checked={newWeekendDays.includes(day)}
+                                                    onCheckedChange={(checked) => {
+                                                        if (checked) {
+                                                            setNewWeekendDays([...newWeekendDays, day]);
+                                                        } else {
+                                                            setNewWeekendDays(newWeekendDays.filter(d => d !== day));
+                                                        }
+                                                    }}
+                                                />
+                                                <Label htmlFor={day} className="text-xs">{day}</Label>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
                             <DialogFooter>
                                 <Button type="button" variant="outline" onClick={() => setIsAddOpen(false)}>Cancel</Button>
                                 <Button type="submit" disabled={saving}>
