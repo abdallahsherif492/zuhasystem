@@ -8,7 +8,7 @@ import { toast } from "sonner";
 import { Clock, Loader2, LogOut } from "lucide-react";
 
 export function ShiftTracker() {
-    const { activeBusiness } = useBusiness();
+    const { activeBusiness, shiftStart, shiftEnd } = useBusiness();
     const [activeShift, setActiveShift] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const [workingTime, setWorkingTime] = useState("");
@@ -129,23 +129,29 @@ export function ShiftTracker() {
         );
     }
 
-    if (activeShift) {
-        return (
-            <div className="flex items-center gap-2">
-                <div className="text-sm text-emerald-600 font-medium flex items-center bg-emerald-50 px-3 py-1.5 rounded-md dark:bg-emerald-950 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800">
-                    <Clock className="mr-2 h-4 w-4 animate-pulse" />
-                    {workingTime || "Just started"}
-                </div>
-                <Button variant="destructive" size="sm" onClick={handleClockOut}>
-                    <LogOut className="mr-2 h-4 w-4" /> Clock Out
-                </Button>
-            </div>
-        );
-    }
-
     return (
-        <Button variant="default" size="sm" onClick={handleClockIn} className="bg-emerald-600 hover:bg-emerald-700 text-white">
-            <Clock className="mr-2 h-4 w-4" /> Clock In
-        </Button>
+        <div className="flex flex-col md:flex-row items-end md:items-center gap-2">
+            {shiftStart && shiftEnd && (
+                <div className="text-xs text-muted-foreground mr-2 hidden lg:block">
+                    Expected Shift: {shiftStart} - {shiftEnd}
+                </div>
+            )}
+            
+            {activeShift ? (
+                <div className="flex items-center gap-2">
+                    <div className="text-sm text-emerald-600 font-medium flex items-center bg-emerald-50 px-3 py-1.5 rounded-md dark:bg-emerald-950 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800">
+                        <Clock className="mr-2 h-4 w-4 animate-pulse" />
+                        {workingTime || "Just started"}
+                    </div>
+                    <Button variant="destructive" size="sm" onClick={handleClockOut}>
+                        <LogOut className="mr-2 h-4 w-4" /> Clock Out
+                    </Button>
+                </div>
+            ) : (
+                <Button variant="default" size="sm" onClick={handleClockIn} className="bg-emerald-600 hover:bg-emerald-700 text-white">
+                    <Clock className="mr-2 h-4 w-4" /> Clock In
+                </Button>
+            )}
+        </div>
     );
 }

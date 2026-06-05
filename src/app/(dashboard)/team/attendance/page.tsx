@@ -1,0 +1,222 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { supabase } from "@/lib/supabase";
+import { useBusiness } from "@/contexts/BusinessContext";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Loader2, CalendarClock, Clock, UserX } from "lucide-react";
+import { format, differenceInMinutes, parseISO, isSameDay, startOfDay } from "date-fns";
+
+type BusinessUser = {
+    user_email: string;
+    role: string;
+    shift_start: string | null;
+    shift_end: string | null;
+    weekend_days: string[];
+};
+
+type Shift = {
+    id: string;
+    user_email: string;
+    clock_in: string;
+    clock_out: string | null;
+};
+
+type AttendanceRecord = {
+    email: string;
+    role: string;
+    status: 'Present' | 'Absent' | 'Weekend';
+    clockIn: string | null;
+    clockOut: string | null;
+    delayMinutes: number;
+    shiftStart: string | null;
+};
+
+export default function AttendancePage() {
+    const { activeBusiness } = useBusiness();
+    const [loading, setLoading] = useState(true);
+    const [records, setRecords] = useState<AttendanceRecord[]>([]);
+    const [date, setDate] = useState<string>(format(new Date(), "yyyy-MM-dd"));
+
+    useEffect(() => {
+        if (activeBusiness && date) {
+            fetchAttendance();
+        }
+    }, [activeBusiness, date]);
+
+    async function fetchAttendance() {
+        if (!activeBusiness) return;
+        setLoading(true);
+
+        const targetDate = parseISO(date);
+        const dayOfWeek = format(targetDate, "EEEE"); // e.g., "Monday"
+
+        // 1. Fetch Users
+        const { data: usersData } = await supabase
+            .from("business_users")
+            .select("user_email, role, shift_start, shift_end, weekend_days")
+            .eq("business_id", activeBusiness.id);
+
+        // 2. Fetch Shifts for the selected date
+        const nextDate = new Date(targetDate);
+        nextDate.setDate(nextDate.getDate() + 1);
+
+        const { data: shiftsData } = await supabase
+            .from("user_shifts")
+            .select("id, user_email, clock_in, clock_out")
+            .eq("business_id", activeBusiness.id)
+            .gte("clock_in", targetDate.toISOString())
+            .lt("clock_in", nextDate.toISOString());
+
+        const users = (usersData || []) as BusinessUser[];
+        const shifts = (shiftsData || []) as Shift[];
+
+        const attendance: AttendanceRecord[] = users.map(user => {
+            const userShift = shifts.find(s => s.user_email === user.user_email);
+            const isWeekend = (user.weekend_days || []).includes(dayOfWeek);
+            
+            let status: 'Present' | 'Absent' | 'Weekend' = 'Absent';
+            let delayMinutes = 0;
+
+            if (userShift) {
+                status = 'Present';
+                if (user.shift_start) {
+                    // Calculate delay
+                    const expectedClockIn = parseISO(`${date}T${user.shift_start}`);
+                    const actualClockIn = parseISO(userShift.clock_in);
+                    
+                    const diff = differenceInMinutes(actualClockIn, expectedClockIn);
+                    if (diff > 0) {
+                        delayMinutes = diff;
+                    }
+                }
+            } else if (isWeekend) {
+                status = 'Weekend';
+            } else {
+                // If the selected date is in the future, don't mark as absent yet
+                if (targetDate > new Date()) {
+                    status = 'Weekend'; // Just placeholder for future
+                } else {
+                    status = 'Absent';
+                }
+            }
+
+            return {
+                email: user.user_email,
+                role: user.role,
+                status,
+                clockIn: userShift?.clock_in || null,
+                clockOut: userShift?.clock_out || null,
+                delayMinutes,
+                shiftStart: user.shift_start
+            };
+        });
+
+        setRecords(attendance);
+        setLoading(false);
+    }
+
+    return (
+        <div className="space-y-6 max-w-5xl mx-auto">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                <div>
+                    <h1 className="text-3xl font-bold tracking-tight">Attendance & Tracking</h1>
+                    <p className="text-muted-foreground mt-1">Monitor staff attendance, delays, and absences.</p>
+                </div>
+                <div className="flex items-center gap-2 bg-background border rounded-md px-3 py-1">
+                    <CalendarClock className="h-4 w-4 text-muted-foreground" />
+                    <Input 
+                        type="date" 
+                        value={date} 
+                        onChange={(e) => setDate(e.target.value)} 
+                        className="border-0 shadow-none h-8 w-[150px] focus-visible:ring-0"
+                    />
+                </div>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-3">
+                <Card>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">Present Today</CardTitle>
+                        <Clock className="h-4 w-4 text-muted-foreground" />
+                    </CardHeader>
+                    <CardContent>
+                        <div className="text-2xl font-bold">{records.filter(r => r.status === 'Present').length}</div>
+                    </CardContent>
+                </Card>
+                <Card>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">Absent</CardTitle>
+                        <UserX className="h-4 w-4 text-destructive" />
+                    </CardHeader>
+                    <CardContent>
+                        <div className="text-2xl font-bold text-destructive">{records.filter(r => r.status === 'Absent' && new Date(date) <= new Date()).length}</div>
+                    </CardContent>
+                </Card>
+                <Card>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">Late Arrivals</CardTitle>
+                        <CalendarClock className="h-4 w-4 text-orange-500" />
+                    </CardHeader>
+                    <CardContent>
+                        <div className="text-2xl font-bold text-orange-500">{records.filter(r => r.delayMinutes > 0).length}</div>
+                    </CardContent>
+                </Card>
+            </div>
+
+            <Card>
+                <CardHeader>
+                    <CardTitle>Attendance Records</CardTitle>
+                </CardHeader>
+                <CardContent>
+                    {loading ? (
+                        <div className="flex justify-center p-8"><Loader2 className="h-8 w-8 animate-spin" /></div>
+                    ) : (
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead>Staff Member</TableHead>
+                                    <TableHead>Expected Shift</TableHead>
+                                    <TableHead>Status</TableHead>
+                                    <TableHead>Clock In</TableHead>
+                                    <TableHead>Clock Out</TableHead>
+                                    <TableHead className="text-right">Delay</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {records.length === 0 ? (
+                                    <TableRow><TableCell colSpan={6} className="text-center">No records found.</TableCell></TableRow>
+                                ) : records.map((record) => (
+                                    <TableRow key={record.email}>
+                                        <TableCell>
+                                            <div className="font-medium">{record.email}</div>
+                                            <div className="text-xs text-muted-foreground uppercase">{record.role}</div>
+                                        </TableCell>
+                                        <TableCell>{record.shiftStart ? record.shiftStart : "No schedule"}</TableCell>
+                                        <TableCell>
+                                            {record.status === 'Present' && <Badge variant="default" className="bg-green-500 hover:bg-green-600">Present</Badge>}
+                                            {record.status === 'Absent' && <Badge variant="destructive">Absent</Badge>}
+                                            {record.status === 'Weekend' && <Badge variant="secondary">Weekend/Off</Badge>}
+                                        </TableCell>
+                                        <TableCell>{record.clockIn ? format(parseISO(record.clockIn), 'hh:mm a') : '-'}</TableCell>
+                                        <TableCell>{record.clockOut ? format(parseISO(record.clockOut), 'hh:mm a') : '-'}</TableCell>
+                                        <TableCell className="text-right">
+                                            {record.delayMinutes > 0 ? (
+                                                <span className="text-orange-500 font-medium">{record.delayMinutes} mins</span>
+                                            ) : (
+                                                <span className="text-muted-foreground">-</span>
+                                            )}
+                                        </TableCell>
+                                    </TableRow>
+                                ))}
+                            </TableBody>
+                        </Table>
+                    )}
+                </CardContent>
+            </Card>
+        </div>
+    );
+}

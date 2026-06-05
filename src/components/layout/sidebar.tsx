@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { useBusiness } from "@/contexts/BusinessContext";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { LayoutDashboard, Package, ShoppingCart, Settings, Users, Truck, Banknote, LineChart, ShoppingBag, Megaphone, Box, DollarSign, ShieldCheck, FileText, Ticket, CreditCard } from "lucide-react";
+import { LayoutDashboard, Package, ShoppingCart, Settings, Users, Truck, Banknote, LineChart, ShoppingBag, Megaphone, Box, DollarSign, ShieldCheck, FileText, Ticket, CreditCard, Clock, Inbox, Calendar } from "lucide-react";
 
 import Image from "next/image";
 
@@ -282,16 +282,38 @@ export function SidebarContent() {
                     </h4>
                     <div className="grid grid-flow-row auto-rows-max text-sm gap-1">
                         {(role === "owner" || role === "admin" || role === "platform admin" || isSystemAdmin || canAccess("/team")) && (
-                            <Link href="/team">
-                                <Button
-                                    variant={pathname.startsWith("/team") ? "secondary" : "ghost"}
-                                    className="w-full justify-start h-8"
-                                    size="sm"
-                                >
-                                    <Users className="mr-2 h-3 w-3" />
-                                    Team
-                                </Button>
-                            </Link>
+                            <>
+                                <Link href="/team">
+                                    <Button
+                                        variant={pathname === "/team" ? "secondary" : "ghost"}
+                                        className="w-full justify-start h-8"
+                                        size="sm"
+                                    >
+                                        <Users className="mr-2 h-3 w-3" />
+                                        Team
+                                    </Button>
+                                </Link>
+                                <Link href="/team/attendance">
+                                    <Button
+                                        variant={pathname.startsWith("/team/attendance") ? "secondary" : "ghost"}
+                                        className="w-full justify-start h-8"
+                                        size="sm"
+                                    >
+                                        <Clock className="mr-2 h-3 w-3" />
+                                        Attendance
+                                    </Button>
+                                </Link>
+                                <Link href="/team/requests">
+                                    <Button
+                                        variant={pathname.startsWith("/team/requests") ? "secondary" : "ghost"}
+                                        className="w-full justify-start h-8"
+                                        size="sm"
+                                    >
+                                        <Inbox className="mr-2 h-3 w-3" />
+                                        Leave Requests
+                                    </Button>
+                                </Link>
+                            </>
                         )}
                         {(role === "owner" || role === "admin" || role === "platform admin" || isSystemAdmin || canAccess("/users")) && (
                             <Link href="/users">
@@ -305,6 +327,16 @@ export function SidebarContent() {
                                 </Button>
                             </Link>
                         )}
+                        <Link href="/my-hr">
+                            <Button
+                                variant={pathname.startsWith("/my-hr") ? "secondary" : "ghost"}
+                                className="w-full justify-start h-8 text-blue-600 hover:text-blue-700 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-950"
+                                size="sm"
+                            >
+                                <Calendar className="mr-2 h-3 w-3" />
+                                My HR
+                            </Button>
+                        </Link>
                     </div>
                 </div>
             )}
