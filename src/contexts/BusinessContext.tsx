@@ -23,6 +23,9 @@ export interface PlatformSettings {
   announcement_active: boolean;
   announcement_message: string;
   announcement_type: string;
+  default_trial_days?: number;
+  instapay_number?: string;
+  instapay_name?: string;
 }
 
 interface BusinessContextType {

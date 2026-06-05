@@ -24,6 +24,8 @@ export default function PlatformSettingsPage() {
     const [announcementType, setAnnouncementType] = useState("info");
     
     const [defaultTrialDays, setDefaultTrialDays] = useState(14);
+    const [instapayNumber, setInstapayNumber] = useState("");
+    const [instapayName, setInstapayName] = useState("");
 
     const fetchSettings = async () => {
         setLoading(true);
@@ -39,7 +41,9 @@ export default function PlatformSettingsPage() {
             setAnnouncementActive(data.announcement_active);
             setAnnouncementMessage(data.announcement_message);
             setAnnouncementType(data.announcement_type);
-            setDefaultTrialDays(data.default_trial_days);
+            setDefaultTrialDays(data.default_trial_days || 14);
+            setInstapayNumber(data.instapay_number || "");
+            setInstapayName(data.instapay_name || "");
         }
         setLoading(false);
     };
@@ -58,7 +62,9 @@ export default function PlatformSettingsPage() {
                 announcement_active: announcementActive,
                 announcement_message: announcementMessage,
                 announcement_type: announcementType,
-                default_trial_days: defaultTrialDays
+                default_trial_days: defaultTrialDays,
+                instapay_number: instapayNumber,
+                instapay_name: instapayName
             })
             .eq("id", "global");
 
@@ -96,7 +102,7 @@ export default function PlatformSettingsPage() {
                         </CardTitle>
                         <CardDescription>Default values for new tenants and global platform variables.</CardDescription>
                     </CardHeader>
-                    <CardContent className="space-y-4">
+                    <CardContent className="space-y-6">
                         <div className="space-y-2 max-w-sm">
                             <Label htmlFor="trialDays">Default Free Trial Days</Label>
                             <Input 
@@ -106,6 +112,31 @@ export default function PlatformSettingsPage() {
                                 onChange={e => setDefaultTrialDays(parseInt(e.target.value))} 
                             />
                             <p className="text-xs text-muted-foreground">Number of days a newly registered business gets for free.</p>
+                        </div>
+                        
+                        <div className="border-t pt-4">
+                            <h4 className="font-semibold mb-4">InstaPay Payment Details</h4>
+                            <div className="grid sm:grid-cols-2 gap-4 max-w-2xl">
+                                <div className="space-y-2">
+                                    <Label htmlFor="instapayNumber">InstaPay Number / Address</Label>
+                                    <Input 
+                                        id="instapayNumber" 
+                                        value={instapayNumber} 
+                                        onChange={e => setInstapayNumber(e.target.value)} 
+                                        placeholder="01xxxxxxxxx"
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label htmlFor="instapayName">InstaPay Account Name</Label>
+                                    <Input 
+                                        id="instapayName" 
+                                        value={instapayName} 
+                                        onChange={e => setInstapayName(e.target.value)} 
+                                        placeholder="e.g. Abdallah Sherif"
+                                    />
+                                </div>
+                            </div>
+                            <p className="text-xs text-muted-foreground mt-2">These details will be shown to clients when they want to pay for their subscription.</p>
                         </div>
                     </CardContent>
                 </Card>
