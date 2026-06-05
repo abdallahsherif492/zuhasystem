@@ -42,7 +42,7 @@ export function SidebarContent() {
 
     const canAccess = (path: string) => {
         if (isSystemAdmin) return true;
-        if (role === "owner" || role === "admin" || role === "platform admin") return true;
+        if (role === "owner" || role === "admin" || role === "platform admin" || role === "super admin") return true;
         
         // Always allow everyone to see the dashboard home
         if (path === "/dashboard") return true;
@@ -275,13 +275,13 @@ export function SidebarContent() {
                 </div>
             )}
 
-            {(role === "owner" || role === "admin" || role === "platform admin" || isSystemAdmin || canAccess("/team") || canAccess("/users")) && (
+            {(role === "owner" || role === "admin" || role === "platform admin" || role === "super admin" || isSystemAdmin || canAccess("/team") || canAccess("/users")) && (
                 <div className="pt-4 pb-2 border-t mt-4">
                     <h4 className="mb-1 rounded-md px-2 py-1 text-sm font-semibold">
                         Administration
                     </h4>
                     <div className="grid grid-flow-row auto-rows-max text-sm gap-1">
-                        {(role === "owner" || role === "admin" || role === "platform admin" || isSystemAdmin || canAccess("/team")) && (
+                        {(role === "owner" || role === "admin" || role === "platform admin" || role === "super admin" || isSystemAdmin || canAccess("/team")) && (
                             <>
                                 <Link href="/team">
                                     <Button
@@ -315,7 +315,7 @@ export function SidebarContent() {
                                 </Link>
                             </>
                         )}
-                        {(role === "owner" || role === "admin" || role === "platform admin" || isSystemAdmin || canAccess("/users")) && (
+                        {(role === "owner" || role === "admin" || role === "platform admin" || role === "super admin" || isSystemAdmin || canAccess("/users")) && (
                             <Link href="/users">
                                 <Button
                                     variant={pathname.startsWith("/users") ? "secondary" : "ghost"}

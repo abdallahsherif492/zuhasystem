@@ -16,7 +16,7 @@ export function PermissionGuard({ children }: { children: React.ReactNode }) {
 
         const role = userRole?.toLowerCase().trim() || "";
         
-        if (isSystemAdmin || role === "owner" || role === "admin" || role === "platform admin") {
+        if (isSystemAdmin || role === "owner" || role === "admin" || role === "platform admin" || role === "super admin") {
             setAuthorized(true);
             return;
         }
