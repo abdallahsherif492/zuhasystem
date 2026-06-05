@@ -56,6 +56,8 @@ export async function middleware(request: NextRequest) {
         // 3. Define Protected Logic
         const isLoginPage = request.nextUrl.pathname.startsWith('/login')
         const isRegisterPage = request.nextUrl.pathname.startsWith('/register')
+        const isForgotPage = request.nextUrl.pathname.startsWith('/forgot-password')
+        const isUpdatePasswordPage = request.nextUrl.pathname.startsWith('/update-password')
         const isAuthCallback = request.nextUrl.pathname.startsWith('/auth')
         const isStatic = request.nextUrl.pathname.startsWith('/_next') ||
             request.nextUrl.pathname.includes('.') ||
@@ -64,22 +66,21 @@ export async function middleware(request: NextRequest) {
         // 4. Redirect Rules
 
         // If user is NOT logged in AND trying to access a protected page
-        // "Fail Closed": If we have no user (due to no session OR missing envs), BLOCK access.
-        if (!user && !isLoginPage && !isRegisterPage && !isAuthCallback && !request.nextUrl.pathname.includes('.')) {
+        if (!user && request.nextUrl.pathname !== '/' && !isLoginPage && !isRegisterPage && !isForgotPage && !isUpdatePasswordPage && !isAuthCallback && !request.nextUrl.pathname.includes('.')) {
             const loginUrl = request.nextUrl.clone()
             loginUrl.pathname = '/login'
             return NextResponse.redirect(loginUrl)
         }
 
-        // If user IS logged in AND trying to access login/register page
-        if (user && (isLoginPage || isRegisterPage)) {
+        // If user IS logged in AND trying to access login/register/forgot page
+        if (user && (isLoginPage || isRegisterPage || isForgotPage)) {
             const dashboardUrl = request.nextUrl.clone()
             dashboardUrl.pathname = '/'
             return NextResponse.redirect(dashboardUrl)
         }
 
         // --- RBAC: Role-Based Access Control ---
-        if (user && !isLoginPage && !isRegisterPage && !isAuthCallback && !isStatic) {
+        if (user && !isLoginPage && !isRegisterPage && !isForgotPage && !isUpdatePasswordPage && !isAuthCallback && !isStatic) {
             const pathname = request.nextUrl.pathname;
 
             // Unrestricted routes explicitly opened for authenticated users
@@ -117,7 +118,12 @@ export async function middleware(request: NextRequest) {
         // But safeguard against infinite loop if Login itself causes error?
         // Login page should be excluded from logic or handled above.
         // If we are already on Login page, return response (to allow rendering error)
-        if (request.nextUrl.pathname.startsWith('/login') || request.nextUrl.pathname.startsWith('/register')) {
+        if (
+            request.nextUrl.pathname.startsWith('/login') || 
+            request.nextUrl.pathname.startsWith('/register') ||
+            request.nextUrl.pathname.startsWith('/forgot-password') ||
+            request.nextUrl.pathname.startsWith('/update-password')
+        ) {
             return NextResponse.next();
         }
 
