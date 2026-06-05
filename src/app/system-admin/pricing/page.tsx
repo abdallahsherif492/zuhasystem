@@ -59,11 +59,20 @@ export default function PricingManagement() {
     }, []);
 
     const toggleStatus = async (id: string, currentStatus: boolean) => {
-        await supabase
+        const { data, error } = await supabase
             .from("subscription_plans")
             .update({ is_active: !currentStatus })
-            .eq("id", id);
-        fetchPlans();
+            .eq("id", id)
+            .select();
+            
+        if (error) {
+            console.error("Error toggling status:", error);
+            alert("Failed to update status: " + error.message);
+        } else if (!data || data.length === 0) {
+            alert("Update failed silently (0 rows affected). This means the database blocked the update, likely due to RLS permissions.");
+        } else {
+            fetchPlans();
+        }
     };
 
     const handleEditClick = (plan: SubscriptionPlan) => {

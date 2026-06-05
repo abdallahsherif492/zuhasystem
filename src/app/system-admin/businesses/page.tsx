@@ -53,6 +53,23 @@ export default function BusinessesManagement() {
         }
     };
 
+    const extendTrial = async (biz: Business) => {
+        const currentEndsAt = biz.trial_ends_at ? new Date(biz.trial_ends_at) : new Date();
+        const newEndsAt = new Date(currentEndsAt.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString();
+        
+        const { error } = await supabase
+            .from("businesses")
+            .update({ trial_ends_at: newEndsAt })
+            .eq("id", biz.id);
+            
+        if (!error) {
+            fetchBusinesses();
+        } else {
+            console.error("Failed to extend trial:", error);
+            alert("Failed to extend trial: " + error.message);
+        }
+    };
+
     const getStatusBadge = (status: string) => {
         switch (status) {
             case "active":
@@ -122,6 +139,11 @@ export default function BusinessesManagement() {
                                                         <Button size="sm" variant="secondary" onClick={() => impersonateBusiness(biz.id)}>
                                                             Open Dashboard
                                                         </Button>
+                                                        {biz.subscription_status === "trialing" || biz.subscription_status === "trial" ? (
+                                                            <Button size="sm" variant="outline" className="text-blue-600 border-blue-200 hover:bg-blue-50" onClick={() => extendTrial(biz)}>
+                                                                +7 Days Trial
+                                                            </Button>
+                                                        ) : null}
                                                         {biz.subscription_status !== "active" && (
                                                             <Button size="sm" variant="outline" className="text-green-600 border-green-200 hover:bg-green-50" onClick={() => updateStatus(biz.id, "active")}>
                                                                 <CheckCircle className="mr-1 h-4 w-4" /> Activate

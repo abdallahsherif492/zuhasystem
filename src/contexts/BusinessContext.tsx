@@ -17,11 +17,20 @@ export interface BusinessUser {
   business: Business;
 }
 
+export interface PlatformSettings {
+  maintenance_mode: boolean;
+  maintenance_message: string;
+  announcement_active: boolean;
+  announcement_message: string;
+  announcement_type: string;
+}
+
 interface BusinessContextType {
   activeBusiness: Business | null;
   userRole: string | null;
   isSystemAdmin: boolean;
   businesses: BusinessUser[];
+  platformSettings: PlatformSettings | null;
   setActiveBusiness: (businessId: string) => void;
   impersonateBusiness: (businessId: string) => void;
   loading: boolean;
@@ -32,6 +41,7 @@ const BusinessContext = createContext<BusinessContextType>({
   userRole: null,
   isSystemAdmin: false,
   businesses: [],
+  platformSettings: null,
   setActiveBusiness: () => {},
   impersonateBusiness: () => {},
   loading: true,
@@ -43,6 +53,7 @@ export const BusinessProvider = ({ children }: { children: React.ReactNode }) =>
   const [activeBusiness, setActiveBusinessState] = useState<Business | null>(null);
   const [userRole, setUserRole] = useState<string | null>(null);
   const [businesses, setBusinesses] = useState<BusinessUser[]>([]);
+  const [platformSettings, setPlatformSettings] = useState<PlatformSettings | null>(null);
   const [isSystemAdmin, setIsSystemAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
@@ -119,6 +130,17 @@ export const BusinessProvider = ({ children }: { children: React.ReactNode }) =>
         }
       }
       
+      // Fetch Platform Settings
+      const { data: settingsData } = await supabase
+        .from('platform_settings')
+        .select('*')
+        .eq('id', 'global')
+        .single();
+        
+      if (settingsData) {
+        setPlatformSettings(settingsData as PlatformSettings);
+      }
+
       setLoading(false);
     };
 
@@ -143,7 +165,7 @@ export const BusinessProvider = ({ children }: { children: React.ReactNode }) =>
   };
 
   return (
-    <BusinessContext.Provider value={{ activeBusiness, userRole, isSystemAdmin, businesses, setActiveBusiness, impersonateBusiness, loading }}>
+    <BusinessContext.Provider value={{ activeBusiness, userRole, isSystemAdmin, businesses, platformSettings, setActiveBusiness, impersonateBusiness, loading }}>
       {children}
     </BusinessContext.Provider>
   );
