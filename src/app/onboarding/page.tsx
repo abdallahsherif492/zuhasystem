@@ -44,14 +44,21 @@ export default function OnboardingPage() {
         }
 
         try {
+            const planId = new URLSearchParams(window.location.search).get('plan');
+
             // 1. Create the business
+            const insertData: any = {
+                name: businessName,
+                subscription_status: "trialing",
+                trial_ends_at: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(),
+            };
+            if (planId) {
+                insertData.plan_id = planId;
+            }
+
             const { data: business, error: businessError } = await supabase
                 .from("businesses")
-                .insert({
-                    name: businessName,
-                    subscription_status: "trialing",
-                    trial_ends_at: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(),
-                })
+                .insert(insertData)
                 .select("id")
                 .single();
 

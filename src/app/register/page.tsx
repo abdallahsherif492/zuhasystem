@@ -45,7 +45,9 @@ export default function RegisterPage() {
             if (error) throw error;
             
             // Redirect to onboarding after successful registration
-            window.location.href = "/onboarding";
+            const planId = new URLSearchParams(window.location.search).get('plan');
+            const redirectUrl = planId ? `/onboarding?plan=${planId}` : "/onboarding";
+            window.location.href = redirectUrl;
         } catch (err: any) {
             console.error("Registration error:", err);
             setError(err.message);

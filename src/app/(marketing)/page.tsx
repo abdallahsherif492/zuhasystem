@@ -24,6 +24,12 @@ export default async function MarketingLandingPage() {
 
   const { data: { user } } = await supabase.auth.getUser();
 
+  const { data: plans } = await supabase
+    .from('subscription_plans')
+    .select('*')
+    .eq('is_active', true)
+    .order('price_monthly', { ascending: true });
+
   return (
     <div className="flex flex-col min-h-screen">
       {/* Header */}
@@ -137,43 +143,10 @@ export default async function MarketingLandingPage() {
           <div className="container px-4 md:px-6 mx-auto max-w-6xl">
             <div className="text-center mb-16">
               <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">Simple, transparent pricing</h2>
-              <p className="mt-4 text-muted-foreground text-lg">One flat rate for everything. No hidden fees.</p>
+              <p className="mt-4 text-muted-foreground text-lg">Choose the perfect plan for your business needs.</p>
             </div>
             
-            <div className="mx-auto max-w-md">
-              <div className="flex flex-col p-8 border-2 border-primary rounded-3xl bg-background shadow-xl relative overflow-hidden">
-                <div className="absolute top-0 right-0 bg-primary text-primary-foreground px-4 py-1 rounded-bl-xl text-sm font-medium">
-                  Most Popular
-                </div>
-                <h3 className="text-2xl font-bold mb-2">Pro Plan</h3>
-                <p className="text-muted-foreground mb-6">Perfect for growing e-commerce brands.</p>
-                
-                <div className="flex items-baseline gap-2 mb-8 border-b pb-8">
-                  <span className="text-5xl font-extrabold">250</span>
-                  <span className="text-xl font-medium text-muted-foreground">EGP / month</span>
-                </div>
-                
-                <ul className="space-y-4 mb-8 flex-1">
-                  {[
-                    "Unlimited Orders & Products",
-                    "Unlimited Team Members",
-                    "Advanced Profit Analytics",
-                    "Logistics & Shipping Tracking",
-                    "Supplier Management",
-                    "24/7 Priority Support"
-                  ].map((feature, i) => (
-                    <li key={i} className="flex items-center gap-3">
-                      <CheckCircle2 className="h-5 w-5 text-green-500 shrink-0" />
-                      <span>{feature}</span>
-                    </li>
-                  ))}
-                </ul>
-                
-                <Button size="lg" className="w-full rounded-xl" asChild>
-                  <Link href="/register">Start 14-Day Free Trial</Link>
-                </Button>
-              </div>
-            </div>
+            <PricingGrid plans={plans} />
           </div>
         </section>
       </main>
@@ -190,6 +163,50 @@ export default async function MarketingLandingPage() {
           </div>
         </div>
       </footer>
+    </div>
+  );
+}
+
+function PricingGrid({ plans }: { plans: any[] | null }) {
+  if (!plans || plans.length === 0) {
+    return (
+      <div className="text-center text-muted-foreground p-8 border border-dashed rounded-xl">
+        Pricing plans are currently being updated. Please check back later.
+      </div>
+    );
+  }
+
+  return (
+    <div className={`grid gap-8 max-w-5xl mx-auto ${plans.length === 1 ? 'grid-cols-1 max-w-md' : plans.length === 2 ? 'sm:grid-cols-2 max-w-3xl' : 'lg:grid-cols-3'}`}>
+      {plans.map((plan) => (
+        <div key={plan.id} className={`flex flex-col p-8 border-2 rounded-3xl bg-background relative overflow-hidden transition-all ${plan.is_popular ? 'border-primary shadow-xl scale-105 z-10' : 'border-border shadow-sm hover:shadow-md'}`}>
+          {plan.is_popular && (
+            <div className="absolute top-0 right-0 bg-primary text-primary-foreground px-4 py-1 rounded-bl-xl text-sm font-medium">
+              Most Popular
+            </div>
+          )}
+          <h3 className="text-2xl font-bold mb-2">{plan.name}</h3>
+          <p className="text-muted-foreground mb-6 h-12 line-clamp-2">{plan.description}</p>
+          
+          <div className="flex items-baseline gap-2 mb-8 border-b pb-8">
+            <span className="text-5xl font-extrabold">{plan.price_monthly}</span>
+            <span className="text-xl font-medium text-muted-foreground">{plan.currency} / month</span>
+          </div>
+          
+          <ul className="space-y-4 mb-8 flex-1">
+            {plan.features?.map((feature: string, i: number) => (
+              <li key={i} className="flex items-start gap-3">
+                <CheckCircle2 className="h-5 w-5 text-green-500 shrink-0 mt-0.5" />
+                <span className="text-sm">{feature}</span>
+              </li>
+            ))}
+          </ul>
+          
+          <Button size="lg" className="w-full rounded-xl" variant={plan.is_popular ? "default" : "outline"} asChild>
+            <Link href={`/register?plan=${plan.id}`}>Start 14-Day Free Trial</Link>
+          </Button>
+        </div>
+      ))}
     </div>
   );
 }
