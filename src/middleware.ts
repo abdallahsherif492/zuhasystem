@@ -89,9 +89,22 @@ export async function middleware(request: NextRequest) {
                     .from('system_admins')
                     .select('id')
                     .eq('user_email', user.email)
-                    .single();
+                    .maybeSingle();
                 
+                // Fallback for legacy super admins (from user_permissions)
+                let isLegacyAdmin = false;
                 if (!sysAdmin) {
+                    const { data: legacyPerms } = await supabase
+                        .from('user_permissions')
+                        .select('super_admin')
+                        .eq('id', user.id)
+                        .maybeSingle();
+                    if (legacyPerms?.super_admin) {
+                        isLegacyAdmin = true;
+                    }
+                }
+                
+                if (!sysAdmin && !isLegacyAdmin) {
                     const unauthUrl = request.nextUrl.clone();
                     unauthUrl.pathname = '/unauthorized';
                     return NextResponse.redirect(unauthUrl);
