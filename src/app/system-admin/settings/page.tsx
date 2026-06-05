@@ -11,6 +11,8 @@ import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Loader2, Settings, ShieldAlert, Megaphone } from "lucide-react";
 
+import { logAuditAction } from "@/lib/audit";
+
 export default function PlatformSettingsPage() {
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
@@ -73,6 +75,11 @@ export default function PlatformSettingsPage() {
             console.error("Error saving settings:", error);
             alert("Failed to save settings: " + error.message);
         } else {
+            await logAuditAction("SETTINGS_UPDATED", "Platform", "global", {
+                maintenance_mode: maintenanceMode,
+                announcement_active: announcementActive,
+                default_trial_days: defaultTrialDays
+            });
             alert("Settings saved successfully!");
         }
     };

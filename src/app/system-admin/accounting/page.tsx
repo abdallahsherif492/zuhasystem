@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Loader2, Banknote, CalendarCheck, FileText, CheckCircle, XCircle, Download, ExternalLink, Activity } from "lucide-react";
 import Image from "next/image";
+import { logAuditAction } from "@/lib/audit";
 
 type Transaction = {
     id: string;
@@ -125,16 +126,27 @@ export default function PlatformAccounting() {
                 .from("businesses")
                 .update({ subscription_status: "active" })
                 .eq("id", tx.business_id);
+            
+            await logAuditAction("PAYMENT_APPROVED", "Business", tx.business_id, {
+                transaction_id: tx.id,
+                amount: tx.amount
+            });
             fetchTransactions();
         }
     };
 
-    const handleReject = async (id: string) => {
+    const handleReject = async (tx: Transaction) => {
         const { error } = await supabase
             .from("platform_transactions")
             .update({ status: "rejected" })
-            .eq("id", id);
-        if (!error) fetchTransactions();
+            .eq("id", tx.id);
+        if (!error) {
+            await logAuditAction("PAYMENT_REJECTED", "Business", tx.business_id || "unknown", {
+                transaction_id: tx.id,
+                amount: tx.amount
+            });
+            fetchTransactions();
+        }
     };
 
     // Calculate metrics
@@ -297,7 +309,7 @@ export default function PlatformAccounting() {
                                         <Button variant="outline" size="sm" className="text-green-600 hover:bg-green-50" onClick={() => handleApprove(req)}>
                                             <CheckCircle className="h-4 w-4 mr-2" /> Approve
                                         </Button>
-                                        <Button variant="outline" size="sm" className="text-red-600 hover:bg-red-50" onClick={() => handleReject(req.id)}>
+                                        <Button variant="outline" size="sm" className="text-red-600 hover:bg-red-50" onClick={() => handleReject(req)}>
                                             <XCircle className="h-4 w-4 mr-2" /> Reject
                                         </Button>
                                     </div>

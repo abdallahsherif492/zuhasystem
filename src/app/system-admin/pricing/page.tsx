@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Loader2, Tag, PlusCircle, CheckCircle, XCircle, Star } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
+import { logAuditAction } from "@/lib/audit";
 
 type SubscriptionPlan = {
     id: string;
@@ -71,6 +72,7 @@ export default function PricingManagement() {
         } else if (!data || data.length === 0) {
             alert("Update failed silently (0 rows affected). This means the database blocked the update, likely due to RLS permissions.");
         } else {
+            await logAuditAction("PRICING_UPDATED", "Pricing", id, { status: !currentStatus ? "active" : "archived" });
             fetchPlans();
         }
     };
@@ -132,6 +134,7 @@ export default function PricingManagement() {
             console.error("Error saving plan:", error);
             alert("Failed to save the package: " + error.message);
         } else {
+            await logAuditAction("PRICING_UPDATED", "Pricing", editingId || "new", { name, priceMonthly });
             setIsCreating(false);
             setEditingId(null);
             fetchPlans();

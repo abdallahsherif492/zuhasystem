@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Loader2, Store, CheckCircle, XCircle } from "lucide-react";
 
 import { useBusiness } from "@/contexts/BusinessContext";
+import { logAuditAction } from "@/lib/audit";
 
 type Business = {
     id: string;
@@ -49,6 +50,12 @@ export default function BusinessesManagement() {
             .eq("id", id);
             
         if (!error) {
+            await logAuditAction(
+                newStatus === "active" ? "BUSINESS_ACTIVATED" : "BUSINESS_SUSPENDED",
+                "Business",
+                id,
+                { new_status: newStatus }
+            );
             fetchBusinesses();
         }
     };
@@ -63,6 +70,10 @@ export default function BusinessesManagement() {
             .eq("id", biz.id);
             
         if (!error) {
+            await logAuditAction("TRIAL_EXTENDED", "Business", biz.id, {
+                old_ends_at: currentEndsAt.toISOString(),
+                new_ends_at: newEndsAt
+            });
             fetchBusinesses();
         } else {
             console.error("Failed to extend trial:", error);

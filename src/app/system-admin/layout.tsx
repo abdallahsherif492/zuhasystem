@@ -55,6 +55,15 @@ function AdminSidebar({ pathname }: { pathname: string }) {
                             Platform Users
                         </Button>
                     </Link>
+                    <Link href="/system-admin/audit-logs">
+                        <Button
+                            variant={pathname.startsWith("/system-admin/audit-logs") ? "secondary" : "ghost"}
+                            className="w-full justify-start"
+                        >
+                            <ShieldCheck className="mr-2 h-4 w-4" />
+                            Audit Logs
+                        </Button>
+                    </Link>
                     <Link href="/system-admin/settings">
                         <Button
                             variant={pathname.startsWith("/system-admin/settings") ? "secondary" : "ghost"}
