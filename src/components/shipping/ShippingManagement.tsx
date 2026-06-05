@@ -13,6 +13,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { toast } from "sonner";
 import Link from "next/link";
 
+import { useBusiness } from "@/contexts/BusinessContext";
+
 const GOVERNORATES = [
     "Cairo", "New Cairo", "Giza", "Alexandria", "Dakahlia", "Red Sea", "Beheira", "Fayoum",
     "Gharbiya", "Ismailia", "Monufia", "Minya", "Qaliubiya", "New Valley", "Suez",
@@ -30,6 +32,7 @@ type ShippingCompany = {
 };
 
 export function ShippingManagement() {
+    const { activeBusiness } = useBusiness();
     const [companies, setCompanies] = useState<ShippingCompany[]>([]);
     const [loading, setLoading] = useState(true);
     const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -45,13 +48,15 @@ export function ShippingManagement() {
 
     useEffect(() => {
         fetchCompanies();
-    }, []);
+    }, [activeBusiness]);
 
     const fetchCompanies = async () => {
+        if (!activeBusiness) return;
         setLoading(true);
         const { data, error } = await supabase
             .from('shipping_companies')
             .select('*')
+            .eq('business_id', activeBusiness.id)
             .order('name');
 
         if (error) {
@@ -92,6 +97,7 @@ export function ShippingManagement() {
 
         try {
             const payload = {
+                business_id: activeBusiness!.id,
                 name: formData.name,
                 type: formData.type,
                 phone: formData.phone,

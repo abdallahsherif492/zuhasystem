@@ -24,6 +24,7 @@ export async function validateStock(items: InventoryItem[]) {
  * Deducts stock for a list of items and logs transactions.
  */
 export async function deductStock(
+    business_id: string,
     items: { variant_id: string; qty: number; track_inventory: boolean }[],
     orderId: string,
     note: string = "Order Creation",
@@ -40,6 +41,7 @@ export async function deductStock(
         // 2. Log Transaction
         if (!updateError) {
             await supabase.from('inventory_transactions').insert({
+                business_id,
                 variant_id: item.variant_id,
                 quantity_change: -item.qty,
                 transaction_type: type,
@@ -54,6 +56,7 @@ export async function deductStock(
  * Restocks items for a returned order.
  */
 export async function restockItems(
+    business_id: string,
     items: { variant_id: string; qty: number; track_inventory: boolean }[],
     orderId: string,
     note: string = "Order Returned"
@@ -68,6 +71,7 @@ export async function restockItems(
         // 2. Log Transaction
         if (!updateError) {
             await supabase.from('inventory_transactions').insert({
+                business_id,
                 variant_id: item.variant_id,
                 quantity_change: item.qty,
                 transaction_type: 'return',

@@ -62,7 +62,10 @@ const GOVERNORATES = [
 
 const CHANNELS = ["Facebook", "Instagram", "Tiktok", "Tiktok Website", "Website", "Whatsapp"];
 
+import { useBusiness } from "@/contexts/BusinessContext";
+
 export default function OrderDetailsPage() {
+    const { activeBusiness } = useBusiness();
     const params = useParams();
     const router = useRouter();
     const orderId = params.id as string;
@@ -333,10 +336,10 @@ export default function OrderDetailsPage() {
 
             // 4. Apply Stock Changes
             if (deductionQueue.length > 0) {
-                await deductStock(deductionQueue, orderId, "Order Edit: Added Items/Qty");
+                await deductStock(activeBusiness!.id, deductionQueue, orderId, "Order Edit: Added Items/Qty");
             }
             if (restockQueue.length > 0) {
-                await restockItems(restockQueue, orderId, "Order Edit: Removed Items/Qty");
+                await restockItems(activeBusiness!.id, restockQueue, orderId, "Order Edit: Removed Items/Qty");
             }
 
             // 5 & 6. Transactional Update via RPC
@@ -401,7 +404,7 @@ export default function OrderDetailsPage() {
                         qty: i.quantity,
                         track_inventory: i.track_inventory
                     }));
-                    await restockItems(finalItems, orderId, "Status Change: Returned");
+                    await restockItems(activeBusiness!.id, finalItems, orderId, "Status Change: Returned");
                 }
             } else if (order.status === 'Returned' && editForm.status !== 'Returned') {
                 if (!newIsPreState) {
@@ -411,7 +414,7 @@ export default function OrderDetailsPage() {
                         qty: i.quantity,
                         track_inventory: i.track_inventory
                     }));
-                    await deductStock(finalItems, orderId, "Status Change: Un-returned");
+                    await deductStock(activeBusiness!.id, finalItems, orderId, "Status Change: Un-returned");
                 }
             }
 
@@ -860,6 +863,7 @@ export default function OrderDetailsPage() {
                             setTransactionLoading(true);
                             try {
                                 const payload = {
+                                    business_id: activeBusiness!.id,
                                     transaction_date: new Date().toISOString(),
                                     type: "revenue",
                                     category: "Deposits",

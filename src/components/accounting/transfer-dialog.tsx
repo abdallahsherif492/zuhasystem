@@ -26,6 +26,8 @@ import { CalendarIcon, Loader2, ArrowRightLeft } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/lib/supabase";
+import { useBusiness } from "@/contexts/BusinessContext";
+import { useEffect } from "react";
 
 interface TransferDialogProps {
     onSuccess: () => void;
@@ -34,8 +36,27 @@ interface TransferDialogProps {
 const ACCOUNTS = ["Mohamed Adel", "Abdallah Sherif"];
 
 export function TransferDialog({ onSuccess }: TransferDialogProps) {
+    const { activeBusiness } = useBusiness();
     const [open, setOpen] = useState(false);
     const [loading, setLoading] = useState(false);
+    const [accounts, setAccounts] = useState<any[]>([]);
+
+    useEffect(() => {
+        if (open && activeBusiness) {
+            fetchAccounts();
+        }
+    }, [open, activeBusiness]);
+
+    async function fetchAccounts() {
+        const { data } = await supabase
+            .from("financial_accounts")
+            .select("name")
+            .eq("business_id", activeBusiness?.id)
+            .order("name");
+        if (data) {
+            setAccounts(data);
+        }
+    }
 
     const [fromAccount, setFromAccount] = useState("");
     const [toAccount, setToAccount] = useState("");
@@ -59,6 +80,7 @@ export function TransferDialog({ onSuccess }: TransferDialogProps) {
 
             const { error } = await supabase.from("transactions").insert([
                 {
+                    business_id: activeBusiness!.id,
                     transaction_date: format(date, "yyyy-MM-dd"),
                     type: "transfer_out", // Special type to exclude from P&L
                     category: "Internal Transfer",
@@ -67,6 +89,7 @@ export function TransferDialog({ onSuccess }: TransferDialogProps) {
                     account_name: fromAccount,
                 },
                 {
+                    business_id: activeBusiness!.id,
                     transaction_date: format(date, "yyyy-MM-dd"),
                     type: "transfer_in", // Special type
                     category: "Internal Transfer",
@@ -120,9 +143,9 @@ export function TransferDialog({ onSuccess }: TransferDialogProps) {
                                     <SelectValue placeholder="Sender" />
                                 </SelectTrigger>
                                 <SelectContent>
-                                    {ACCOUNTS.map((acc) => (
-                                        <SelectItem key={acc} value={acc} disabled={acc === toAccount}>
-                                            {acc}
+                                    {accounts.map((acc) => (
+                                        <SelectItem key={acc.name} value={acc.name} disabled={acc.name === toAccount}>
+                                            {acc.name}
                                         </SelectItem>
                                     ))}
                                 </SelectContent>
@@ -135,9 +158,9 @@ export function TransferDialog({ onSuccess }: TransferDialogProps) {
                                     <SelectValue placeholder="Receiver" />
                                 </SelectTrigger>
                                 <SelectContent>
-                                    {ACCOUNTS.map((acc) => (
-                                        <SelectItem key={acc} value={acc} disabled={acc === fromAccount}>
-                                            {acc}
+                                    {accounts.map((acc) => (
+                                        <SelectItem key={acc.name} value={acc.name} disabled={acc.name === fromAccount}>
+                                            {acc.name}
                                         </SelectItem>
                                     ))}
                                 </SelectContent>

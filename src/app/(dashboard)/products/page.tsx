@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import { useBusiness } from "@/contexts/BusinessContext";
 import { formatCurrency } from "@/lib/utils";
 import { ProductWithVariants } from "@/types";
 import { Button } from "@/components/ui/button";
@@ -19,6 +20,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 
 export default function ProductsPage() {
+    const { activeBusiness } = useBusiness();
     const [products, setProducts] = useState<ProductWithVariants[]>([]);
     const [loading, setLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState("");
@@ -30,9 +32,10 @@ export default function ProductsPage() {
 
     useEffect(() => {
         fetchProducts();
-    }, []);
+    }, [activeBusiness]);
 
     async function fetchProducts() {
+        if (!activeBusiness) return;
         try {
             setLoading(true);
             // Fetch products and their variants
@@ -42,6 +45,7 @@ export default function ProductsPage() {
             *,
             variants (*)
         `)
+                .eq('business_id', activeBusiness.id)
                 .order("created_at", { ascending: false });
 
             if (error) throw error;

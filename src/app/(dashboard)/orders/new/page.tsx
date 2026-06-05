@@ -80,7 +80,10 @@ const GOVERNORATES = [
 
 const CHANNELS = ["Facebook", "Instagram", "Tiktok", "Tiktok Website", "Website", "Whatsapp"];
 
+import { useBusiness } from "@/contexts/BusinessContext";
+
 export default function NewOrderPage() {
+    const { activeBusiness } = useBusiness();
     const router = useRouter();
     const [products, setProducts] = useState<ProductWithVariants[]>([]);
     const [loading, setLoading] = useState(true);
@@ -314,6 +317,7 @@ export default function NewOrderPage() {
                 const { data: newCust, error: custError } = await supabase
                     .from("customers")
                     .insert({
+                        business_id: activeBusiness!.id,
                         name: customerName,
                         phone: customerPhone,
                         phone2: customerPhone2,
@@ -340,6 +344,7 @@ export default function NewOrderPage() {
             const { data: orderData, error: orderError } = await supabase
                 .from("orders")
                 .insert({
+                    business_id: activeBusiness!.id,
                     customer_id: custId,
                     customer_info: { name: customerName, phone: customerPhone, phone2: customerPhone2, address: customerAddress, governorate: customerGov },
                     total_amount: calculateTotal(),
@@ -362,6 +367,7 @@ export default function NewOrderPage() {
 
             // 3. Create Order Items
             const itemsData = cart.map(item => ({
+                business_id: activeBusiness!.id,
                 order_id: orderData.id,
                 variant_id: item.variantId,
                 quantity: item.quantity,
@@ -868,6 +874,7 @@ export default function NewOrderPage() {
                             setTransactionLoading(true);
                             try {
                                 const payload = {
+                                    business_id: activeBusiness!.id,
                                     transaction_date: new Date().toISOString(),
                                     type: "revenue",
                                     category: "Deposits",

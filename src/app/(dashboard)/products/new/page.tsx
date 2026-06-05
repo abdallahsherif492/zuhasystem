@@ -41,7 +41,10 @@ const formSchema = z.object({
     variants: z.array(variantSchema).min(1, "At least one variant is required"),
 });
 
+import { useBusiness } from "@/contexts/BusinessContext";
+
 export default function NewProductPage() {
+    const { activeBusiness } = useBusiness();
     const router = useRouter();
     const [loading, setLoading] = useState(false);
 
@@ -69,6 +72,7 @@ export default function NewProductPage() {
     });
 
     async function onSubmit(values: z.infer<typeof formSchema>) {
+        if (!activeBusiness) return;
         try {
             setLoading(true);
 
@@ -76,6 +80,7 @@ export default function NewProductPage() {
             const { data: productData, error: productError } = await supabase
                 .from("products")
                 .insert({
+                    business_id: activeBusiness.id,
                     name: values.name,
                     description: values.description,
                 })

@@ -1,13 +1,16 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, Suspense } from "react";
+import { cn } from "@/lib/utils";
 import { useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import { useBusiness } from "@/contexts/BusinessContext";
 import { formatCurrency } from "@/lib/utils";
 import { format } from "date-fns";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { AddTransactionDialog } from "@/components/accounting/add-transaction-dialog";
 import { TransferDialog } from "@/components/accounting/transfer-dialog";
+import { ManageAccountsDialog } from "@/components/accounting/manage-accounts-dialog";
 import {
     Table,
     TableBody,
@@ -42,6 +45,7 @@ import {
 } from "@/components/ui/alert-dialog";
 
 function AccountingContent() {
+    const { activeBusiness } = useBusiness();
     const searchParams = useSearchParams();
     const [transactions, setTransactions] = useState<any[]>([]);
     const [allTransactions, setAllTransactions] = useState<any[]>([]); // For balance calc if we want total history, but usually query
@@ -68,19 +72,45 @@ function AccountingContent() {
     }, [fromDate, toDate]);
 
     async function fetchBalances() {
-        // Fetch aggregated balances directly from Postgres via RPC
-        const { data, error } = await supabase.rpc("get_treasury_balances");
-        if (data) {
-            const newBalances: Record<string, number> = { "Mohamed Adel": 0, "Abdallah Sherif": 0, "Safe": 0 };
-            data.forEach((t: any) => {
-                if (!t.account_name) return;
-                newBalances[t.account_name] = Number(t.balance) || 0;
-            });
+        if (!activeBusiness) return;
+        if (!activeBusiness) return;
+        
+        try {
+            // Fetch the accounts list for this business
+            const { data: accountsData } = await supabase
+                .from("financial_accounts")
+                .select("name")
+                .eq("business_id", activeBusiness.id);
+
+            // Fetch aggregated balances
+            const { data: balancesData } = await supabase
+                .rpc("get_treasury_balances", { p_business_id: activeBusiness.id });
+
+            const newBalances: Record<string, number> = {};
+            
+            // Initialize all accounts to 0
+            if (accountsData) {
+                accountsData.forEach((acc: any) => {
+                    newBalances[acc.name] = 0;
+                });
+            }
+
+            // Populate actual balances
+            if (balancesData) {
+                balancesData.forEach((t: any) => {
+                    if (!t.account_name) return;
+                    newBalances[t.account_name] = Number(t.balance) || 0;
+                });
+            }
+            
             setBalances(newBalances as any);
+        } catch (error) {
+            console.error("Error fetching balances:", error);
         }
     }
 
     async function fetchData() {
+        if (!activeBusiness) return;
         try {
             setLoading(true);
             let query = supabase
@@ -149,6 +179,7 @@ function AccountingContent() {
                 <AddTransactionDialog type="revenue" onSuccess={refresh} />
                 <AddTransactionDialog type="expense" onSuccess={refresh} />
                 <TransferDialog onSuccess={refresh} />
+                <ManageAccountsDialog onSuccess={refresh} />
             </div>
 
             {/* Filtering & Search */}
@@ -300,7 +331,7 @@ function AccountingContent() {
     );
 }
 
-import { Suspense } from "react";
+
 
 export default function AccountingPage() {
     return (
@@ -310,5 +341,5 @@ export default function AccountingPage() {
     );
 }
 
-// Helper for cn (copying plain classnames without library if utility not imported, but we have it)
-import { cn } from "@/lib/utils";
+
+

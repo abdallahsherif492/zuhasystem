@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, Suspense } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import { useBusiness } from "@/contexts/BusinessContext";
 import { formatCurrency } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
@@ -59,6 +60,7 @@ interface Order {
 }
 
 function OrdersContent() {
+    const { activeBusiness } = useBusiness();
     const searchParams = useSearchParams();
     const [orders, setOrders] = useState<Order[]>([]);
     const [loading, setLoading] = useState(true);
@@ -83,13 +85,15 @@ function OrdersContent() {
     }, [fromDate, toDate]);
 
     async function fetchProducts() {
-        const { data } = await supabase.from('products').select('id, name').order('name');
+        if (!activeBusiness) return;
+        const { data } = await supabase.from('products').select('id, name').eq('business_id', activeBusiness.id).order('name');
         if (data) {
             setProductsOptions(data.map(p => ({ label: p.name, value: p.id })));
         }
     }
 
     async function fetchOrders() {
+        if (!activeBusiness) return;
         try {
             setLoading(true);
             let allOrders: any[] = [];
@@ -108,6 +112,7 @@ function OrdersContent() {
                             )
                         )
                     `)
+                    .eq('business_id', activeBusiness.id)
                     .order("created_at", { ascending: false })
                     .range(from, from + step - 1);
 
@@ -526,9 +531,10 @@ function OrdersContent() {
     );
 }
 
-import { Suspense } from "react";
+
 
 export default function OrdersPage() {
+    const { activeBusiness } = useBusiness();
     return (
         <Suspense fallback={<div className="flex justify-center p-8"><Loader2 className="h-8 w-8 animate-spin" /></div>}>
             <OrdersContent />

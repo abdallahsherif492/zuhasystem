@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import { useBusiness } from "@/contexts/BusinessContext";
 import { format } from "date-fns";
 import { Loader2, CheckCircle2, Package, User, MapPin, RefreshCw } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
@@ -50,6 +51,7 @@ type Order = {
 };
 
 export default function PurchasesPage() {
+    const { activeBusiness } = useBusiness();
     const [orders, setOrders] = useState<Order[]>([]);
     const [loading, setLoading] = useState(true);
     // Track checked items: Record<OrderId, ItemIndex[]>
@@ -60,7 +62,7 @@ export default function PurchasesPage() {
 
     useEffect(() => {
         fetchPendingOrders();
-    }, []);
+    }, [activeBusiness]);
 
     const fetchPendingOrders = async () => {
         setLoading(true);
@@ -83,8 +85,9 @@ export default function PurchasesPage() {
                     )
                 )
             `)
+            .eq("business_id", activeBusiness!.id)
             .in("status", ["Pending", "Processing"])
-            .order("created_at", { ascending: true }); // Oldest first (FIFO)
+            .order("created_at", { ascending: true });
 
         if (error) {
             console.error("Error fetching orders:", error);

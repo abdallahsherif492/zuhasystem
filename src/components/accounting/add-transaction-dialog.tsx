@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -36,6 +36,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { CalendarIcon, Loader2 } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
+import { useBusiness } from "@/contexts/BusinessContext";
 
 const transactionSchema = z.object({
     date: z.date(),
@@ -59,8 +60,27 @@ const REVENUE_CATEGORIES = ["Orders Collection", "Deposit", "Other"];
 type TransactionFormValues = z.infer<typeof transactionSchema>;
 
 export function AddTransactionDialog({ type, onSuccess }: AddTransactionDialogProps) {
+    const { activeBusiness } = useBusiness();
     const [open, setOpen] = useState(false);
     const [submitting, setSubmitting] = useState(false);
+    const [accounts, setAccounts] = useState<any[]>([]);
+
+    useEffect(() => {
+        if (open && activeBusiness) {
+            fetchAccounts();
+        }
+    }, [open, activeBusiness]);
+
+    async function fetchAccounts() {
+        const { data } = await supabase
+            .from("financial_accounts")
+            .select("name")
+            .eq("business_id", activeBusiness?.id)
+            .order("name");
+        if (data) {
+            setAccounts(data);
+        }
+    }
 
     // Initializing form with relaxed types to avoid build errors
 
@@ -81,6 +101,7 @@ export function AddTransactionDialog({ type, onSuccess }: AddTransactionDialogPr
         try {
             const finalAmount = values.type === "expense" ? -values.amount : values.amount;
             const payload = {
+                business_id: activeBusiness!.id,
                 transaction_date: values.date.toISOString(),
                 type: values.type,
                 category: values.category,
@@ -239,8 +260,8 @@ export function AddTransactionDialog({ type, onSuccess }: AddTransactionDialogPr
                                             </SelectTrigger>
                                         </FormControl>
                                         <SelectContent>
-                                            {ACCOUNTS.map((acc) => (
-                                                <SelectItem key={acc} value={acc}>{acc}</SelectItem>
+                                            {accounts.map((acc) => (
+                                                <SelectItem key={acc.name} value={acc.name}>{acc.name}</SelectItem>
                                             ))}
                                             {type === "expense" && (
                                                 <SelectItem value="Split">Split (50/50)</SelectItem>

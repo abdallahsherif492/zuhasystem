@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
+import { useBusiness } from "@/contexts/BusinessContext";
 import { Button } from "@/components/ui/button";
 import {
     Table,
@@ -31,6 +32,7 @@ const GOV_OPTIONS: Option[] = [
 ];
 
 export default function CustomersPage() {
+    const { activeBusiness } = useBusiness();
     const [customers, setCustomers] = useState<any[]>([]);
     const [products, setProducts] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
@@ -46,21 +48,68 @@ export default function CustomersPage() {
 
     useEffect(() => {
         fetchData();
-    }, []);
+    }, [activeBusiness]);
 
     async function fetchData() {
+        if (!activeBusiness) return;
         try {
             setLoading(true);
 
             // Fetch Products for the filter
-            const { data: pData } = await supabase.from('products').select('id, name');
+            const { data: pData } = await supabase.from('products').select('id, name').eq('business_id', activeBusiness.id);
             if (pData) setProducts(pData);
 
-            // Fetch Customers using the new RPC
-            const { data: cData, error } = await supabase.rpc('get_customers_with_stats');
+            // Fetch Customers from orders
+            const { data: orders, error } = await supabase
+                .from('orders')
+                .select(`
+                    created_at,
+                    customer_info,
+                    items:order_items (
+                        variant:variants (
+                            product_id
+                        )
+                    )
+                `)
+                .eq('business_id', activeBusiness.id);
 
             if (error) throw error;
-            setCustomers(cData || []);
+
+            // Aggregate customers
+            const customerMap = new Map();
+
+            (orders || []).forEach(order => {
+                const info = order.customer_info || {};
+                const phone = info.phone;
+                if (!phone) return;
+
+                if (!customerMap.has(phone)) {
+                    customerMap.set(phone, {
+                        id: phone, // using phone as ID since we don't have a real customer ID
+                        created_at: order.created_at,
+                        name: info.name,
+                        phone: phone,
+                        email: info.email || '',
+                        governorate: info.governorate,
+                        total_orders: 0,
+                        ordered_products: []
+                    });
+                }
+
+                const cust = customerMap.get(phone);
+                cust.total_orders += 1;
+                
+                // Add product ids
+                if (order.items) {
+                    order.items.forEach((item: any) => {
+                        if (item.variant?.product_id && !cust.ordered_products.includes(item.variant.product_id)) {
+                            cust.ordered_products.push(item.variant.product_id);
+                        }
+                    });
+                }
+            });
+
+            setCustomers(Array.from(customerMap.values()));
         } catch (error) {
             console.error("Error fetching customers:", error);
         } finally {

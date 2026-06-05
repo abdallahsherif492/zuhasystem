@@ -92,7 +92,10 @@ function LogisticsDashboard() {
     );
 }
 
+import { useBusiness } from "@/contexts/BusinessContext";
+
 function LogisticsContent() {
+    const { activeBusiness } = useBusiness();
     const searchParams = useSearchParams();
     const router = useRouter();
     const [orders, setOrders] = useState<any[]>([]);
@@ -137,18 +140,21 @@ function LogisticsContent() {
     }, [fromDate, toDate, router]);
 
     async function fetchProducts() {
-        const { data } = await supabase.from('products').select('id, name').order('name');
+        if (!activeBusiness) return;
+        const { data } = await supabase.from('products').select('id, name').eq('business_id', activeBusiness.id).order('name');
         if (data) {
             setProductsOptions(data.map(p => ({ label: p.name, value: p.id })));
         }
     }
 
     async function fetchShippingCompanies() {
-        const { data } = await supabase.from('shipping_companies').select('*').eq('active', true).order('name');
+        if (!activeBusiness) return;
+        const { data } = await supabase.from('shipping_companies').select('*').eq('business_id', activeBusiness.id).eq('active', true).order('name');
         setShippingCompanies(data || []);
     }
 
     async function fetchOrders() {
+        if (!activeBusiness) return;
         try {
             setLoading(true);
             let allOrders: any[] = [];
@@ -167,6 +173,7 @@ function LogisticsContent() {
                             )
                         )
                     `)
+                    .eq('business_id', activeBusiness.id)
                     .order("created_at", { ascending: false })
                     .range(from, from + step - 1);
 
@@ -265,6 +272,7 @@ function LogisticsContent() {
                         .eq('order_id', oid);
                     if (items) {
                         await deductStock(
+                            activeBusiness!.id,
                             items.map((i: any) => ({
                                 variant_id: i.variant_id,
                                 qty: i.quantity,
@@ -281,6 +289,7 @@ function LogisticsContent() {
                         .eq('order_id', oid);
                     if (items) {
                         await restockItems(
+                            activeBusiness!.id,
                             items.map((i: any) => ({
                                 variant_id: i.variant_id,
                                 qty: i.quantity,

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { supabase } from "@/lib/supabase";
+import { useBusiness } from "@/contexts/BusinessContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -42,6 +43,7 @@ type AdExpense = {
 };
 
 export default function AdsPage() {
+    const { activeBusiness } = useBusiness();
     const [expenses, setExpenses] = useState<AdExpense[]>([]);
     const [filteredExpenses, setFilteredExpenses] = useState<AdExpense[]>([]);
     const [loading, setLoading] = useState(true);
@@ -67,17 +69,19 @@ export default function AdsPage() {
 
     useEffect(() => {
         fetchExpenses();
-    }, []);
+    }, [activeBusiness]);
 
     useEffect(() => {
         applyFilters();
     }, [expenses, dateRange]);
 
     const fetchExpenses = async () => {
+        if (!activeBusiness) return;
         setLoading(true);
         const { data, error } = await supabase
             .from("ads_expenses")
             .select("*")
+            .eq("business_id", activeBusiness.id)
             .order("ad_date", { ascending: false });
 
         if (error) {
@@ -147,6 +151,7 @@ export default function AdsPage() {
                             }
 
                             return {
+                                business_id: activeBusiness!.id,
                                 ad_date: isoDate,
                                 amount: parseFloat(row["Amount spent"]) * 1.14, // Add 14% VAT
                                 currency: row["Currency"] || "EGP",
@@ -165,7 +170,7 @@ export default function AdsPage() {
 
                     const { error } = await supabase
                         .from("ads_expenses")
-                        .upsert(recordsToInsert, { onConflict: "ad_date,platform" });
+                        .upsert(recordsToInsert, { onConflict: "business_id, ad_date, platform" });
 
                     if (error) throw error;
 
@@ -209,11 +214,12 @@ export default function AdsPage() {
             const { error } = await supabase
                 .from("ads_expenses")
                 .upsert({
+                    business_id: activeBusiness!.id,
                     ad_date: dateStr,
                     platform: manualPlatform,
                     amount: amountWithVat,
                     currency: "EGP"
-                }, { onConflict: "ad_date,platform" });
+                }, { onConflict: "business_id, ad_date, platform" });
 
             if (error) throw error;
 

@@ -1,8 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, Suspense } from "react";
+import { cn } from "@/lib/utils";
 import { useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import { useBusiness } from "@/contexts/BusinessContext";
 import { formatCurrency } from "@/lib/utils";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { DateRangePicker } from "@/components/date-range-picker";
@@ -18,6 +20,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d'];
 
 function InsightsContent() {
+    const { activeBusiness } = useBusiness();
     const router = useRouter();
     const searchParams = useSearchParams();
     const fromDate = searchParams.get("from");
@@ -86,6 +89,7 @@ function InsightsContent() {
     }, [fromDate, toDate]);
 
     async function fetchData() {
+        if (!activeBusiness) return;
         setLoading(true);
         try {
             // Safe defaults (though useEffect handles redirect)
@@ -197,16 +201,16 @@ function InsightsContent() {
                 { data: supplierInvoicesData }
             ] = await Promise.all([
                 // 1. Total Investment
-                supabase.from('transactions').select('amount').eq('type', 'investment'),
+                supabase.from('transactions').select('amount').eq('business_id', activeBusiness.id).eq('type', 'investment'),
                 // 2. Pending Orders (Prepared + Shipped Only)
-                supabase.from('orders').select('total_amount').in('status', ['Prepared', 'Shipped']),
+                supabase.from('orders').select('total_amount').eq('business_id', activeBusiness.id).in('status', ['Prepared', 'Shipped']),
                 // 3. Treasury Balances
-                supabase.from('transactions').select('amount').eq('account_name', 'Abdallah Sherif'),
-                supabase.from('transactions').select('amount').eq('account_name', 'Mohamed Adel'),
+                supabase.from('transactions').select('amount').eq('business_id', activeBusiness.id).eq('account_name', 'Abdallah Sherif'),
+                supabase.from('transactions').select('amount').eq('business_id', activeBusiness.id).eq('account_name', 'Mohamed Adel'),
                 // 4. Stock Value
                 supabase.from('variants').select('cost_price, stock_qty'),
                 // 5. Total Debts
-                supabase.from('supplier_invoices').select('total_amount, paid_amount').neq('status', 'Fully Paid')
+                supabase.from('supplier_invoices').select('total_amount, paid_amount').eq('business_id', activeBusiness.id).neq('status', 'Fully Paid')
             ]);
 
             const investVal = investData?.reduce((sum, row) => sum + (Number(row.amount) || 0), 0) || 0;
@@ -456,9 +460,10 @@ function MetricCard({ title, value, sub, pos, neg, bold, className }: any) {
     );
 }
 
-import { Suspense } from "react";
+
 
 export default function InsightsPage() {
+    const { activeBusiness } = useBusiness();
     return (
         <Suspense fallback={<div className="flex justify-center p-8"><Loader2 className="h-8 w-8 animate-spin" /></div>}>
             <InsightsContent />
@@ -466,5 +471,5 @@ export default function InsightsPage() {
     );
 }
 
-// Helper for cn
-import { cn } from "@/lib/utils";
+
+

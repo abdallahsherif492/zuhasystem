@@ -40,7 +40,10 @@ import { DateRangePicker } from "@/components/date-range-picker";
 import { useSearchParams } from "next/navigation";
 import { Suspense } from "react";
 
+import { useBusiness } from "@/contexts/BusinessContext";
+
 function PayableContent() {
+    const { activeBusiness } = useBusiness();
     const searchParams = useSearchParams();
     const [activeTab, setActiveTab] = useState("invoices");
     const [loading, setLoading] = useState(true);
@@ -70,14 +73,15 @@ function PayableContent() {
 
     useEffect(() => {
         fetchData();
-    }, []);
+    }, [activeBusiness]);
 
     async function fetchData() {
+        if (!activeBusiness) return;
         setLoading(true);
         try {
             const [supRes, invRes] = await Promise.all([
-                supabase.from("suppliers").select("*").order("name"),
-                supabase.from("supplier_invoices").select("*, suppliers(name)").order("created_at", { ascending: false })
+                supabase.from("suppliers").select("*").eq('business_id', activeBusiness.id).order("name"),
+                supabase.from("supplier_invoices").select("*, suppliers(name)").eq('business_id', activeBusiness.id).order("created_at", { ascending: false })
             ]);
 
             if (supRes.error) throw supRes.error;
@@ -101,7 +105,7 @@ function PayableContent() {
         setIsSubmittingSupplier(true);
         try {
             const { error } = await supabase.from("suppliers").insert([
-                { name: newSupplierName, phone: newSupplierPhone }
+                { business_id: activeBusiness!.id, name: newSupplierName, phone: newSupplierPhone }
             ]);
             if (error) throw error;
             toast.success("Supplier added successfully");
@@ -123,6 +127,7 @@ function PayableContent() {
         try {
             const { error } = await supabase.from("supplier_invoices").insert([
                 {
+                    business_id: activeBusiness!.id,
                     supplier_id: invoiceSupplierId,
                     invoice_number: invoiceNumber,
                     total_amount: Number(invoiceAmount),
@@ -185,6 +190,7 @@ function PayableContent() {
                 .from("transactions")
                 .insert([
                     {
+                        business_id: activeBusiness!.id,
                         transaction_date: format(new Date(), "yyyy-MM-dd"),
                         amount: -Math.abs(amountToPay), // Negative for expense
                         type: "expense",

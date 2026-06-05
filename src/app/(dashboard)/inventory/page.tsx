@@ -43,8 +43,10 @@ import {
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
+import { useBusiness } from "@/contexts/BusinessContext";
 
 export default function InventoryPage() {
+    const { activeBusiness } = useBusiness();
     const [loading, setLoading] = useState(true);
     const [stockItems, setStockItems] = useState<any[]>([]);
     const [transactions, setTransactions] = useState<any[]>([]);
@@ -52,9 +54,10 @@ export default function InventoryPage() {
 
     useEffect(() => {
         fetchData();
-    }, []);
+    }, [activeBusiness]);
 
     async function fetchData() {
+        if (!activeBusiness) return;
         try {
             setLoading(true);
 
@@ -63,8 +66,9 @@ export default function InventoryPage() {
                 .from("variants")
                 .select(`
                     id, title, stock_qty, cost_price, track_inventory,
-                    product:products (name)
+                    product:products!inner (name, business_id)
                 `)
+                .eq('products.business_id', activeBusiness.id)
                 .order("stock_qty", { ascending: true }); // Show low stock first
 
             if (varError) throw varError;
@@ -75,8 +79,9 @@ export default function InventoryPage() {
                 .from("inventory_transactions")
                 .select(`
                     *,
-                    variant:variants (title, product:products(name))
+                    variant:variants!inner (title, product:products!inner(name, business_id))
                 `)
+                .eq('variants.products.business_id', activeBusiness.id)
                 .order("created_at", { ascending: false })
                 .limit(50);
 
@@ -176,6 +181,7 @@ export default function InventoryPage() {
 
             // 3. Log Transaction
             await supabase.from('inventory_transactions').insert({
+                business_id: activeBusiness!.id,
                 variant_id: selectedVariant.id,
                 quantity_change: changeAmount,
                 transaction_type: transactionType,
