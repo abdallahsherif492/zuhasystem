@@ -218,6 +218,16 @@ export function SidebarContent() {
                     Administration
                 </h4>
                 <div className="grid grid-flow-row auto-rows-max text-sm gap-1">
+                    <Link href="/team">
+                        <Button
+                            variant={pathname.startsWith("/team") ? "secondary" : "ghost"}
+                            className="w-full justify-start h-8"
+                            size="sm"
+                        >
+                            <Users className="mr-2 h-3 w-3" />
+                            Team
+                        </Button>
+                    </Link>
                     <Link href="/users">
                         <Button
                             variant={pathname.startsWith("/users") ? "secondary" : "ghost"}

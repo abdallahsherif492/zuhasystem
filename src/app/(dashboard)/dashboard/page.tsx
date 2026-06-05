@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import { useBusiness } from "@/contexts/BusinessContext";
 import { formatCurrency } from "@/lib/utils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -36,6 +37,7 @@ import { RecentSales } from "@/components/dashboard/recent-sales";
 import { TopProducts } from "@/components/dashboard/top-products";
 
 function DashboardContent() {
+  const { activeBusiness } = useBusiness();
   const searchParams = useSearchParams();
   const router = useRouter();
   const [loading, setLoading] = useState(true);
@@ -76,6 +78,7 @@ function DashboardContent() {
   }, [fromDate, toDate]);
 
   async function fetchDashboardData() {
+    if (!activeBusiness) return;
     try {
       setLoading(true);
 
@@ -99,41 +102,39 @@ function DashboardContent() {
 
       // 1. Dashboard Stats (RPC)
       const { data: statsData, error: statsError } = await supabase
-        .rpc('get_dashboard_stats', { from_date: start, to_date: end });
+        .rpc('get_dashboard_stats', { from_date: start, to_date: end, p_business_id: activeBusiness.id });
       if (statsError) throw statsError;
 
       const { data: prevStatsData, error: prevStatsError } = await supabase
-        .rpc('get_dashboard_stats', { from_date: prevStartStr, to_date: prevEndStr });
+        .rpc('get_dashboard_stats', { from_date: prevStartStr, to_date: prevEndStr, p_business_id: activeBusiness.id });
       if (prevStatsError) throw prevStatsError;
 
       // 2. Daily Sales Chart (RPC)
       const { data: dailyData, error: chartError } = await supabase
-        .rpc('get_daily_sales', { from_date: start, to_date: end });
+        .rpc('get_daily_sales', { from_date: start, to_date: end, p_business_id: activeBusiness.id });
       if (chartError) throw chartError;
 
       // 3. Top Products (RPC)
       const { data: topProds, error: topError } = await supabase
-        .rpc('get_top_products', { from_date: start, to_date: end, limit_count: 5 });
+        .rpc('get_top_products', { from_date: start, to_date: end, limit_count: 5, p_business_id: activeBusiness.id });
       if (topError) throw topError;
 
       // 4. Recent Sales (Raw Query)
       const { data: recent, error: recentError } = await supabase
         .from("orders")
-        .select("*, customer_info") // Need customer names
+        .select("*, customer_info")
+        .eq("business_id", activeBusiness.id)
         .gte("created_at", start)
         .lte("created_at", end)
         .order("created_at", { ascending: false })
         .limit(5);
-      // Note: Recent sales usually implies "Latest global sales", but here conforming to date filter is safer for "Dashboard specific to date".
-      // HOWEVER, "Recent Sales" usually means "Just Happened". 
-      // If I filter by "Yesterday", seeing "Recent Sales" as "Sales from Yesterday" is correct contextually.
       if (recentError) throw recentError;
-
 
       // 5. Low Stock (Raw Query)
       const { data: lowStock, error: lowStockError } = await supabase
         .from("variants")
         .select("*, products(name)")
+        .eq("business_id", activeBusiness.id)
         .eq("track_inventory", true)
         .lt("stock_qty", 5)
         .order("stock_qty", { ascending: true })
