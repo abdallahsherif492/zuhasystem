@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Loader2, Tag, PlusCircle, CheckCircle, XCircle, Star } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 
@@ -30,6 +30,8 @@ export default function PricingManagement() {
     const [loading, setLoading] = useState(true);
     const [isCreating, setIsCreating] = useState(false);
     const [submitting, setSubmitting] = useState(false);
+
+    const [editingId, setEditingId] = useState<string | null>(null);
 
     // Form states
     const [name, setName] = useState("");
@@ -64,13 +66,35 @@ export default function PricingManagement() {
         fetchPlans();
     };
 
+    const handleEditClick = (plan: SubscriptionPlan) => {
+        setEditingId(plan.id);
+        setName(plan.name);
+        setDescription(plan.description || "");
+        setPriceMonthly(plan.price_monthly.toString());
+        setPriceYearly(plan.price_yearly.toString());
+        setFeaturesStr(plan.features?.join("\n") || "");
+        setIsPopular(plan.is_popular);
+        setIsCreating(true);
+    };
+
+    const handleNewClick = () => {
+        setEditingId(null);
+        setName("");
+        setDescription("");
+        setPriceMonthly("0");
+        setPriceYearly("0");
+        setFeaturesStr("");
+        setIsPopular(false);
+        setIsCreating(true);
+    };
+
     const handleCreate = async (e: React.FormEvent) => {
         e.preventDefault();
         setSubmitting(true);
         
         const featuresArray = featuresStr.split("\n").map(f => f.trim()).filter(f => f.length > 0);
 
-        const { error } = await supabase.from("subscription_plans").insert({
+        const payload = {
             name,
             description,
             price_monthly: parseFloat(priceMonthly),
@@ -78,17 +102,29 @@ export default function PricingManagement() {
             features: featuresArray,
             is_popular: isPopular,
             is_active: true
-        });
+        };
+
+        let error;
+        if (editingId) {
+            const { error: updateError } = await supabase
+                .from("subscription_plans")
+                .update(payload)
+                .eq("id", editingId);
+            error = updateError;
+        } else {
+            const { error: insertError } = await supabase
+                .from("subscription_plans")
+                .insert(payload);
+            error = insertError;
+        }
 
         setSubmitting(false);
-        if (!error) {
+        if (error) {
+            console.error("Error saving plan:", error);
+            alert("Failed to save the package: " + error.message);
+        } else {
             setIsCreating(false);
-            setName("");
-            setDescription("");
-            setPriceMonthly("0");
-            setPriceYearly("0");
-            setFeaturesStr("");
-            setIsPopular(false);
+            setEditingId(null);
             fetchPlans();
         }
     };
@@ -102,13 +138,13 @@ export default function PricingManagement() {
                 </div>
                 <Dialog open={isCreating} onOpenChange={setIsCreating}>
                     <DialogTrigger asChild>
-                        <Button>
+                        <Button onClick={handleNewClick}>
                             <PlusCircle className="mr-2 h-4 w-4" /> New Package
                         </Button>
                     </DialogTrigger>
                     <DialogContent className="sm:max-w-[500px]">
                         <DialogHeader>
-                            <DialogTitle>Create Subscription Plan</DialogTitle>
+                            <DialogTitle>{editingId ? "Edit Subscription Plan" : "Create Subscription Plan"}</DialogTitle>
                             <DialogDescription>Define a new tier for your SaaS platform.</DialogDescription>
                         </DialogHeader>
                         <form onSubmit={handleCreate} className="space-y-4 py-4">
@@ -155,7 +191,7 @@ export default function PricingManagement() {
                                 <Button type="button" variant="outline" onClick={() => setIsCreating(false)}>Cancel</Button>
                                 <Button type="submit" disabled={submitting}>
                                     {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                                    Create Plan
+                                    {editingId ? "Save Changes" : "Create Plan"}
                                 </Button>
                             </DialogFooter>
                         </form>
@@ -213,14 +249,23 @@ export default function PricingManagement() {
                                                     </Badge>
                                                 </TableCell>
                                                 <TableCell className="text-right">
-                                                    <Button 
-                                                        size="sm" 
-                                                        variant="outline" 
-                                                        onClick={() => toggleStatus(plan.id, plan.is_active)}
-                                                        className={plan.is_active ? "text-red-600 border-red-200 hover:bg-red-50" : "text-green-600 border-green-200 hover:bg-green-50"}
-                                                    >
-                                                        {plan.is_active ? "Archive" : "Activate"}
-                                                    </Button>
+                                                    <div className="flex justify-end gap-2">
+                                                        <Button 
+                                                            size="sm" 
+                                                            variant="outline" 
+                                                            onClick={() => handleEditClick(plan)}
+                                                        >
+                                                            Edit
+                                                        </Button>
+                                                        <Button 
+                                                            size="sm" 
+                                                            variant="outline" 
+                                                            onClick={() => toggleStatus(plan.id, plan.is_active)}
+                                                            className={plan.is_active ? "text-red-600 border-red-200 hover:bg-red-50" : "text-green-600 border-green-200 hover:bg-green-50"}
+                                                        >
+                                                            {plan.is_active ? "Archive" : "Activate"}
+                                                        </Button>
+                                                    </div>
                                                 </TableCell>
                                             </TableRow>
                                         ))

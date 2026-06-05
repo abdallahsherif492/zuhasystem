@@ -35,7 +35,7 @@ export default function SupportPage() {
         const { data, error } = await supabase
             .from("support_tickets")
             .select("*")
-            .eq("business_id", activeBusiness.business.id)
+            .eq("business_id", activeBusiness.id)
             .order("created_at", { ascending: false });
 
         if (!error && data) {
@@ -56,7 +56,7 @@ export default function SupportPage() {
         const { data: { user } } = await supabase.auth.getUser();
 
         const { error } = await supabase.from("support_tickets").insert({
-            business_id: activeBusiness.business.id,
+            business_id: activeBusiness.id,
             user_email: user?.email,
             subject,
             message,
