@@ -36,8 +36,15 @@ export default function PlatformAccounting() {
     // Expense form
     const [isExpenseOpen, setIsExpenseOpen] = useState(false);
     const [expAmount, setExpAmount] = useState("");
-    const [expCategory, setExpCategory] = useState("Hosting");
+    const [expCategory, setExpCategory] = useState("Hosting/Servers");
     const [expDesc, setExpDesc] = useState("");
+    
+    // Revenue form
+    const [isRevenueOpen, setIsRevenueOpen] = useState(false);
+    const [revAmount, setRevAmount] = useState("");
+    const [revCategory, setRevCategory] = useState("Manual Addition");
+    const [revDesc, setRevDesc] = useState("");
+    
     const [submitting, setSubmitting] = useState(false);
 
     const fetchTransactions = async () => {
@@ -83,6 +90,29 @@ export default function PlatformAccounting() {
         }
     };
 
+    const handleAddRevenue = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setSubmitting(true);
+
+        const { error } = await supabase.from("platform_transactions").insert({
+            type: "revenue",
+            amount: parseFloat(revAmount),
+            status: "approved",
+            category: revCategory,
+            description: revDesc
+        });
+
+        setSubmitting(false);
+        if (!error) {
+            setIsRevenueOpen(false);
+            setRevAmount("");
+            setRevDesc("");
+            fetchTransactions();
+        } else {
+            alert("Error: " + error.message);
+        }
+    };
+
     const handleApprove = async (tx: Transaction) => {
         const { error } = await supabase
             .from("platform_transactions")
@@ -121,49 +151,86 @@ export default function PlatformAccounting() {
                     <h1 className="text-3xl font-bold tracking-tight">Accounting</h1>
                     <p className="text-muted-foreground">Track platform revenue, expenses, and payment requests.</p>
                 </div>
-                <Dialog open={isExpenseOpen} onOpenChange={setIsExpenseOpen}>
-                    <DialogTrigger asChild>
-                        <Button variant="destructive">
-                            Add Expense
-                        </Button>
-                    </DialogTrigger>
-                    <DialogContent>
-                        <DialogHeader>
-                            <DialogTitle>Log an Expense</DialogTitle>
-                            <DialogDescription>Record server costs, payroll, or marketing expenses.</DialogDescription>
-                        </DialogHeader>
-                        <form onSubmit={handleAddExpense} className="space-y-4 pt-4">
-                            <div className="grid gap-2">
-                                <Label>Category</Label>
-                                <Select value={expCategory} onValueChange={setExpCategory}>
-                                    <SelectTrigger><SelectValue /></SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="Hosting/Servers">Hosting / Servers</SelectItem>
-                                        <SelectItem value="Marketing/Ads">Marketing / Ads</SelectItem>
-                                        <SelectItem value="Payroll">Payroll</SelectItem>
-                                        <SelectItem value="Software/Tools">Software / Tools</SelectItem>
-                                        <SelectItem value="Miscellaneous">Miscellaneous</SelectItem>
-                                    </SelectContent>
-                                </Select>
-                            </div>
-                            <div className="grid gap-2">
-                                <Label>Amount (EGP)</Label>
-                                <Input type="number" step="0.01" value={expAmount} onChange={e => setExpAmount(e.target.value)} required />
-                            </div>
-                            <div className="grid gap-2">
-                                <Label>Description</Label>
-                                <Input value={expDesc} onChange={e => setExpDesc(e.target.value)} placeholder="e.g. Vercel Hosting Invoice" required />
-                            </div>
-                            <DialogFooter>
-                                <Button type="button" variant="outline" onClick={() => setIsExpenseOpen(false)}>Cancel</Button>
-                                <Button type="submit" disabled={submitting}>
-                                    {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                                    Save Expense
-                                </Button>
-                            </DialogFooter>
-                        </form>
-                    </DialogContent>
-                </Dialog>
+                <div className="flex gap-2">
+                    <Dialog open={isRevenueOpen} onOpenChange={setIsRevenueOpen}>
+                        <DialogTrigger asChild>
+                            <Button variant="outline" className="text-green-600 border-green-200 hover:bg-green-50">
+                                Add Revenue
+                            </Button>
+                        </DialogTrigger>
+                        <DialogContent>
+                            <DialogHeader>
+                                <DialogTitle>Log Manual Revenue</DialogTitle>
+                                <DialogDescription>Record revenue that came outside the system directly.</DialogDescription>
+                            </DialogHeader>
+                            <form onSubmit={handleAddRevenue} className="space-y-4 pt-4">
+                                <div className="grid gap-2">
+                                    <Label>Category</Label>
+                                    <Input value={revCategory} onChange={e => setRevCategory(e.target.value)} required />
+                                </div>
+                                <div className="grid gap-2">
+                                    <Label>Amount (EGP)</Label>
+                                    <Input type="number" step="0.01" value={revAmount} onChange={e => setRevAmount(e.target.value)} required />
+                                </div>
+                                <div className="grid gap-2">
+                                    <Label>Description</Label>
+                                    <Input value={revDesc} onChange={e => setRevDesc(e.target.value)} placeholder="e.g. Cash payment from client X" required />
+                                </div>
+                                <DialogFooter>
+                                    <Button type="button" variant="outline" onClick={() => setIsRevenueOpen(false)}>Cancel</Button>
+                                    <Button type="submit" disabled={submitting}>
+                                        {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                        Save Revenue
+                                    </Button>
+                                </DialogFooter>
+                            </form>
+                        </DialogContent>
+                    </Dialog>
+
+                    <Dialog open={isExpenseOpen} onOpenChange={setIsExpenseOpen}>
+                        <DialogTrigger asChild>
+                            <Button variant="destructive">
+                                Add Expense
+                            </Button>
+                        </DialogTrigger>
+                        <DialogContent>
+                            <DialogHeader>
+                                <DialogTitle>Log an Expense</DialogTitle>
+                                <DialogDescription>Record server costs, payroll, or marketing expenses.</DialogDescription>
+                            </DialogHeader>
+                            <form onSubmit={handleAddExpense} className="space-y-4 pt-4">
+                                <div className="grid gap-2">
+                                    <Label>Category</Label>
+                                    <Select value={expCategory} onValueChange={setExpCategory}>
+                                        <SelectTrigger><SelectValue /></SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="Hosting/Servers">Hosting / Servers</SelectItem>
+                                            <SelectItem value="Marketing/Ads">Marketing / Ads</SelectItem>
+                                            <SelectItem value="Payroll">Payroll</SelectItem>
+                                            <SelectItem value="Software/Tools">Software / Tools</SelectItem>
+                                            <SelectItem value="Miscellaneous">Miscellaneous</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                                <div className="grid gap-2">
+                                    <Label>Amount (EGP)</Label>
+                                    <Input type="number" step="0.01" value={expAmount} onChange={e => setExpAmount(e.target.value)} required />
+                                </div>
+                                <div className="grid gap-2">
+                                    <Label>Description</Label>
+                                    <Input value={expDesc} onChange={e => setExpDesc(e.target.value)} placeholder="e.g. Vercel Hosting Invoice" required />
+                                </div>
+                                <DialogFooter>
+                                    <Button type="button" variant="outline" onClick={() => setIsExpenseOpen(false)}>Cancel</Button>
+                                    <Button type="submit" disabled={submitting}>
+                                        {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                        Save Expense
+                                    </Button>
+                                </DialogFooter>
+                            </form>
+                        </DialogContent>
+                    </Dialog>
+                </div>
             </div>
 
             <div className="grid gap-4 md:grid-cols-3">
