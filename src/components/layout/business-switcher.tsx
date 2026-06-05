@@ -10,10 +10,10 @@ import {
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { useRouter } from "next/navigation";
-import { Loader2, Settings } from "lucide-react";
+import { Loader2, Settings, ShieldCheck } from "lucide-react";
 
 export function BusinessSwitcher() {
-  const { activeBusiness, businesses, setActiveBusiness, isSystemAdmin, loading } = useBusiness();
+  const { activeBusiness, businesses, setActiveBusiness, isSystemAdmin, loading, userRole } = useBusiness();
   const router = useRouter();
 
   if (loading) {
@@ -39,6 +39,12 @@ export function BusinessSwitcher() {
           ))}
         </SelectContent>
       </Select>
+      
+      {userRole === 'Platform Admin' && (
+        <div className="flex items-center gap-1 text-xs font-bold text-red-500 bg-red-50 dark:bg-red-950 px-2 py-1 rounded-md border border-red-200">
+          <ShieldCheck className="h-3 w-3" /> God Mode
+        </div>
+      )}
 
       {isSystemAdmin && (
         <Button 

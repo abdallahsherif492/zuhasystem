@@ -8,6 +8,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Loader2, Store, CheckCircle, XCircle } from "lucide-react";
 
+import { useBusiness } from "@/contexts/BusinessContext";
+
 type Business = {
     id: string;
     name: string;
@@ -17,6 +19,7 @@ type Business = {
 };
 
 export default function BusinessesManagement() {
+    const { impersonateBusiness } = useBusiness();
     const [businesses, setBusinesses] = useState<Business[]>([]);
     const [loading, setLoading] = useState(true);
 
@@ -116,6 +119,9 @@ export default function BusinessesManagement() {
                                                 <TableCell>{new Date(biz.created_at).toLocaleDateString()}</TableCell>
                                                 <TableCell className="text-right">
                                                     <div className="flex justify-end gap-2">
+                                                        <Button size="sm" variant="secondary" onClick={() => impersonateBusiness(biz.id)}>
+                                                            Open Dashboard
+                                                        </Button>
                                                         {biz.subscription_status !== "active" && (
                                                             <Button size="sm" variant="outline" className="text-green-600 border-green-200 hover:bg-green-50" onClick={() => updateStatus(biz.id, "active")}>
                                                                 <CheckCircle className="mr-1 h-4 w-4" /> Activate

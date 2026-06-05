@@ -23,6 +23,7 @@ interface BusinessContextType {
   isSystemAdmin: boolean;
   businesses: BusinessUser[];
   setActiveBusiness: (businessId: string) => void;
+  impersonateBusiness: (businessId: string) => void;
   loading: boolean;
 }
 
@@ -32,6 +33,7 @@ const BusinessContext = createContext<BusinessContextType>({
   isSystemAdmin: false,
   businesses: [],
   setActiveBusiness: () => {},
+  impersonateBusiness: () => {},
   loading: true,
 });
 
@@ -93,7 +95,19 @@ export const BusinessProvider = ({ children }: { children: React.ReactNode }) =>
 
         // Retrieve saved active business from localStorage, or default to the first one
         const savedId = localStorage.getItem('activeBusinessId');
-        const active = formatted.find(b => b.business.id === savedId) || formatted[0];
+        let active = formatted.find((b: any) => b.business.id === savedId);
+        
+        // --- GOD MODE (Impersonation) ---
+        if (!active && sysAdmin && savedId) {
+            const { data: impBusiness } = await supabase.from('businesses').select('*').eq('id', savedId).single();
+            if (impBusiness) {
+                const impObj = { role: 'Platform Admin', business: impBusiness as Business };
+                formatted.push(impObj);
+                active = impObj;
+            }
+        }
+        
+        active = active || formatted[0];
         
         setActiveBusinessState(active.business);
         setUserRole(active.role);
@@ -122,8 +136,14 @@ export const BusinessProvider = ({ children }: { children: React.ReactNode }) =>
     }
   };
 
+  const impersonateBusiness = (businessId: string) => {
+    if (!isSystemAdmin) return;
+    localStorage.setItem('activeBusinessId', businessId);
+    window.location.href = '/dashboard';
+  };
+
   return (
-    <BusinessContext.Provider value={{ activeBusiness, userRole, isSystemAdmin, businesses, setActiveBusiness, loading }}>
+    <BusinessContext.Provider value={{ activeBusiness, userRole, isSystemAdmin, businesses, setActiveBusiness, impersonateBusiness, loading }}>
       {children}
     </BusinessContext.Provider>
   );

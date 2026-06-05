@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import Image from "next/image";
 import { Button } from "@/components/ui/button";
-import { LayoutDashboard, Store, Ticket, ShieldCheck, LogOut, Menu } from "lucide-react";
+import { LayoutDashboard, Store, Ticket, ShieldCheck, LogOut, Menu, Users, Banknote } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { supabase } from "@/lib/supabase";
 
@@ -35,6 +35,24 @@ function AdminSidebar({ pathname }: { pathname: string }) {
                         >
                             <Store className="mr-2 h-4 w-4" />
                             Businesses
+                        </Button>
+                    </Link>
+                    <Link href="/system-admin/users">
+                        <Button
+                            variant={pathname.startsWith("/system-admin/users") ? "secondary" : "ghost"}
+                            className="w-full justify-start"
+                        >
+                            <Users className="mr-2 h-4 w-4" />
+                            Platform Users
+                        </Button>
+                    </Link>
+                    <Link href="/system-admin/accounting">
+                        <Button
+                            variant={pathname.startsWith("/system-admin/accounting") ? "secondary" : "ghost"}
+                            className="w-full justify-start"
+                        >
+                            <Banknote className="mr-2 h-4 w-4" />
+                            Accounting
                         </Button>
                     </Link>
                     <Link href="/system-admin/tickets">
