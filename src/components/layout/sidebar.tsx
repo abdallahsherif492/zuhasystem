@@ -1,20 +1,26 @@
 "use client";
 
 import Link from "next/link";
+import { supabase } from "@/lib/supabase";
 import { usePathname } from "next/navigation";
 import { useBusiness } from "@/contexts/BusinessContext";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { LayoutDashboard, Package, ShoppingCart, Settings, Users, Truck, Banknote, LineChart, ShoppingBag, Megaphone, Box, DollarSign, ShieldCheck, FileText, Ticket, CreditCard, Clock, Inbox, Calendar } from "lucide-react";
+import { LayoutDashboard, Package, ShoppingCart, Settings, Users, Truck, Banknote, LineChart, ShoppingBag, Megaphone, Box, DollarSign, ShieldCheck, FileText, Ticket, CreditCard, Clock, Inbox, Calendar, LogOut } from "lucide-react";
 
 import Image from "next/image";
 
 interface SidebarProps extends React.HTMLAttributes<HTMLDivElement> { }
 
 export function Sidebar({ className }: SidebarProps) {
+    const handleLogout = async () => {
+        await supabase.auth.signOut();
+        window.location.href = "/login";
+    };
+
     return (
-        <div className={cn("pb-12 h-screen border-r", className)}>
-            <div className="space-y-4 py-4">
+        <div className={cn("pb-12 h-screen border-r flex flex-col", className)}>
+            <div className="space-y-4 py-4 flex-1 overflow-auto">
                 <div className="px-3 py-2">
                     <div className="flex items-center justify-center mb-8 px-2">
                         <div className="relative h-20 w-40">
@@ -29,6 +35,17 @@ export function Sidebar({ className }: SidebarProps) {
                     </div>
                     <SidebarContent />
                 </div>
+            </div>
+
+            <div className="p-4 mt-auto border-t">
+                <Button
+                    variant="ghost"
+                    className="w-full justify-start h-10 text-red-600 hover:text-red-700 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/50"
+                    onClick={handleLogout}
+                >
+                    <LogOut className="mr-2 h-4 w-4" />
+                    Log Out
+                </Button>
             </div>
         </div>
     );

@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Loader2, Store, CheckCircle2 } from "lucide-react";
+import { Loader2, Store, CheckCircle2, LogOut, ArrowRight } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 
 export default function OnboardingPage() {
@@ -31,6 +31,16 @@ export default function OnboardingPage() {
         };
         checkUser();
     }, [router]);
+
+    const handleLogout = async () => {
+        await supabase.auth.signOut();
+        window.location.href = "/login";
+    };
+
+    const handleSkip = () => {
+        localStorage.setItem('skipOnboarding', 'true');
+        window.location.href = "/dashboard";
+    };
 
     const handleCreateBusiness = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -161,12 +171,23 @@ export default function OnboardingPage() {
                             </div>
                         </CardContent>
                         
-                        <CardFooter>
+                        
+                        <CardFooter className="flex flex-col gap-3">
                             <Button type="submit" className="w-full h-12 text-lg" disabled={loading}>
                                 {loading && <Loader2 className="mr-2 h-5 w-5 animate-spin" />}
                                 Launch My Business
                             </Button>
+                            
+                            <div className="flex gap-2 w-full mt-2">
+                                <Button type="button" variant="outline" className="flex-1" onClick={handleSkip} disabled={loading}>
+                                    Skip to Dashboard <ArrowRight className="ml-2 h-4 w-4" />
+                                </Button>
+                                <Button type="button" variant="ghost" className="flex-none text-red-600 hover:text-red-700 hover:bg-red-50" onClick={handleLogout} disabled={loading}>
+                                    <LogOut className="h-5 w-5" />
+                                </Button>
+                            </div>
                         </CardFooter>
+
                     </form>
                 </Card>
             </div>

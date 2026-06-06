@@ -163,7 +163,8 @@ export const BusinessProvider = ({ children }: { children: React.ReactNode }) =>
         localStorage.setItem('activeBusinessId', active.business.id);
       } else {
         // User has no businesses. Redirect to onboarding if not on onboarding page.
-        if (pathname !== '/onboarding' && !pathname.startsWith('/system-admin')) {
+        const skipped = typeof window !== 'undefined' ? localStorage.getItem('skipOnboarding') : null;
+        if (pathname !== '/onboarding' && !pathname.startsWith('/system-admin') && !skipped) {
           router.push('/onboarding');
         }
       }
