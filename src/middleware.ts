@@ -91,47 +91,10 @@ export async function middleware(request: NextRequest) {
                     .eq('user_email', user.email)
                     .maybeSingle();
                 
-                // Fallback for legacy super admins (from user_permissions)
-                let isLegacyAdmin = false;
                 if (!sysAdmin) {
-                    const { data: legacyPerms } = await supabase
-                        .from('user_permissions')
-                        .select('super_admin')
-                        .eq('id', user.id)
-                        .maybeSingle();
-                    if (legacyPerms?.super_admin) {
-                        isLegacyAdmin = true;
-                    }
-                }
-                
-                if (!sysAdmin && !isLegacyAdmin) {
                     const unauthUrl = request.nextUrl.clone();
                     unauthUrl.pathname = '/unauthorized';
                     return NextResponse.redirect(unauthUrl);
-                }
-            } else if (pathname !== '/' && pathname !== '/unauthorized' && pathname !== '/onboarding') {
-                const { data: userPerms, error } = await supabase
-                    .from('user_permissions')
-                    .select('super_admin, permissions')
-                    .eq('id', user.id)
-                    .single();
-
-                if (!userPerms || !userPerms.super_admin) {
-                    const perms = userPerms?.permissions || {};
-                    // Extract root section namespace: e.g. /orders/new -> /orders
-                    const basePath = `/${pathname.split('/')[1]}`;
-
-                    if (basePath === '/users') {
-                        // Strict Block: Users Page is Super Admin Only
-                        const unauthUrl = request.nextUrl.clone();
-                        unauthUrl.pathname = '/unauthorized';
-                        return NextResponse.redirect(unauthUrl);
-                    } else if (perms[basePath] !== true) {
-                        // Strict Block: Any defined section explicitly marked false or undefined
-                        const unauthUrl = request.nextUrl.clone();
-                        unauthUrl.pathname = '/unauthorized';
-                        return NextResponse.redirect(unauthUrl);
-                    }
                 }
             }
         }
