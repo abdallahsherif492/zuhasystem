@@ -96,8 +96,8 @@ export default function TeamManagementPage() {
                 user_email: newEmail.toLowerCase().trim(),
                 role: newRole,
                 allowed_pages: newRole === 'owner' || newRole === 'admin' ? [] : newAllowedPages,
-                shift_start: newShiftStart,
-                shift_end: newShiftEnd,
+                shift_start: newShiftStart || null,
+                shift_end: newShiftEnd || null,
                 weekend_days: newWeekendDays
             });
 
