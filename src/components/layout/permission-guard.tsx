@@ -21,8 +21,8 @@ export function PermissionGuard({ children }: { children: React.ReactNode }) {
             return;
         }
 
-        // Always allow dashboard
-        if (pathname === "/dashboard") {
+        // Always allow dashboard and my-hr
+        if (pathname === "/dashboard" || pathname.startsWith("/my-hr")) {
             setAuthorized(true);
             return;
         }

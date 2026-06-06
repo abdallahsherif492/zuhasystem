@@ -88,6 +88,15 @@ export function SidebarContent() {
 
     return (
         <div className="space-y-1">
+            <Link href="/my-hr">
+                <Button
+                    variant={pathname.startsWith("/my-hr") ? "secondary" : "ghost"}
+                    className="w-full justify-start"
+                >
+                    <Calendar className="mr-2 h-4 w-4" />
+                    My HR
+                </Button>
+            </Link>
             {canAccess("/dashboard") && (
                 <Link href="/dashboard">
                     <Button
@@ -344,16 +353,6 @@ export function SidebarContent() {
                                 </Button>
                             </Link>
                         )}
-                        <Link href="/my-hr">
-                            <Button
-                                variant={pathname.startsWith("/my-hr") ? "secondary" : "ghost"}
-                                className="w-full justify-start h-8 text-blue-600 hover:text-blue-700 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-950"
-                                size="sm"
-                            >
-                                <Calendar className="mr-2 h-3 w-3" />
-                                My HR
-                            </Button>
-                        </Link>
                     </div>
                 </div>
             )}
