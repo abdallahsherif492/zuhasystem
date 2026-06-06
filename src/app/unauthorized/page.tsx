@@ -2,13 +2,18 @@
 
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { ShieldAlert, Loader2 } from "lucide-react";
+import { ShieldAlert, Loader2, LogOut } from "lucide-react";
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 
 export default function UnauthorizedPage() {
     const [debugInfo, setDebugInfo] = useState<any>(null);
     const [loading, setLoading] = useState(true);
+
+    const handleLogout = async () => {
+        await supabase.auth.signOut();
+        window.location.href = "/login";
+    };
 
     useEffect(() => {
         async function fetchDebugInfo() {
@@ -56,11 +61,16 @@ export default function UnauthorizedPage() {
                 )}
             </div>
 
-            <Link href="/">
-                <Button size="lg" className="mt-4">
-                    Return to Dashboard
+            <div className="flex gap-4 mt-4">
+                <Link href="/">
+                    <Button size="lg" variant="default">
+                        Return to Dashboard
+                    </Button>
+                </Link>
+                <Button size="lg" variant="outline" className="text-red-600 hover:text-red-700 hover:bg-red-50" onClick={handleLogout}>
+                    <LogOut className="mr-2 h-5 w-5" /> Log Out
                 </Button>
-            </Link>
+            </div>
         </div>
     );
 }

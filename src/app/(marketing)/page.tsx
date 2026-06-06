@@ -5,6 +5,7 @@ import { CheckCircle2, Package, TrendingUp, Users, ShieldCheck } from "lucide-re
 
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
+import { LogoutButton } from "@/components/ui/logout-button";
 
 export default async function MarketingLandingPage() {
   const cookieStore = await cookies();
@@ -48,9 +49,12 @@ export default async function MarketingLandingPage() {
           </Link>
           <div className="flex items-center gap-2 ml-4">
             {user ? (
-              <Button asChild>
-                <Link href="/dashboard">Go to Dashboard</Link>
-              </Button>
+              <>
+                <LogoutButton />
+                <Button asChild>
+                  <Link href="/dashboard">Go to Dashboard</Link>
+                </Button>
+              </>
             ) : (
               <>
                 <Button variant="ghost" asChild>
@@ -81,9 +85,12 @@ export default async function MarketingLandingPage() {
               </div>
               <div className="flex flex-col sm:flex-row gap-4 w-full sm:w-auto">
                 {user ? (
-                  <Button size="lg" className="h-14 px-8 text-lg rounded-full" asChild>
-                    <Link href="/dashboard">Go to Dashboard</Link>
-                  </Button>
+                  <div className="flex flex-col sm:flex-row gap-4">
+                    <LogoutButton size="lg" variant="outline" className="h-14 px-8 text-lg rounded-full text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200 hover:border-red-300 bg-background/50 backdrop-blur-sm" />
+                    <Button size="lg" className="h-14 px-8 text-lg rounded-full" asChild>
+                      <Link href="/dashboard">Go to Dashboard</Link>
+                    </Button>
+                  </div>
                 ) : (
                   <>
                     <Button size="lg" className="h-14 px-8 text-lg rounded-full" asChild>
