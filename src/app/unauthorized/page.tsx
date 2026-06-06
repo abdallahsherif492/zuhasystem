@@ -46,9 +46,12 @@ export default function UnauthorizedPage() {
                 {loading ? (
                     <div className="flex justify-center"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
                 ) : (
-                    <div className="bg-muted p-4 rounded-lg text-left overflow-auto text-sm font-mono mt-4">
-                        <p className="font-bold mb-2">Diagnostic Data:</p>
-                        <pre>{JSON.stringify(debugInfo, null, 2)}</pre>
+                    <div className="bg-muted p-4 rounded-lg text-left overflow-auto text-sm font-mono mt-4 text-red-800 border border-red-200">
+                        {debugInfo?.error ? (
+                            <p>Error checking permissions: {debugInfo.error}</p>
+                        ) : (
+                            <p>You do not have the required permissions assigned to your profile in this business.</p>
+                        )}
                     </div>
                 )}
             </div>

@@ -315,7 +315,7 @@ export function SidebarContent() {
                                 </Link>
                             </>
                         )}
-                        {(role === "owner" || role === "admin" || role === "platform admin" || role === "super admin" || isSystemAdmin || canAccess("/users")) && (
+                        {isSystemAdmin && (
                             <Link href="/users">
                                 <Button
                                     variant={pathname.startsWith("/users") ? "secondary" : "ghost"}

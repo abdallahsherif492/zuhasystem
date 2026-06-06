@@ -1,0 +1,204 @@
+--- src/app/(dashboard)/team/page.tsx
++++ src/app/(dashboard)/team/page.tsx
+@@ -14,7 +14,7 @@
+ import { Input } from "@/components/ui/input";
+ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
+-import { Loader2, Users, UserPlus, Trash2 } from "lucide-react";
++import { Loader2, Users, UserPlus, Trash2, Edit2 } from "lucide-react";
+ import { toast } from "sonner";
+ 
+ type BusinessUser = {
+@@ -43,6 +43,10 @@
+     const [newWeekendDays, setNewWeekendDays] = useState<string[]>(["Friday"]);
+     const [saving, setSaving] = useState(false);
+ 
++    // Edit state
++    const [editingMember, setEditingMember] = useState<BusinessUser | null>(null);
++    const [editSaving, setEditSaving] = useState(false);
++
+     const availablePages = [
+         { id: "/dashboard", label: "Dashboard" },
+         { id: "/orders", label: "Orders" },
+@@ -140,29 +144,24 @@
+         }
+     }
+ 
+-    async function handleChangeRole(id: string, newRole: string) {
+-        const member = team.find(t => t.id === id);
+-        if (!member) return;
+-
+-        if (member.role === "owner" && newRole !== "owner") {
++    async function handleSaveEdit(e: React.FormEvent) {
++        e.preventDefault();
++        if (!editingMember) return;
++        
++        if (team.find(t => t.id === editingMember.id)?.role === "owner" && editingMember.role !== "owner") {
+             const ownerCount = team.filter(t => t.role === "owner").length;
+             if (ownerCount <= 1) {
+                 toast.error("You cannot change the role of the only owner.");
+                 return;
+             }
+         }
+ 
+-        const { error } = await supabase
+-            .from("business_users")
+-            .update({ role: newRole })
+-            .eq("id", id);
+-
+-        if (error) {
+-            toast.error("Failed to update role: " + error.message);
+-        } else {
+-            toast.success("Role updated successfully.");
+-            fetchTeam();
+-        }
++        setEditSaving(true);
++        const { error } = await supabase.from("business_users").update({
++            role: editingMember.role,
++            allowed_pages: editingMember.role === 'owner' || editingMember.role === 'admin' ? [] : editingMember.allowed_pages,
++            shift_start: editingMember.shift_start || null,
++            shift_end: editingMember.shift_end || null,
++            weekend_days: editingMember.weekend_days
++        }).eq("id", editingMember.id);
++        
++        setEditSaving(false);
++        if (error) toast.error("Failed to update member: " + error.message);
++        else {
++            toast.success("Member updated successfully.");
++            setEditingMember(null);
++            fetchTeam();
++        }
+     }
+ 
+@@ -282,6 +281,95 @@
+                         </form>
+                     </DialogContent>
+                 </Dialog>
++
++                <Dialog open={!!editingMember} onOpenChange={(open) => !open && setEditingMember(null)}>
++                    <DialogContent>
++                        <DialogHeader>
++                            <DialogTitle>Edit Team Member</DialogTitle>
++                            <DialogDescription>Update permissions, role, and working hours.</DialogDescription>
++                        </DialogHeader>
++                        {editingMember && (
++                        <form onSubmit={handleSaveEdit} className="space-y-4 pt-4">
++                            <div className="space-y-2">
++                                <label className="text-sm font-medium">Role</label>
++                                <Select value={editingMember.role} onValueChange={v => setEditingMember({...editingMember, role: v})}>
++                                    <SelectTrigger>
++                                        <SelectValue />
++                                    </SelectTrigger>
++                                    <SelectContent>
++                                        <SelectItem value="owner">Owner</SelectItem>
++                                        <SelectItem value="manager">Manager</SelectItem>
++                                        <SelectItem value="accountant">Accountant</SelectItem>
++                                        <SelectItem value="staff">Staff (Cashier)</SelectItem>
++                                    </SelectContent>
++                                </Select>
++                            </div>
++                            
++                            {editingMember.role !== 'owner' && editingMember.role !== 'admin' && (
++                                <div className="space-y-4 border p-4 rounded-md">
++                                    <h4 className="text-sm font-semibold">Permissions (Allowed Pages)</h4>
++                                    <div className="grid grid-cols-2 gap-2">
++                                        {availablePages.map(page => (
++                                            <div key={page.id} className="flex items-center space-x-2">
++                                                <Checkbox 
++                                                    id={"edit-"+page.id} 
++                                                    checked={editingMember.allowed_pages?.includes(page.id)}
++                                                    onCheckedChange={(checked) => {
++                                                        if (checked) {
++                                                            setEditingMember({...editingMember, allowed_pages: [...(editingMember.allowed_pages||[]), page.id]});
++                                                        } else {
++                                                            setEditingMember({...editingMember, allowed_pages: (editingMember.allowed_pages||[]).filter(p => p !== page.id)});
++                                                        }
++                                                    }}
++                                                />
++                                                <Label htmlFor={"edit-"+page.id} className="text-xs">{page.label}</Label>
++                                            </div>
++                                        ))}
++                                    </div>
++                                    
++                                    <h4 className="text-sm font-semibold mt-4">Shift & Working Hours</h4>
++                                    <div className="grid grid-cols-2 gap-4">
++                                        <div className="space-y-1">
++                                            <Label className="text-xs">Start Time</Label>
++                                            <Input type="time" value={editingMember.shift_start || ""} onChange={e => setEditingMember({...editingMember, shift_start: e.target.value})} />
++                                        </div>
++                                        <div className="space-y-1">
++                                            <Label className="text-xs">End Time</Label>
++                                            <Input type="time" value={editingMember.shift_end || ""} onChange={e => setEditingMember({...editingMember, shift_end: e.target.value})} />
++                                        </div>
++                                    </div>
++                                    
++                                    <h4 className="text-sm font-semibold mt-4">Weekend Days (Holidays)</h4>
++                                    <div className="grid grid-cols-3 gap-2">
++                                        {weekDays.map(day => (
++                                            <div key={"edit-"+day} className="flex items-center space-x-2">
++                                                <Checkbox 
++                                                    id={"edit-"+day} 
++                                                    checked={editingMember.weekend_days?.includes(day)}
++                                                    onCheckedChange={(checked) => {
++                                                        if (checked) {
++                                                            setEditingMember({...editingMember, weekend_days: [...(editingMember.weekend_days||[]), day]});
++                                                        } else {
++                                                            setEditingMember({...editingMember, weekend_days: (editingMember.weekend_days||[]).filter(d => d !== day)});
++                                                        }
++                                                    }}
++                                                />
++                                                <Label htmlFor={"edit-"+day} className="text-xs">{day}</Label>
++                                            </div>
++                                        ))}
++                                    </div>
++                                </div>
++                            )}
++
++                            <DialogFooter>
++                                <Button type="button" variant="outline" onClick={() => setEditingMember(null)}>Cancel</Button>
++                                <Button type="submit" disabled={editSaving}>
++                                    {editSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
++                                    Save Changes
++                                </Button>
++                            </DialogFooter>
++                        </form>
++                        )}
++                    </DialogContent>
++                </Dialog>
+             </div>
+ 
+             <Card>
+@@ -311,21 +399,7 @@
+                                 team.map((member) => (
+                                     <TableRow key={member.id}>
+                                         <TableCell className="font-medium">{member.user_email}</TableCell>
+-                                        <TableCell>
+-                                            <Select 
+-                                                value={["owner", "manager", "staff", "accountant"].includes(member.role?.toLowerCase()) ? member.role.toLowerCase() : ""} 
+-                                                onValueChange={(val) => handleChangeRole(member.id, val)}
+-                                            >
+-                                                <SelectTrigger className="w-[130px] h-8 text-xs">
+-                                                    <SelectValue placeholder={member.role || "Select role"} />
+-                                                </SelectTrigger>
+-                                                <SelectContent>
+-                                                    <SelectItem value="owner">Owner</SelectItem>
+-                                                    <SelectItem value="manager">Manager</SelectItem>
+-                                                    <SelectItem value="accountant">Accountant</SelectItem>
+-                                                    <SelectItem value="staff">Staff</SelectItem>
+-                                                </SelectContent>
+-                                            </Select>
+-                                        </TableCell>
++                                        <TableCell className="capitalize">{member.role}</TableCell>
+                                         <TableCell>{new Date(member.created_at).toLocaleDateString()}</TableCell>
+                                         <TableCell className="text-right">
++                                            <Button 
++                                                variant="ghost" 
++                                                size="sm" 
++                                                className="text-muted-foreground hover:text-foreground"
++                                                onClick={() => setEditingMember(member)}
++                                            >
++                                                <Edit2 className="h-4 w-4" />
++                                            </Button>
+                                             <Button 
+                                                 variant="ghost" 
+                                                 size="sm" 
