@@ -104,6 +104,7 @@ export default function TeamManagementPage() {
 
         setSaving(false);
         if (error) {
+            console.error("Supabase Insert Error:", error);
             toast.error("Failed to add team member: " + error.message);
         } else {
             toast.success("Team member added successfully! They can access the system immediately after creating an account with this email.");
