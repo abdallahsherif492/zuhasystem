@@ -106,7 +106,7 @@ export default function TeamManagementPage() {
         if (error) {
             toast.error("Failed to add team member: " + error.message);
         } else {
-            toast.success("Team member added! They can now sign up using this email.");
+            toast.success("Team member added successfully! They can access the system immediately after creating an account with this email.");
             setIsAddOpen(false);
             setNewEmail("");
             setNewRole("staff");
@@ -274,7 +274,7 @@ export default function TeamManagementPage() {
                                 <Button type="button" variant="outline" onClick={() => setIsAddOpen(false)}>Cancel</Button>
                                 <Button type="submit" disabled={saving}>
                                     {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                                    Send Invite
+                                    Add Member
                                 </Button>
                             </DialogFooter>
                         </form>
