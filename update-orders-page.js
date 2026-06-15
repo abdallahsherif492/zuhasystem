@@ -1,4 +1,6 @@
-"use client";
+const fs = require('fs');
+
+const pageContent = `"use client";
 
 import { useEffect, useState, useMemo, Suspense } from "react";
 import Link from "next/link";
@@ -202,16 +204,16 @@ function OrdersContent() {
             }
 
             const content = itemsArray?.map((item: any) =>
-                `${item.variant?.product?.name} (${item.variant?.title}) x${item.quantity}`
+                \`\${item.variant?.product?.name} (\${item.variant?.title}) x\${item.quantity}\`
             ).join(" + ") || "No Items";
 
             const phone1 = order.customer_info?.phone || "";
             const phone2 = order.customer_info?.phone2;
-            const combinedPhone = phone2 ? `${phone1} / ${phone2}` : phone1;
+            const combinedPhone = phone2 ? \`\${phone1} / \${phone2}\` : phone1;
 
             const baseNotes = order.notes || "";
             const requestNotes = "قابل للكسر"; // Fragile
-            const combinedNotes = baseNotes ? `${baseNotes} | ${requestNotes}` : requestNotes;
+            const combinedNotes = baseNotes ? \`\${baseNotes} | \${requestNotes}\` : requestNotes;
 
             const paymentStatus = order.payment_status || "Not Paid";
             const paidAmount = order.paid_amount || 0;
@@ -247,7 +249,7 @@ function OrdersContent() {
         const worksheet = XLSX.utils.json_to_sheet(exportData);
         const workbook = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(workbook, worksheet, "Orders");
-        XLSX.writeFile(workbook, `orders_export_${suffix}_${new Date().toISOString().split('T')[0]}.xlsx`);
+        XLSX.writeFile(workbook, \`orders_export_\${suffix}_\${new Date().toISOString().split('T')[0]}.xlsx\`);
         toast.dismiss();
         toast.success("Export successful");
     }
@@ -258,7 +260,7 @@ function OrdersContent() {
             return;
         }
         const ids = Array.from(selectedOrders).join(",");
-        window.open(`/orders/print?ids=${ids}`, '_blank');
+        window.open(\`/orders/print?ids=\${ids}\`, '_blank');
     }
 
     const STATUSES = ["Pending", "Processing", "Prepared", "Shipped", "Delivered", "Cancelled", "Returned"];
@@ -378,7 +380,7 @@ function OrdersContent() {
                             </Button>
                             <Button variant="outline" onClick={handleExport} className="bg-white">
                                 <Download className="mr-2 h-4 w-4" />
-                                {selectedOrders.size > 0 ? `Export Selected` : "Export All"}
+                                {selectedOrders.size > 0 ? \`Export Selected\` : "Export All"}
                             </Button>
                         </div>
                     </div>
@@ -465,12 +467,12 @@ function OrdersContent() {
                                             <Button
                                                 variant="outline"
                                                 size="sm"
-                                                onClick={() => window.open(`/orders/${order.id}/invoice`, '_blank')}
+                                                onClick={() => window.open(\`/orders/\${order.id}/invoice\`, '_blank')}
                                                 className="h-8 px-2"
                                             >
                                                 <Printer className="h-3 w-3" />
                                             </Button>
-                                            <Link href={`/orders/${order.id}`}>
+                                            <Link href={\`/orders/\${order.id}\`}>
                                                 <Button
                                                     variant="outline"
                                                     size="sm"
@@ -531,3 +533,6 @@ export default function OrdersPage() {
         </Suspense>
     );
 }
+`;
+
+fs.writeFileSync('src/app/(dashboard)/orders/page.tsx', pageContent);
