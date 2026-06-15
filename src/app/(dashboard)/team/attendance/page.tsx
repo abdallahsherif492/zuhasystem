@@ -7,7 +7,9 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Loader2, CalendarClock, Clock, UserX } from "lucide-react";
+import { Loader2, CalendarClock, Clock, UserX, ArrowRight } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import Link from "next/link";
 import { format, differenceInMinutes, parseISO, isSameDay, startOfDay } from "date-fns";
 
 type BusinessUser = {
@@ -184,6 +186,7 @@ export default function AttendancePage() {
                                     <TableHead>Clock In</TableHead>
                                     <TableHead>Clock Out</TableHead>
                                     <TableHead className="text-right">Delay</TableHead>
+                                    <TableHead></TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
@@ -209,6 +212,13 @@ export default function AttendancePage() {
                                             ) : (
                                                 <span className="text-muted-foreground">-</span>
                                             )}
+                                        </TableCell>
+                                        <TableCell>
+                                            <Button variant="ghost" size="sm" asChild>
+                                                <Link href={`/team/attendance/${encodeURIComponent(record.email)}`}>
+                                                    <ArrowRight className="h-4 w-4" />
+                                                </Link>
+                                            </Button>
                                         </TableCell>
                                     </TableRow>
                                 ))}
