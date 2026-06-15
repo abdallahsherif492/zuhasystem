@@ -497,7 +497,7 @@ function OrdersContent() {
                                     </TableCell>
                                     <TableCell>{formatCurrency(order.total_amount)}</TableCell>
                                     <TableCell className="text-green-600 font-medium">
-                                        +{formatCurrency(order.profit - (order.shipping_cost || 0) - 10)}
+                                        +{formatCurrency(order.profit)}
                                     </TableCell>
                                     <TableCell>
                                         <div className="flex items-center gap-1">

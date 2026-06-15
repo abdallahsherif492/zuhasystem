@@ -142,13 +142,12 @@ function InsightsContent() {
             const ordShip = Number(ordRow.total_shipping);
             const wonCount = Number(ordRow.won_count);
 
-            const handling = ordCount * 10; // 10 EGP per order
-            const totalDeductions = ordCogs + adsSpent + ordShip + handling; // Ads Spent is reused here
+            const handling = 0; // Removed hardcoded 10 EGP handling fee as requested
+            const totalDeductions = ordCogs + adsSpent + ordShip; // Ads Spent is reused here
             const ordNetProfit = ordRev - totalDeductions;
 
-            // "Collectable Orders total minus shipping minus 10 pounds" -> Implies Net Revenue from courier
-            // Assuming 'Collectable' means (Revenue - ShippingCost - Handling)
-            const collectable = ordRev - ordShip - handling;
+            // Collectable Orders total minus actual shipping
+            const collectable = ordRev - ordShip;
 
             setOrdersMetrics({
                 count: ordCount,
@@ -402,7 +401,7 @@ function InsightsContent() {
                             <MetricCard title="COGS" value={formatCurrency(ordersMetrics.cogs)} neg />
 
                             <MetricCard title="Ads Spent" value={formatCurrency(ordersMetrics.adsSpent)} neg />
-                            <MetricCard title="Shipping + Fees" value={formatCurrency(ordersMetrics.shipping + ordersMetrics.handlingFees)} sub={`Shipping + ${formatCurrency(ordersMetrics.handlingFees)} Fees`} neg />
+                            <MetricCard title="Shipping Costs" value={formatCurrency(ordersMetrics.shipping)} sub="Actual Shipping Cost" neg />
 
                             <MetricCard title="Net Profit" value={formatCurrency(ordersMetrics.netProfit)} pos={ordersMetrics.netProfit > 0} bold />
                             <MetricCard title="Profit / Order" value={formatCurrency(ordersMetrics.netProfitPerOrder)} pos={ordersMetrics.netProfitPerOrder > 0} />
