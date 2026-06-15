@@ -66,6 +66,7 @@ function OrdersContent() {
     const searchParams = useSearchParams();
     const [orders, setOrders] = useState<Order[]>([]);
     const [loading, setLoading] = useState(true);
+    const [errorMsg, setErrorMsg] = useState<string | null>(null);
     const [totalCount, setTotalCount] = useState(0);
     const [productsOptions, setProductsOptions] = useState<Option[]>([]);
 
@@ -113,6 +114,7 @@ function OrdersContent() {
         if (!activeBusiness) return;
         try {
             setLoading(true);
+            setErrorMsg(null);
 
             // Fetch via RPC for paginated and filtered data
             const { data, error } = await supabase.rpc('get_orders_paginated', {
@@ -129,7 +131,7 @@ function OrdersContent() {
                 p_export_all: false
             });
 
-            if (error) throw error;
+            if (error) { setErrorMsg(error.message + " | Details: " + JSON.stringify(error)); throw error; }
 
             if (data && data.length > 0) {
                 setOrders(data);
@@ -407,7 +409,13 @@ function OrdersContent() {
                         </TableRow>
                     </TableHeader>
                     <TableBody>
-                        {loading ? (
+                        {errorMsg ? (
+                            <TableRow>
+                                <TableCell colSpan={10} className="h-24 text-center text-red-500 font-bold">
+                                    Error: {errorMsg}
+                                </TableCell>
+                            </TableRow>
+                        ) : loading ? (
                             <TableRow>
                                 <TableCell colSpan={10} className="h-24 text-center">
                                     <div className="flex justify-center items-center">
