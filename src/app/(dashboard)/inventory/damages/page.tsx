@@ -21,6 +21,11 @@ import {
 } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { Check, ChevronsUpDown } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import {
@@ -55,6 +60,7 @@ export default function DamagesPage() {
         notes: ""
     });
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [openPopover, setOpenPopover] = useState(false);
 
     useEffect(() => {
         if (activeBusiness) {
@@ -177,18 +183,52 @@ export default function DamagesPage() {
                         <div className="grid gap-4 py-4">
                             <div className="flex flex-col gap-2">
                                 <label className="text-sm font-medium">Product / Variant</label>
-                                <Select value={formData.variant_id} onValueChange={(val) => setFormData({...formData, variant_id: val})}>
-                                    <SelectTrigger>
-                                        <SelectValue placeholder="Select product" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        {variants.map(v => (
-                                            <SelectItem key={v.id} value={v.id}>
-                                                {v.products?.name} - {v.title} ({formatCurrency(v.cost_price)})
-                                            </SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
+                                <Popover open={openPopover} onOpenChange={setOpenPopover}>
+                                    <PopoverTrigger asChild>
+                                        <Button
+                                            variant="outline"
+                                            role="combobox"
+                                            aria-expanded={openPopover}
+                                            className="justify-between w-full font-normal"
+                                        >
+                                            {formData.variant_id
+                                                ? (() => {
+                                                    const v = variants.find((variant) => variant.id === formData.variant_id);
+                                                    return v ? `${v.products?.name} - ${v.title} (${formatCurrency(v.cost_price)})` : "Select product...";
+                                                })()
+                                                : "Search product..."}
+                                            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                        </Button>
+                                    </PopoverTrigger>
+                                    <PopoverContent className="w-[400px] p-0" align="start">
+                                        <Command>
+                                            <CommandInput placeholder="Search by name..." />
+                                            <CommandList>
+                                                <CommandEmpty>No product found.</CommandEmpty>
+                                                <CommandGroup>
+                                                    {variants.map((v) => (
+                                                        <CommandItem
+                                                            key={v.id}
+                                                            value={`${v.products?.name} ${v.title}`}
+                                                            onSelect={() => {
+                                                                setFormData({ ...formData, variant_id: v.id });
+                                                                setOpenPopover(false);
+                                                            }}
+                                                        >
+                                                            <Check
+                                                                className={cn(
+                                                                    "mr-2 h-4 w-4",
+                                                                    formData.variant_id === v.id ? "opacity-100" : "opacity-0"
+                                                                )}
+                                                            />
+                                                            {v.products?.name} - {v.title} ({formatCurrency(v.cost_price)})
+                                                        </CommandItem>
+                                                    ))}
+                                                </CommandGroup>
+                                            </CommandList>
+                                        </Command>
+                                    </PopoverContent>
+                                </Popover>
                             </div>
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="flex flex-col gap-2">
