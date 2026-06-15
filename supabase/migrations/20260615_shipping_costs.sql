@@ -1,0 +1,5 @@
+ALTER TABLE IF EXISTS public.shipping_companies
+ADD COLUMN IF NOT EXISTS is_default BOOLEAN DEFAULT false;
+
+ALTER TABLE IF EXISTS public.orders
+ADD COLUMN IF NOT EXISTS actual_shipping_cost NUMERIC DEFAULT 0;

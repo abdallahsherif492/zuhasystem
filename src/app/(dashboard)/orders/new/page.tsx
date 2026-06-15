@@ -337,9 +337,33 @@ export default function NewOrderPage() {
                 }).eq("id", custId);
             }
 
+            
+            // 1.5 Calculate Actual Shipping Cost based on Default Company
+            let actual_shipping_cost = 0;
+            try {
+                const { data: defaultCompany } = await supabase
+                    .from('shipping_companies')
+                    .select('rates')
+                    .eq('business_id', activeBusiness!.id)
+                    .eq('is_default', true)
+                    .single();
+
+                if (defaultCompany && defaultCompany.rates && defaultCompany.rates[customerGov]) {
+                    actual_shipping_cost = Number(defaultCompany.rates[customerGov]);
+                } else {
+                    const isCairoGiza = customerGov === 'Cairo' || customerGov === 'Giza' || customerGov === 'New Cairo' || customerGov === 'القاهرة' || customerGov === 'الجيزة';
+                    actual_shipping_cost = isCairoGiza ? 65 : 75;
+                }
+            } catch(e) {
+                const isCairoGiza = customerGov === 'Cairo' || customerGov === 'Giza' || customerGov === 'New Cairo' || customerGov === 'القاهرة' || customerGov === 'الجيزة';
+                actual_shipping_cost = isCairoGiza ? 65 : 75;
+            }
+
             // 2. Create Order
             const subtotal = calculateSubtotal();
             const totalCost = calculateTotalCost();
+            const profit = calculateTotal() - totalCost - actual_shipping_cost;
+
 
             const { data: orderData, error: orderError } = await supabase
                 .from("orders")
@@ -352,6 +376,7 @@ export default function NewOrderPage() {
                     subtotal: subtotal,
                     discount: discount,
                     shipping_cost: shippingCost,
+                    actual_shipping_cost: actual_shipping_cost,
                     status: initialStatus,
                     channel: channel,
                     tags: tags.split(",").map(t => t.trim()).filter(Boolean),

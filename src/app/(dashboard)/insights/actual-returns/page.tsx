@@ -62,7 +62,7 @@ function ActualReturnsContent() {
             // 1. Fetch Collected Orders
             const { data: orders, error: ordersError } = await supabase
                 .from('orders')
-                .select('created_at, total_amount, total_cost, shipping_cost, status, customer_info')
+                .select('created_at, total_amount, total_cost, shipping_cost, actual_shipping_cost, status, customer_info')
                 .eq('status', 'Collected')
                 .gte('created_at', start)
                 .lte('created_at', end);
@@ -94,9 +94,7 @@ function ActualReturnsContent() {
                 const r = Number(o.total_amount) || 0;
                 const c = Number(o.total_cost) || 0;
 
-                const gov = String(o.customer_info?.governorate || '');
-                const isCairoGiza = gov === 'Cairo' || gov === 'Giza' || gov === 'New Cairo' || gov === 'القاهرة' || gov === 'الجيزة';
-                const courierRate = isCairoGiza ? 65 : 75;
+                const courierRate = Number(o.actual_shipping_cost) || 0;
 
                 rev += r;
                 cogs += c;
@@ -345,7 +343,7 @@ function ActualReturnsContent() {
                             <span className="text-blue-500 font-semibold">-{formatCurrency(metrics.adsExpenses)}</span>
                         </div>
                         <div className="flex justify-between items-center py-2 border-b">
-                            <span className="font-medium text-muted-foreground">- Courier Fees (65/75 EGP per order)</span>
+                            <span className="font-medium text-muted-foreground">- Courier Fees (Actual Cost)</span>
                             <span className="text-purple-500 font-semibold">-{formatCurrency(metrics.courierShippingCost)}</span>
                         </div>
                         <div className="flex justify-between items-center py-4 bg-primary/5 rounded-lg px-4 mt-4">

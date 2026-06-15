@@ -10,6 +10,7 @@ import { Loader2, Plus, Pencil, Trash2, Truck, Upload } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import Link from "next/link";
 
@@ -29,6 +30,7 @@ type ShippingCompany = {
     phone: string;
     rates: Record<string, number>;
     active: boolean;
+    is_default?: boolean;
 };
 
 export function ShippingManagement() {
@@ -43,7 +45,8 @@ export function ShippingManagement() {
         name: "",
         type: "Company" as 'Company' | 'Courier' | 'Office',
         phone: "",
-        rates: {} as Record<string, number>
+        rates: {} as Record<string, number>,
+        is_default: false
     });
 
     useEffect(() => {
@@ -75,7 +78,8 @@ export function ShippingManagement() {
                 name: company.name,
                 type: company.type,
                 phone: company.phone || "",
-                rates: company.rates || {}
+                rates: company.rates || {},
+                is_default: company.is_default || false
             });
         } else {
             setEditingCompany(null);
@@ -83,7 +87,8 @@ export function ShippingManagement() {
                 name: "",
                 type: "Company",
                 phone: "",
-                rates: {}
+                rates: {},
+                is_default: false
             });
         }
         setIsDialogOpen(true);
@@ -96,12 +101,22 @@ export function ShippingManagement() {
         }
 
         try {
+            
+            if (formData.is_default) {
+                // Unset all other defaults first
+                await supabase
+                    .from('shipping_companies')
+                    .update({ is_default: false })
+                    .eq('business_id', activeBusiness!.id);
+            }
+
             const payload = {
                 business_id: activeBusiness!.id,
                 name: formData.name,
                 type: formData.type,
                 phone: formData.phone,
-                rates: formData.rates
+                rates: formData.rates,
+                is_default: formData.is_default
             };
 
             let error;
@@ -199,6 +214,11 @@ export function ShippingManagement() {
                                     <Badge variant={company.active ? "default" : "secondary"}>
                                         {company.active ? "Active" : "Inactive"}
                                     </Badge>
+                                    {company.is_default && (
+                                        <Badge variant="default" className="bg-yellow-500 hover:bg-yellow-600 ml-2">
+                                            Default
+                                        </Badge>
+                                    )}
                                 </div>
                             </CardHeader>
                             <CardContent>
@@ -264,6 +284,18 @@ export function ShippingManagement() {
                                     placeholder="Contact Number"
                                 />
                             </div>
+                        </div>
+
+                        
+                        <div className="flex items-center justify-between border rounded-lg p-4 bg-muted/20">
+                            <div>
+                                <h3 className="font-semibold">Default Shipping Company</h3>
+                                <p className="text-sm text-muted-foreground">Use this company's rates to estimate pending/processing orders.</p>
+                            </div>
+                            <Switch 
+                                checked={formData.is_default}
+                                onCheckedChange={(checked) => setFormData({ ...formData, is_default: checked })}
+                            />
                         </div>
 
                         <div className="space-y-4 border rounded-lg p-4 bg-muted/20">
