@@ -21,8 +21,8 @@ type BusinessUser = {
 type Shift = {
     id: string;
     user_email: string;
-    clock_in: string;
-    clock_out: string | null;
+    clock_in_time: string;
+    clock_out_time: string | null;
 };
 
 type AttendanceRecord = {
@@ -65,17 +65,17 @@ export default function AttendancePage() {
         nextDate.setDate(nextDate.getDate() + 1);
 
         const { data: shiftsData } = await supabase
-            .from("user_shifts")
-            .select("id, user_email, clock_in, clock_out")
+            .from("attendance_logs")
+            .select("id, user_email, clock_in_time, clock_out_time")
             .eq("business_id", activeBusiness.id)
-            .gte("clock_in", targetDate.toISOString())
-            .lt("clock_in", nextDate.toISOString());
+            .gte("clock_in_time", targetDate.toISOString())
+            .lt("clock_in_time", nextDate.toISOString());
 
         const users = (usersData || []) as BusinessUser[];
         const shifts = (shiftsData || []) as Shift[];
 
         const attendance: AttendanceRecord[] = users.map(user => {
-            const userShift = shifts.find(s => s.user_email === user.user_email);
+            const userShift = shifts.find(s => s.user_email === user.user_email) as any;
             const isWeekend = (user.weekend_days || []).includes(dayOfWeek);
             
             let status: 'Present' | 'Absent' | 'Weekend' = 'Absent';
@@ -86,7 +86,7 @@ export default function AttendancePage() {
                 if (user.shift_start) {
                     // Calculate delay
                     const expectedClockIn = parseISO(`${date}T${user.shift_start}`);
-                    const actualClockIn = parseISO(userShift.clock_in);
+                    const actualClockIn = parseISO(userShift.clock_in_time);
                     
                     const diff = differenceInMinutes(actualClockIn, expectedClockIn);
                     if (diff > 0) {
@@ -108,8 +108,8 @@ export default function AttendancePage() {
                 email: user.user_email,
                 role: user.role,
                 status,
-                clockIn: userShift?.clock_in || null,
-                clockOut: userShift?.clock_out || null,
+                clockIn: userShift?.clock_in_time || null,
+                clockOut: userShift?.clock_out_time || null,
                 delayMinutes,
                 shiftStart: user.shift_start
             };
