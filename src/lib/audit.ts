@@ -3,6 +3,7 @@ import { supabase } from "@/lib/supabase";
 export type AuditAction = 
     | "USER_BANNED"
     | "USER_ROLE_CHANGED"
+    | "USER_QUOTA_CHANGED"
     | "USER_REVOKED"
     | "BUSINESS_SUSPENDED"
     | "BUSINESS_ACTIVATED"
