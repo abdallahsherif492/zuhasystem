@@ -6,7 +6,7 @@ import { usePathname } from "next/navigation";
 import { useBusiness } from "@/contexts/BusinessContext";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { LayoutDashboard, Package, ShoppingCart, Settings, Users, Truck, Banknote, LineChart, ShoppingBag, Megaphone, Box, DollarSign, ShieldCheck, FileText, Ticket, CreditCard, Clock, Inbox, Calendar, LogOut } from "lucide-react";
+import { LayoutDashboard, AlertTriangle, Package, ShoppingCart, Settings, Users, Truck, Banknote, LineChart, ShoppingBag, Megaphone, Box, DollarSign, ShieldCheck, FileText, Ticket, CreditCard, Clock, Inbox, Calendar, LogOut } from "lucide-react";
 
 import Image from "next/image";
 
@@ -120,15 +120,26 @@ export function SidebarContent() {
                 </Link>
             )}
             {canAccess("/inventory") && (
-                <Link href="/inventory">
-                    <Button
-                        variant={pathname.startsWith("/inventory") ? "secondary" : "ghost"}
-                        className="w-full justify-start"
-                    >
-                        <Box className="mr-2 h-4 w-4" />
-                        Inventory
-                    </Button>
-                </Link>
+                <>
+                    <Link href="/inventory">
+                        <Button
+                            variant={pathname === "/inventory" ? "secondary" : "ghost"}
+                            className="w-full justify-start"
+                        >
+                            <Box className="mr-2 h-4 w-4" />
+                            Inventory
+                        </Button>
+                    </Link>
+                    <Link href="/inventory/damages">
+                        <Button
+                            variant={pathname.startsWith("/inventory/damages") ? "secondary" : "ghost"}
+                            className="w-full justify-start pl-8 text-sm text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950"
+                        >
+                            <AlertTriangle className="mr-2 h-3.5 w-3.5" />
+                            Damages (التلفيات)
+                        </Button>
+                    </Link>
+                </>
             )}
             {canAccess("/orders") && (
                 <Link href="/orders">

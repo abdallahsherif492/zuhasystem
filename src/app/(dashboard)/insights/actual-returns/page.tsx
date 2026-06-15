@@ -5,7 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { formatCurrency } from "@/lib/utils";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Loader2, DollarSign, ArrowDownRight, ArrowUpRight, Percent, Package, Wallet, TrendingDown, Truck } from "lucide-react";
+import { Loader2, DollarSign, ArrowDownRight, ArrowUpRight, Percent, Package, Wallet, TrendingDown, Truck, AlertTriangle } from "lucide-react";
 import { DateRangePicker } from "@/components/date-range-picker";
 import {
     BarChart,
@@ -37,7 +37,8 @@ function ActualReturnsContent() {
         courierShippingCost: 0,
         netProfit: 0,
         profitMargin: 0,
-        totalShippingCost: 0
+        totalShippingCost: 0,
+        damagesLoss: 0
     });
 
     const [dailyData, setDailyData] = useState<any[]>([]);
@@ -80,6 +81,21 @@ function ActualReturnsContent() {
             if (transError) throw transError;
 
             // 3. (Removed ads_expenses fetch)
+
+            
+            // 4. Fetch Damages
+            const { data: damages, error: damagesError } = await supabase
+                .from('inventory_damages')
+                .select('total_loss')
+                .gte('date', start)
+                .lte('date', end);
+
+            if (damagesError) throw damagesError;
+
+            let damagesLoss = 0;
+            (damages || []).forEach(d => {
+                damagesLoss += Number(d.total_loss) || 0;
+            });
 
             // Aggregation
             let rev = 0;
@@ -140,7 +156,8 @@ function ActualReturnsContent() {
                 courierShippingCost: courierTotal,
                 netProfit,
                 profitMargin,
-                totalShippingCost: ship
+                totalShippingCost: ship,
+                damagesLoss
             });
 
             // Build Daily Chart Data
@@ -250,6 +267,17 @@ function ActualReturnsContent() {
                     <CardContent>
                         <div className="text-2xl font-bold text-purple-500">-{formatCurrency(metrics.courierShippingCost)}</div>
                         <p className="text-xs text-muted-foreground mt-1">Delivery fees on store</p>
+                    </CardContent>
+                </Card>
+                
+                <Card>
+                    <CardHeader className="flex flex-row items-center justify-between pb-2">
+                        <CardTitle className="text-sm font-medium">Inventory Damages</CardTitle>
+                        <AlertTriangle className="h-4 w-4 text-red-500" />
+                    </CardHeader>
+                    <CardContent>
+                        <div className="text-2xl font-bold text-red-500">{formatCurrency(metrics.damagesLoss)}</div>
+                        <p className="text-xs text-muted-foreground mt-1">Loss from damaged products (Not deducted)</p>
                     </CardContent>
                 </Card>
                 <Card className="bg-primary/5 border-primary/20">
