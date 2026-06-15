@@ -37,6 +37,20 @@ type AttendanceRecord = {
     shiftStart: string | null;
 };
 
+
+function formatTime12(timeString: string | null) {
+    if (!timeString) return 'N/A';
+    try {
+        const [hours, minutes] = timeString.split(':');
+        const h = parseInt(hours, 10);
+        const ampm = h >= 12 ? 'PM' : 'AM';
+        const h12 = h % 12 || 12;
+        return `${h12.toString().padStart(2, '0')}:${minutes} ${ampm}`;
+    } catch (e) {
+        return timeString;
+    }
+}
+
 export default function AttendancePage() {
     const { activeBusiness } = useBusiness();
     const [loading, setLoading] = useState(true);
@@ -198,7 +212,7 @@ export default function AttendancePage() {
                                             <div className="font-medium">{record.email}</div>
                                             <div className="text-xs text-muted-foreground uppercase">{record.role}</div>
                                         </TableCell>
-                                        <TableCell>{record.shiftStart ? record.shiftStart : "No schedule"}</TableCell>
+                                        <TableCell>{record.shiftStart ? formatTime12(record.shiftStart) : "No schedule"}</TableCell>
                                         <TableCell>
                                             {record.status === 'Present' && <Badge variant="default" className="bg-green-500 hover:bg-green-600">Present</Badge>}
                                             {record.status === 'Absent' && <Badge variant="destructive">Absent</Badge>}

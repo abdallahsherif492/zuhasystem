@@ -21,6 +21,20 @@ type AttendanceRecord = {
     delayMinutes: number;
 };
 
+
+function formatTime12(timeString: string | null) {
+    if (!timeString) return 'N/A';
+    try {
+        const [hours, minutes] = timeString.split(':');
+        const h = parseInt(hours, 10);
+        const ampm = h >= 12 ? 'PM' : 'AM';
+        const h12 = h % 12 || 12;
+        return `${h12.toString().padStart(2, '0')}:${minutes} ${ampm}`;
+    } catch (e) {
+        return timeString;
+    }
+}
+
 export default function EmployeeAttendancePage({ params }: { params: Promise<{ email: string }> }) {
     const resolvedParams = use(params);
     const email = decodeURIComponent(resolvedParams.email);
@@ -151,7 +165,7 @@ export default function EmployeeAttendancePage({ params }: { params: Promise<{ e
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-muted/50 p-4 rounded-xl border">
                 <div className="text-sm">
                     <span className="text-muted-foreground mr-2">Shift:</span>
-                    <span className="font-medium font-mono">{employeeInfo?.shift_start || 'N/A'} - {employeeInfo?.shift_end || 'N/A'}</span>
+                    <span className="font-medium font-mono">{formatTime12(employeeInfo?.shift_start)} - {formatTime12(employeeInfo?.shift_end)}</span>
                 </div>
                 <div className="flex items-center gap-2">
                     <div className="flex items-center gap-2 bg-background border rounded-md px-3 py-1">

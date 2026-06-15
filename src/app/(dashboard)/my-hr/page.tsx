@@ -25,6 +25,20 @@ type HRRequest = {
     created_at: string;
 };
 
+
+function formatTime12(timeString: string | null) {
+    if (!timeString) return 'N/A';
+    try {
+        const [hours, minutes] = timeString.split(':');
+        const h = parseInt(hours, 10);
+        const ampm = h >= 12 ? 'PM' : 'AM';
+        const h12 = h % 12 || 12;
+        return `${h12.toString().padStart(2, '0')}:${minutes} ${ampm}`;
+    } catch (e) {
+        return timeString;
+    }
+}
+
 export default function MyHRPage() {
     const { activeBusiness, shiftStart, shiftEnd, weekendDays } = useBusiness();
     const [requests, setRequests] = useState<HRRequest[]>([]);
@@ -293,7 +307,7 @@ export default function MyHRPage() {
                         </CardTitle>
                     </CardHeader>
                     <CardContent>
-                        <p className="text-2xl font-mono font-bold text-blue-900 dark:text-blue-100">{shiftStart || 'Not set'}</p>
+                        <p className="text-2xl font-mono font-bold text-blue-900 dark:text-blue-100">{formatTime12(shiftStart)}</p>
                     </CardContent>
                 </Card>
                 <Card className="bg-indigo-50/50 dark:bg-indigo-900/10 border-indigo-100 dark:border-indigo-900/30">
@@ -303,7 +317,7 @@ export default function MyHRPage() {
                         </CardTitle>
                     </CardHeader>
                     <CardContent>
-                        <p className="text-2xl font-mono font-bold text-indigo-900 dark:text-indigo-100">{shiftEnd || 'Not set'}</p>
+                        <p className="text-2xl font-mono font-bold text-indigo-900 dark:text-indigo-100">{formatTime12(shiftEnd)}</p>
                     </CardContent>
                 </Card>
                 <Card className="bg-orange-50/50 dark:bg-orange-900/10 border-orange-100 dark:border-orange-900/30">
