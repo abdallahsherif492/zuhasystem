@@ -95,25 +95,28 @@ export default function EmployeeAttendancePage({ params }: { params: Promise<{ e
                 const dateStr = format(day, 'yyyy-MM-dd');
                 const dayOfWeek = format(day, 'EEEE');
                 
-                const log = logsData?.find(l => {
-                    if (l.date && l.date.startsWith(dateStr)) return true;
-                    if (l.clock_in_time) {
-                        const clockInStr = format(parseISO(l.clock_in_time), 'yyyy-MM-dd');
-                        if (clockInStr === dateStr) return true;
-                        
-                        // Handle overnight shift logic (e.g. clocked in at 1 AM for previous day's shift)
-                        const clockIn = parseISO(l.clock_in_time);
-                        if (userRow.shift_start) {
-                            const [sh] = userRow.shift_start.split(':').map(Number);
-                            if (sh >= 12 && clockIn.getHours() < 12) {
-                                // clocked in AM but shift is PM, likely belongs to previous day
-                                const prevDay = new Date(clockIn);
-                                prevDay.setDate(prevDay.getDate() - 1);
-                                if (format(prevDay, 'yyyy-MM-dd') === dateStr) return true;
-                            }
+                // Sort by clock_in_time desc so we pick the latest shift for the day if there are multiple
+                const sortedLogs = [...(logsData || [])].sort((a, b) => new Date(b.clock_in_time).getTime() - new Date(a.clock_in_time).getTime());
+
+                const log = sortedLogs.find(l => {
+                    if (!l.clock_in_time) return false;
+                    
+                    const clockIn = parseISO(l.clock_in_time);
+                    const clockInStr = format(clockIn, 'yyyy-MM-dd');
+                    let shiftDateStr = clockInStr;
+
+                    // Handle overnight shift logic (e.g. clocked in at 1 AM for previous day's shift)
+                    if (userRow.shift_start) {
+                        const [sh] = userRow.shift_start.split(':').map(Number);
+                        if (sh >= 12 && clockIn.getHours() < 12) {
+                            // clocked in AM but shift is PM, likely belongs to previous day
+                            const prevDay = new Date(clockIn);
+                            prevDay.setDate(prevDay.getDate() - 1);
+                            shiftDateStr = format(prevDay, 'yyyy-MM-dd');
                         }
                     }
-                    return false;
+                    
+                    return shiftDateStr === dateStr;
                 });
                 const isWeekend = (userRow.weekend_days || []).includes(dayOfWeek);
                 

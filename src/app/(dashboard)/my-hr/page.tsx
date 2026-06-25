@@ -127,7 +127,7 @@ export default function MyHRPage() {
             .select("*")
             .eq("business_id", activeBusiness.id)
             .eq("user_email", user.email)
-            .order("date", { ascending: false })
+            .order("clock_in_time", { ascending: false })
             .limit(1)
             .maybeSingle();
 
@@ -167,7 +167,7 @@ export default function MyHRPage() {
             .select("*")
             .eq("business_id", activeBusiness.id)
             .eq("user_email", user.email)
-            .order("date", { ascending: false })
+            .order("clock_in_time", { ascending: false })
             .limit(30);
             
         if (rawHistory) {

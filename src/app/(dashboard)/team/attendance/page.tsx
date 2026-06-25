@@ -76,39 +76,44 @@ export default function AttendancePage() {
             .select("user_email, role, shift_start, shift_end, weekend_days")
             .eq("business_id", activeBusiness.id);
 
-        // 2. Fetch Shifts for the selected date
+        // 2. Fetch Shifts for the selected date window based on clock_in_time
         const targetDateObj = new Date(date);
         const prevDateStr = new Date(targetDateObj.getTime() - 86400000).toISOString().split('T')[0];
-        const nextDateStr = new Date(targetDateObj.getTime() + 86400000).toISOString().split('T')[0];
+        const nextDateStr = new Date(targetDateObj.getTime() + 86400000 * 2).toISOString().split('T')[0];
 
         const { data: shiftsData } = await supabase
             .from("attendance_logs")
             .select("id, user_email, clock_in_time, clock_out_time, date")
             .eq("business_id", activeBusiness.id)
-            .in("date", [prevDateStr, date, nextDateStr]);
+            .gte("clock_in_time", prevDateStr)
+            .lt("clock_in_time", nextDateStr);
 
         const users = (usersData || []) as BusinessUser[];
 
         const attendance: AttendanceRecord[] = users.map(user => {
             const userEmail = user.user_email.toLowerCase();
-            const userShift = shiftsData?.find(s => {
-                if (s.user_email.toLowerCase() !== userEmail) return false;
-                if (s.date && s.date.startsWith(date)) return true;
-                if (s.clock_in_time) {
-                    const clockInStr = format(parseISO(s.clock_in_time), 'yyyy-MM-dd');
-                    if (clockInStr === date) return true;
-                    
-                    const clockIn = parseISO(s.clock_in_time);
-                    if (user.shift_start) {
-                        const [sh] = user.shift_start.split(':').map(Number);
-                        if (sh >= 12 && clockIn.getHours() < 12) {
-                            const prevDay = new Date(clockIn);
-                            prevDay.setDate(prevDay.getDate() - 1);
-                            if (format(prevDay, 'yyyy-MM-dd') === date) return true;
-                        }
+            const userShifts = shiftsData?.filter(s => s.user_email.toLowerCase() === userEmail) || [];
+            
+            // Sort by clock_in_time desc so we pick the latest shift for the day if there are multiple
+            userShifts.sort((a, b) => new Date(b.clock_in_time).getTime() - new Date(a.clock_in_time).getTime());
+
+            const userShift = userShifts.find(s => {
+                if (!s.clock_in_time) return false;
+                
+                const clockIn = parseISO(s.clock_in_time);
+                const clockInStr = format(clockIn, 'yyyy-MM-dd');
+                let shiftDateStr = clockInStr;
+                
+                if (user.shift_start) {
+                    const [sh] = user.shift_start.split(':').map(Number);
+                    if (sh >= 12 && clockIn.getHours() < 12) {
+                        const prevDay = new Date(clockIn);
+                        prevDay.setDate(prevDay.getDate() - 1);
+                        shiftDateStr = format(prevDay, 'yyyy-MM-dd');
                     }
                 }
-                return false;
+                
+                return shiftDateStr === date;
             });
             const isWeekend = (user.weekend_days || []).includes(dayOfWeek);
             
