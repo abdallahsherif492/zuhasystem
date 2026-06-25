@@ -39,6 +39,7 @@ import {
 import { DateRangePicker } from "@/components/date-range-picker";
 import { useSearchParams } from "next/navigation";
 import { Suspense } from "react";
+import { Checkbox } from "@/components/ui/checkbox";
 
 import { useBusiness } from "@/contexts/BusinessContext";
 
@@ -69,6 +70,7 @@ function PayableContent() {
     const [paymentStatus, setPaymentStatus] = useState<"Partially Paid" | "Fully Paid">("Partially Paid");
     const [paymentAmount, setPaymentAmount] = useState("");
     const [paymentTreasury, setPaymentTreasury] = useState("Abdallah Sherif");
+    const [addToTransactions, setAddToTransactions] = useState(true);
     const [isSubmittingPayment, setIsSubmittingPayment] = useState(false);
 
     useEffect(() => {
@@ -184,26 +186,28 @@ function PayableContent() {
                 .eq("id", paymentInvoice.id);
             if (invError) throw invError;
 
-            // 2. Create Transaction
-            const supplierName = paymentInvoice.suppliers?.name || "Supplier";
-            const { error: transError } = await supabase
-                .from("transactions")
-                .insert([
-                    {
-                        business_id: activeBusiness!.id,
-                        transaction_date: format(new Date(), "yyyy-MM-dd"),
-                        amount: -Math.abs(amountToPay), // Negative for expense
-                        type: "expense",
-                        category: "Purchases",
-                        sub_category: "Supplier Invoice",
-                        account_name: paymentTreasury,
-                        description: `Payment for Invoice #${paymentInvoice.invoice_number || paymentInvoice.id.slice(0, 8)} to ${supplierName}`
-                    }
-                ]);
+            // 2. Create Transaction (if requested)
+            if (addToTransactions) {
+                const supplierName = paymentInvoice.suppliers?.name || "Supplier";
+                const { error: transError } = await supabase
+                    .from("transactions")
+                    .insert([
+                        {
+                            business_id: activeBusiness!.id,
+                            transaction_date: format(new Date(), "yyyy-MM-dd"),
+                            amount: -Math.abs(amountToPay), // Negative for expense
+                            type: "expense",
+                            category: "Purchases",
+                            sub_category: "Supplier Invoice",
+                            account_name: paymentTreasury,
+                            description: `Payment for Invoice #${paymentInvoice.invoice_number || paymentInvoice.id.slice(0, 8)} to ${supplierName}`
+                        }
+                    ]);
 
-            if (transError) throw transError;
+                if (transError) throw transError;
+            }
 
-            toast.success(`Payment registered and deducted from ${paymentTreasury}`);
+            toast.success(addToTransactions ? `Payment registered and deducted from ${paymentTreasury}` : "Payment registered successfully");
             setPaymentInvoice(null);
             fetchData();
         } catch (error: any) {
@@ -498,6 +502,20 @@ function PayableContent() {
                                     <SelectItem value="Safe">Safe</SelectItem>
                                 </SelectContent>
                             </Select>
+                        </div>
+
+                        <div className="flex items-center space-x-2 pt-2">
+                            <Checkbox 
+                                id="addToTrans" 
+                                checked={addToTransactions} 
+                                onCheckedChange={(checked) => setAddToTransactions(checked as boolean)}
+                            />
+                            <label
+                                htmlFor="addToTrans"
+                                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                            >
+                                Add this payment to Transactions Log?
+                            </label>
                         </div>
                     </div>
                     <DialogFooter>
