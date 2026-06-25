@@ -257,7 +257,7 @@ function InsightsContent() {
             const [
                 { data: investData },
                 { data: pendingData },
-                { data: allTransactions },
+                { data: balancesData },
                 { data: accountsData },
                 { data: stockData },
                 { data: supplierInvoicesData }
@@ -266,8 +266,8 @@ function InsightsContent() {
                 supabase.from('transactions').select('amount').eq('business_id', activeBusiness.id).eq('type', 'investment'),
                 // 2. Pending Orders (Prepared + Shipped Only)
                 supabase.from('orders').select('total_amount').eq('business_id', activeBusiness.id).in('status', ['Prepared', 'Shipped']),
-                // 3. Treasury Balances
-                supabase.from('transactions').select('amount, account_name').eq('business_id', activeBusiness.id),
+                // 3. Treasury Balances (using same RPC as accounting page)
+                supabase.rpc('get_treasury_balances', { p_business_id: activeBusiness.id }),
                 supabase.from('financial_accounts').select('name').eq('business_id', activeBusiness.id),
                 // 4. Stock Value
                 supabase.from('variants').select('cost_price, stock_qty'),
@@ -286,14 +286,11 @@ function InsightsContent() {
             }
 
             let totalTreasuryVal = 0;
-            if (allTransactions) {
-                allTransactions.forEach(row => {
-                    if (row.account_name) {
-                        if (treasuries[row.account_name] === undefined) {
-                            treasuries[row.account_name] = 0;
-                        }
-                        const amt = Number(row.amount) || 0;
-                        treasuries[row.account_name] += amt;
+            if (balancesData) {
+                balancesData.forEach((t: any) => {
+                    if (t.account_name) {
+                        const amt = Number(t.balance) || 0;
+                        treasuries[t.account_name] = amt;
                         totalTreasuryVal += amt;
                     }
                 });
