@@ -63,7 +63,7 @@ export default function EmployeeAttendancePage({ params }: { params: Promise<{ e
                 .from("business_users")
                 .select("role, shift_start, shift_end, weekend_days")
                 .eq("business_id", activeBusiness.id)
-                .eq("user_email", email)
+                .ilike("user_email", email)
                 .single();
 
             if (userError) throw userError;
