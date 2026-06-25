@@ -120,7 +120,7 @@ function ProductAnalysisContent() {
             variantsData?.forEach(v => {
                 metricsMap.set(v.id, {
                     variant_id: v.id,
-                    product_name: v.products?.name || 'Unknown Product',
+                    product_name: (v.products as any)?.name || 'Unknown Product',
                     variant_name: v.title || 'Default',
                     total_orders: 0,
                     total_sales: 0,
