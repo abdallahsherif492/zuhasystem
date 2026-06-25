@@ -37,7 +37,7 @@ function formatTime12(timeString: string | null) {
 
 export default function EmployeeAttendancePage({ params }: { params: Promise<{ email: string }> }) {
     const resolvedParams = use(params);
-    const email = decodeURIComponent(resolvedParams.email);
+    const email = decodeURIComponent(resolvedParams.email).trim();
     const { activeBusiness } = useBusiness();
     const [loading, setLoading] = useState(true);
     const [records, setRecords] = useState<AttendanceRecord[]>([]);

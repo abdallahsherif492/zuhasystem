@@ -91,8 +91,8 @@ export default function AttendancePage() {
         const users = (usersData || []) as BusinessUser[];
 
         const attendance: AttendanceRecord[] = users.map(user => {
-            const userEmail = user.user_email.toLowerCase();
-            const userShifts = shiftsData?.filter(s => s.user_email.toLowerCase() === userEmail) || [];
+            const userEmail = (user.user_email || "").toLowerCase().trim();
+            const userShifts = shiftsData?.filter(s => (s.user_email || "").toLowerCase().trim() === userEmail) || [];
             
             // Sort by clock_in_time desc so we pick the latest shift for the day if there are multiple
             userShifts.sort((a, b) => new Date(b.clock_in_time).getTime() - new Date(a.clock_in_time).getTime());
