@@ -7,5 +7,8 @@ const supabase = createClient(
 );
 
 async function test() {
-    // Just fetch column info via REST? Can't.
+    const { data, error } = await supabase.from('system_admins').select('*');
+    console.log("System Admins:", data);
+    console.log("Error:", error);
 }
+test();

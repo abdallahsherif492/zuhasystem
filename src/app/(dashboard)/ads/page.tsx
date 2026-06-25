@@ -11,7 +11,7 @@ import { Loader2, Upload, Megaphone, Trash2, Calendar as CalendarIcon, Plus } fr
 import Papa from "papaparse";
 import { toast } from "sonner";
 import { formatCurrency, cn } from "@/lib/utils";
-import { format, subDays } from "date-fns";
+import { format, subDays, startOfDay, endOfDay } from "date-fns";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Progress } from "@/components/ui/progress";
@@ -99,12 +99,11 @@ export default function AdsPage() {
             return;
         }
 
-        const start = dateRange.from.getTime();
-        const end = dateRange.to ? dateRange.to.getTime() : start; // Default to single day if no end
+        const start = startOfDay(dateRange.from).getTime();
+        const end = dateRange.to ? endOfDay(dateRange.to).getTime() : endOfDay(dateRange.from).getTime();
 
         const filtered = expenses.filter(item => {
             const itemDate = new Date(item.ad_date).getTime();
-            // Ensure itemDate is within the selected range (inclusive)
             return itemDate >= start && itemDate <= end;
         });
 

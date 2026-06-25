@@ -113,12 +113,12 @@ BEGIN
             fo.payment_status,
             fo.paid_amount,
             (
-                SELECT json_agg(
-                    json_build_object(
+                SELECT jsonb_agg(
+                    jsonb_build_object(
                         ''quantity'', oi.quantity,
-                        ''variant'', json_build_object(
+                        ''variant'', jsonb_build_object(
                             ''title'', v.title,
-                            ''product'', json_build_object(
+                            ''product'', jsonb_build_object(
                                 ''id'', p.id,
                                 ''name'', p.name
                             )

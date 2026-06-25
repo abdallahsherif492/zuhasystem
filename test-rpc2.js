@@ -7,5 +7,6 @@ const supabase = createClient(
 );
 
 async function test() {
-    // Just fetch column info via REST? Can't.
+    // Authenticate first if needed, but wait I can't authenticate without email/password.
+    // Let me fetch via REST API directly? No.
 }

@@ -99,17 +99,29 @@ function InsightsContent() {
             const dateOnlyEnd = toDate || format(new Date(), "yyyy-MM-dd");
 
             // --- 1. ADS INSIGHTS ---
-            const { data: adsData, error: adsError } = await supabase.rpc('get_insight_ads_stats', {
-                from_date: start, // Assuming RPC updated to take timestamp or date string
-                to_date: end
-            });
-            if (adsError) throw adsError;
+            const [
+                { data: rawAdsExpenses },
+                { data: rawOrders }
+            ] = await Promise.all([
+                supabase.from('ads_expenses')
+                    .select('ad_date, amount')
+                    .eq('business_id', activeBusiness.id)
+                    .gte('ad_date', dateOnlyStart)
+                    .lte('ad_date', dateOnlyEnd),
+                supabase.from('orders')
+                    .select('created_at, total_amount, status, total_cost, shipping_cost')
+                    .eq('business_id', activeBusiness.id)
+                    .gte('created_at', start)
+                    .lte('created_at', end)
+            ]);
 
-            // Ads RPC returns table with single row
-            const adsRow = adsData[0] || { total_ads_spent: 0, total_orders: 0, total_revenue: 0 };
-            const adsSpent = Number(adsRow.total_ads_spent);
-            const adsOrders = Number(adsRow.total_orders);
-            const adsRev = Number(adsRow.total_revenue);
+            const adsExpensesArr = rawAdsExpenses || [];
+            const ordersArr = rawOrders || [];
+            const validOrdersArr = ordersArr.filter(o => o.status !== 'Cancelled');
+
+            const adsSpent = adsExpensesArr.reduce((sum, item) => sum + Number(item.amount || 0), 0);
+            const adsOrders = validOrdersArr.length;
+            const adsRev = validOrdersArr.reduce((sum, item) => sum + Number(item.total_amount || 0), 0);
 
             setAdsMetrics({
                 adsSpent,
@@ -121,32 +133,56 @@ function InsightsContent() {
             });
 
             // 1.1 Daily Ads Data
-            const { data: dailyData, error: dailyError } = await supabase.rpc('get_daily_ads_performance', {
-                from_date: start,
-                to_date: end
+            const dailyMap = new Map<string, any>();
+            let currDate = parseISO(start);
+            const endDateObj = parseISO(end);
+            
+            while (currDate <= endDateObj) {
+                const dayStr = format(currDate, "yyyy-MM-dd");
+                dailyMap.set(dayStr, {
+                    day_date: dayStr,
+                    daily_ads_spent: 0,
+                    daily_orders: 0,
+                    daily_revenue: 0,
+                    daily_cpo: 0,
+                    daily_roas: 0
+                });
+                currDate.setDate(currDate.getDate() + 1);
+            }
+
+            adsExpensesArr.forEach(item => {
+                const dayStr = format(parseISO(item.ad_date), "yyyy-MM-dd");
+                if (dailyMap.has(dayStr)) {
+                    dailyMap.get(dayStr).daily_ads_spent += Number(item.amount || 0);
+                }
             });
-            if (dailyError) throw dailyError;
-            setDailyAdsData(dailyData || []);
+
+            validOrdersArr.forEach(item => {
+                const dayStr = format(parseISO(item.created_at), "yyyy-MM-dd");
+                if (dailyMap.has(dayStr)) {
+                    dailyMap.get(dayStr).daily_orders += 1;
+                    dailyMap.get(dayStr).daily_revenue += Number(item.total_amount || 0);
+                }
+            });
+
+            const dailyData = Array.from(dailyMap.values()).map(d => {
+                d.daily_cpo = d.daily_orders > 0 ? d.daily_ads_spent / d.daily_orders : 0;
+                d.daily_roas = d.daily_ads_spent > 0 ? d.daily_revenue / d.daily_ads_spent : 0;
+                return d;
+            });
+            setDailyAdsData(dailyData);
 
             // --- 2. ORDERS INSIGHTS ---
-            const { data: ordData, error: ordError } = await supabase.rpc('get_insight_orders_stats', {
-                from_date: start,
-                to_date: end
-            });
-            if (ordError) throw ordError;
+            const ordCount = ordersArr.length;
+            const ordRev = ordersArr.reduce((sum, item) => sum + Number(item.total_amount || 0), 0);
+            const ordCogs = ordersArr.reduce((sum, item) => sum + Number(item.total_cost || 0), 0);
+            const ordShip = ordersArr.reduce((sum, item) => sum + Number(item.shipping_cost || 0), 0);
+            const wonCount = ordersArr.filter(o => o.status !== 'Cancelled' && o.status !== 'Returned').length;
 
-            const ordRow = ordData[0] || { total_count: 0, total_revenue: 0, total_cogs: 0, total_shipping: 0, won_count: 0 };
-            const ordCount = Number(ordRow.total_count);
-            const ordRev = Number(ordRow.total_revenue);
-            const ordCogs = Number(ordRow.total_cogs);
-            const ordShip = Number(ordRow.total_shipping);
-            const wonCount = Number(ordRow.won_count);
-
-            const handling = 0; // Removed hardcoded 10 EGP handling fee as requested
-            const totalDeductions = ordCogs + adsSpent + ordShip; // Ads Spent is reused here
+            const handling = 0;
+            const totalDeductions = ordCogs + adsSpent + ordShip; 
             const ordNetProfit = ordRev - totalDeductions;
 
-            // Collectable Orders total minus actual shipping
             const collectable = ordRev - ordShip;
 
             setOrdersMetrics({
@@ -165,26 +201,46 @@ function InsightsContent() {
 
 
             // --- 3. BUSINESS INSIGHTS ---
-            const { data: busData, error: busError } = await supabase.rpc('get_insight_business_stats', {
-                from_date: dateOnlyStart,
-                to_date: dateOnlyEnd
-            });
+            const { data: rawTransactions, error: busError } = await supabase
+                .from('transactions')
+                .select('type, category, amount, transaction_date')
+                .eq('business_id', activeBusiness.id)
+                .gte('transaction_date', dateOnlyStart)
+                .lte('transaction_date', dateOnlyEnd);
+
             if (busError) throw busError;
 
-            const busRow = busData[0] || { total_revenue: 0, total_expenses: 0, ads_expenses: 0, purchases_expenses: 0, other_expenses: 0 };
-            const busRev = Number(busRow.total_revenue);
-            const busExp = Number(busRow.total_expenses);
+            let busRev = 0;
+            let busExp = 0;
+            let busAdsExp = 0;
+            let busPurExp = 0;
+            let busOthExp = 0;
 
-            // Fix: Net Profit = Revenue + Expenses (since expenses are negative)
-            // Example: 1000 + (-300) = 700
-            const busNet = busRev + busExp;
+            (rawTransactions || []).forEach(t => {
+                const amt = Number(t.amount || 0);
+                if (t.type === 'revenue') {
+                    busRev += amt;
+                } else if (t.type === 'expense') {
+                    busExp += amt;
+                    const cat = (t.category || '').toLowerCase();
+                    if (cat === 'ads') {
+                        busAdsExp += amt;
+                    } else if (cat === 'purchases') {
+                        busPurExp += amt;
+                    } else {
+                        busOthExp += amt;
+                    }
+                }
+            });
+
+            const busNet = busRev + busExp; // expenses are negative
 
             setBusinessMetrics({
                 revenue: busRev,
                 totalExpenses: busExp,
-                adsExpenses: Number(busRow.ads_expenses),
-                purchasesExpenses: Number(busRow.purchases_expenses),
-                otherExpenses: Number(busRow.other_expenses),
+                adsExpenses: busAdsExp,
+                purchasesExpenses: busPurExp,
+                otherExpenses: busOthExp,
                 netProfit: busNet,
                 roi: busExp ? (busNet / Math.abs(busExp)) * 100 : 0
             });
