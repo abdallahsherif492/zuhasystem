@@ -39,6 +39,50 @@ function formatTime12(timeString: string | null) {
     }
 }
 
+function getLogicalShiftDate(currentDate: Date, shiftStartString: string | null): string {
+    if (!shiftStartString) return currentDate.toISOString().split('T')[0];
+    const [hours, minutes] = shiftStartString.split(':').map(Number);
+    const offsetHours = 2 - hours;
+    const offsetMinutes = -minutes;
+    
+    const logicalDate = new Date(currentDate);
+    logicalDate.setHours(logicalDate.getHours() + offsetHours);
+    logicalDate.setMinutes(logicalDate.getMinutes() + offsetMinutes);
+    
+    const yyyy = logicalDate.getFullYear();
+    const mm = String(logicalDate.getMonth() + 1).padStart(2, '0');
+    const dd = String(logicalDate.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+}
+
+function getShiftEndDateTime(logicalDateStr: string, shiftStartStr: string | null, shiftEndStr: string | null): Date {
+    const endDate = new Date(`${logicalDateStr}T00:00:00`);
+    if (!shiftStartStr || !shiftEndStr) {
+        endDate.setHours(23, 59, 59, 999);
+        return endDate;
+    }
+    const [startH, startM] = shiftStartStr.split(':').map(Number);
+    const [endH, endM] = shiftEndStr.split(':').map(Number);
+    
+    endDate.setHours(endH, endM, 0, 0);
+    
+    if (endH < startH || (endH === startH && endM < startM)) {
+        endDate.setDate(endDate.getDate() + 1);
+    }
+    return endDate;
+}
+
+function getShiftStartDateTime(logicalDateStr: string, shiftStartStr: string | null): Date {
+    const startDate = new Date(`${logicalDateStr}T00:00:00`);
+    if (!shiftStartStr) {
+        startDate.setHours(0, 0, 0, 0);
+        return startDate;
+    }
+    const [startH, startM] = shiftStartStr.split(':').map(Number);
+    startDate.setHours(startH, startM, 0, 0);
+    return startDate;
+}
+
 export default function MyHRPage() {
     const { activeBusiness, shiftStart, shiftEnd, weekendDays } = useBusiness();
     const [requests, setRequests] = useState<HRRequest[]>([]);
@@ -74,14 +118,41 @@ export default function MyHRPage() {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
 
-        const today = new Date().toISOString().split('T')[0];
+        const now = new Date();
+        const logicalDate = getLogicalShiftDate(now, shiftStart);
 
+        // Auto-logout check for any unclosed session
+        const { data: lastAttendance } = await supabase
+            .from("attendance_logs")
+            .select("*")
+            .eq("business_id", activeBusiness.id)
+            .eq("user_email", user.email)
+            .order("date", { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
+        if (lastAttendance && !lastAttendance.clock_out_time) {
+            const shiftEndDate = getShiftEndDateTime(lastAttendance.date, shiftStart, shiftEnd);
+            const autoLogoutTime = new Date(shiftEndDate.getTime() + 5 * 60 * 60 * 1000); // + 5 hours
+            
+            if (now > autoLogoutTime) {
+                await supabase
+                    .from("attendance_logs")
+                    .update({ 
+                        clock_out_time: autoLogoutTime.toISOString()
+                    })
+                    .eq("id", lastAttendance.id);
+                toast("System auto-logged out your previous shift.", { icon: '⏲️' });
+            }
+        }
+
+        // Fetch current logical day's attendance
         const { data, error } = await supabase
             .from("attendance_logs")
             .select("*")
             .eq("business_id", activeBusiness.id)
             .eq("user_email", user.email)
-            .eq("date", today)
+            .eq("date", logicalDate)
             .maybeSingle();
 
         if (!error && data) {
@@ -90,7 +161,8 @@ export default function MyHRPage() {
             setTodayAttendance(null);
         }
         
-        const { data: historyData } = await supabase
+        // Fetch raw history
+        const { data: rawHistory } = await supabase
             .from("attendance_logs")
             .select("*")
             .eq("business_id", activeBusiness.id)
@@ -98,8 +170,39 @@ export default function MyHRPage() {
             .order("date", { ascending: false })
             .limit(30);
             
-        if (historyData) {
-            setAttendanceHistory(historyData);
+        if (rawHistory) {
+            // Build dynamic timeline for the past 30 days
+            const dynamicHistory = [];
+            const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+            
+            for (let i = 0; i < 30; i++) {
+                const d = new Date(logicalDate);
+                d.setDate(d.getDate() - i);
+                const dStr = d.toISOString().split('T')[0];
+                const dayName = dayNames[d.getDay()];
+                
+                const isWeekend = weekendDays?.includes(dayName);
+                const record = rawHistory.find(r => r.date === dStr);
+                
+                if (record) {
+                    let delayMinutes = 0;
+                    if (shiftStart) {
+                        const expectedStart = getShiftStartDateTime(record.date, shiftStart);
+                        const actualStart = new Date(record.clock_in_time);
+                        if (actualStart > expectedStart) {
+                            delayMinutes = Math.floor((actualStart.getTime() - expectedStart.getTime()) / 60000);
+                        }
+                    }
+                    dynamicHistory.push({ ...record, delayMinutes, isWeekend });
+                } else if (!isWeekend && d < now && i > 0) {
+                    // Missed a workday in the past
+                    dynamicHistory.push({ id: `absent-${dStr}`, date: dStr, isAbsent: true, status: 'absent' });
+                } else if (isWeekend && !record) {
+                    // Optional: show weekend
+                    // dynamicHistory.push({ id: `weekend-${dStr}`, date: dStr, isWeekend: true, status: 'weekend' });
+                }
+            }
+            setAttendanceHistory(dynamicHistory);
         }
 
         setAttendanceLoading(false);
@@ -111,16 +214,16 @@ export default function MyHRPage() {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
 
-        const today = new Date().toISOString().split('T')[0];
-        const now = new Date().toISOString();
+        const now = new Date();
+        const logicalDate = getLogicalShiftDate(now, shiftStart);
 
         const { error } = await supabase
             .from("attendance_logs")
             .insert({
                 business_id: activeBusiness.id,
                 user_email: user.email,
-                date: today,
-                clock_in_time: now,
+                date: logicalDate,
+                clock_in_time: now.toISOString(),
                 status: 'present'
             });
 
@@ -424,14 +527,24 @@ export default function MyHRPage() {
                                 {attendanceHistory.length === 0 ? (
                                     <TableRow><TableCell colSpan={4} className="text-center">No attendance records found.</TableCell></TableRow>
                                 ) : attendanceHistory.map((record) => (
-                                    <TableRow key={record.id}>
-                                        <TableCell className="font-medium">{format(parseISO(record.date), 'MMM dd, yyyy')}</TableCell>
+                                    <TableRow key={record.id} className={record.isAbsent ? "bg-red-500/10" : ""}>
+                                        <TableCell className="font-medium">
+                                            {format(parseISO(record.date), 'MMM dd, yyyy')}
+                                            {record.isAbsent && <span className="ml-2 text-xs text-red-500 font-semibold">(Absent)</span>}
+                                        </TableCell>
                                         <TableCell>{record.clock_in_time ? format(parseISO(record.clock_in_time), 'hh:mm a') : '-'}</TableCell>
                                         <TableCell>{record.clock_out_time ? format(parseISO(record.clock_out_time), 'hh:mm a') : '-'}</TableCell>
                                         <TableCell>
-                                            <Badge variant="outline" className="capitalize">
-                                                {record.status || 'Present'}
-                                            </Badge>
+                                            <div className="flex gap-2 items-center">
+                                                <Badge variant={record.isAbsent ? "destructive" : "outline"} className="capitalize">
+                                                    {record.status || 'Present'}
+                                                </Badge>
+                                                {record.delayMinutes > 0 && (
+                                                    <Badge variant="secondary" className="text-orange-500 border-orange-500/30">
+                                                        {record.delayMinutes} min late
+                                                    </Badge>
+                                                )}
+                                            </div>
                                         </TableCell>
                                     </TableRow>
                                 ))}
