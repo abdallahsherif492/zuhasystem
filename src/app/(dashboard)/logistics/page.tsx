@@ -596,6 +596,7 @@ function LogisticsContent() {
                             onChange={setGovFilter}
                             placeholder="Governorate"
                             className="bg-white"
+                            showSelectAll={true}
                         />
                         <MultiSelect
                             options={productsOptions}

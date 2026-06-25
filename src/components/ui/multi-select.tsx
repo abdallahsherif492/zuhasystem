@@ -29,6 +29,8 @@ interface MultiSelectProps {
     onChange: (selected: string[]) => void;
     placeholder?: string;
     className?: string;
+    showSelectAll?: boolean;
+    selectAllLabel?: string;
 }
 
 export function MultiSelect({
@@ -37,6 +39,8 @@ export function MultiSelect({
     onChange,
     placeholder = "Select options...",
     className,
+    showSelectAll = false,
+    selectAllLabel = "Select All",
 }: MultiSelectProps) {
     const [open, setOpen] = React.useState(false);
 
@@ -84,6 +88,29 @@ export function MultiSelect({
                     <CommandList>
                         <CommandEmpty>No results found.</CommandEmpty>
                         <CommandGroup className="max-h-64 overflow-auto">
+                            {showSelectAll && options.length > 0 && (
+                                <CommandItem
+                                    key="select-all"
+                                    value={selectAllLabel}
+                                    onSelect={() => {
+                                        if (selected.length === options.length) {
+                                            onChange([]);
+                                        } else {
+                                            onChange(options.map(o => o.value));
+                                        }
+                                    }}
+                                >
+                                    <Check
+                                        className={cn(
+                                            "mr-2 h-4 w-4",
+                                            selected.length === options.length
+                                                ? "opacity-100"
+                                                : "opacity-0"
+                                        )}
+                                    />
+                                    {selectAllLabel}
+                                </CommandItem>
+                            )}
                             {options.map((option) => (
                                 <CommandItem
                                     key={option.value}
