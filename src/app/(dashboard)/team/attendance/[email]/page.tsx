@@ -69,17 +69,11 @@ export default function EmployeeAttendancePage({ params }: { params: Promise<{ e
             if (userError) throw userError;
             setEmployeeInfo(userRow);
 
-            // 2. Fetch attendance logs in date range
-            const startStr = `${startDate}T00:00:00Z`;
-            const endStr = `${endDate}T23:59:59Z`;
-
             const { data: logsData, error: logsError } = await supabase
                 .from("attendance_logs")
                 .select("*")
                 .eq("business_id", activeBusiness.id)
-                .eq("user_email", email.toLowerCase())
-                .gte("date", startDate)
-                .lte("date", endDate);
+                .ilike("user_email", email);
 
             if (logsError) throw logsError;
 
@@ -101,7 +95,26 @@ export default function EmployeeAttendancePage({ params }: { params: Promise<{ e
                 const dateStr = format(day, 'yyyy-MM-dd');
                 const dayOfWeek = format(day, 'EEEE');
                 
-                const log = logsData?.find(l => l.date === dateStr);
+                const log = logsData?.find(l => {
+                    if (l.date && l.date.startsWith(dateStr)) return true;
+                    if (l.clock_in_time) {
+                        const clockInStr = format(parseISO(l.clock_in_time), 'yyyy-MM-dd');
+                        if (clockInStr === dateStr) return true;
+                        
+                        // Handle overnight shift logic (e.g. clocked in at 1 AM for previous day's shift)
+                        const clockIn = parseISO(l.clock_in_time);
+                        if (userRow.shift_start) {
+                            const [sh] = userRow.shift_start.split(':').map(Number);
+                            if (sh >= 12 && clockIn.getHours() < 12) {
+                                // clocked in AM but shift is PM, likely belongs to previous day
+                                const prevDay = new Date(clockIn);
+                                prevDay.setDate(prevDay.getDate() - 1);
+                                if (format(prevDay, 'yyyy-MM-dd') === dateStr) return true;
+                            }
+                        }
+                    }
+                    return false;
+                });
                 const isWeekend = (userRow.weekend_days || []).includes(dayOfWeek);
                 
                 let status: 'Present' | 'Absent' | 'Weekend' | 'Future' = 'Absent';

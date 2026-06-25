@@ -77,21 +77,39 @@ export default function AttendancePage() {
             .eq("business_id", activeBusiness.id);
 
         // 2. Fetch Shifts for the selected date
-        const nextDate = new Date(targetDate);
-        nextDate.setDate(nextDate.getDate() + 1);
+        const targetDateObj = new Date(date);
+        const prevDateStr = new Date(targetDateObj.getTime() - 86400000).toISOString().split('T')[0];
+        const nextDateStr = new Date(targetDateObj.getTime() + 86400000).toISOString().split('T')[0];
 
         const { data: shiftsData } = await supabase
             .from("attendance_logs")
-            .select("id, user_email, clock_in_time, clock_out_time")
+            .select("id, user_email, clock_in_time, clock_out_time, date")
             .eq("business_id", activeBusiness.id)
-            .gte("clock_in_time", targetDate.toISOString())
-            .lt("clock_in_time", nextDate.toISOString());
+            .in("date", [prevDateStr, date, nextDateStr]);
 
         const users = (usersData || []) as BusinessUser[];
-        const shifts = (shiftsData || []) as Shift[];
 
         const attendance: AttendanceRecord[] = users.map(user => {
-            const userShift = shifts.find(s => s.user_email.toLowerCase() === user.user_email.toLowerCase()) as any;
+            const userEmail = user.user_email.toLowerCase();
+            const userShift = shiftsData?.find(s => {
+                if (s.user_email.toLowerCase() !== userEmail) return false;
+                if (s.date && s.date.startsWith(date)) return true;
+                if (s.clock_in_time) {
+                    const clockInStr = format(parseISO(s.clock_in_time), 'yyyy-MM-dd');
+                    if (clockInStr === date) return true;
+                    
+                    const clockIn = parseISO(s.clock_in_time);
+                    if (user.shift_start) {
+                        const [sh] = user.shift_start.split(':').map(Number);
+                        if (sh >= 12 && clockIn.getHours() < 12) {
+                            const prevDay = new Date(clockIn);
+                            prevDay.setDate(prevDay.getDate() - 1);
+                            if (format(prevDay, 'yyyy-MM-dd') === date) return true;
+                        }
+                    }
+                }
+                return false;
+            });
             const isWeekend = (user.weekend_days || []).includes(dayOfWeek);
             
             let status: 'Present' | 'Absent' | 'Weekend' = 'Absent';
