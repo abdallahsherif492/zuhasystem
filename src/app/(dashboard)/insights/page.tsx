@@ -66,12 +66,19 @@ function InsightsContent() {
     });
 
     // 4. Business Value (Snapshot)
-    const [businessValue, setBusinessValue] = useState({
+    const [businessValue, setBusinessValue] = useState<{
+        totalInvestment: number;
+        pendingOrdersValue: number;
+        stockValue: number;
+        treasuries: Record<string, number>;
+        totalDebts: number;
+        estimatedBusinessValue: number;
+        investmentGrowthRatio: number;
+    }>({
         totalInvestment: 0,
         pendingOrdersValue: 0,
         stockValue: 0,
-        treasuryAbdallah: 0,
-        treasuryMohamed: 0,
+        treasuries: {},
         totalDebts: 0,
         estimatedBusinessValue: 0,
         investmentGrowthRatio: 0
@@ -250,8 +257,8 @@ function InsightsContent() {
             const [
                 { data: investData },
                 { data: pendingData },
-                { data: treasuryAbdallahData },
-                { data: treasuryMohamedData },
+                { data: allTransactions },
+                { data: accountsData },
                 { data: stockData },
                 { data: supplierInvoicesData }
             ] = await Promise.all([
@@ -260,8 +267,8 @@ function InsightsContent() {
                 // 2. Pending Orders (Prepared + Shipped Only)
                 supabase.from('orders').select('total_amount').eq('business_id', activeBusiness.id).in('status', ['Prepared', 'Shipped']),
                 // 3. Treasury Balances
-                supabase.from('transactions').select('amount').eq('business_id', activeBusiness.id).eq('account_name', 'Abdallah Sherif'),
-                supabase.from('transactions').select('amount').eq('business_id', activeBusiness.id).eq('account_name', 'Mohamed Adel'),
+                supabase.from('transactions').select('amount, account_name').eq('business_id', activeBusiness.id),
+                supabase.from('financial_accounts').select('name').eq('business_id', activeBusiness.id),
                 // 4. Stock Value
                 supabase.from('variants').select('cost_price, stock_qty'),
                 // 5. Total Debts
@@ -270,20 +277,39 @@ function InsightsContent() {
 
             const investVal = investData?.reduce((sum, row) => sum + (Number(row.amount) || 0), 0) || 0;
             const pendingVal = pendingData?.reduce((sum, row) => sum + (Number(row.total_amount) || 0), 0) || 0;
-            const treasuryAbdallahVal = treasuryAbdallahData?.reduce((sum, row) => sum + (Number(row.amount) || 0), 0) || 0;
-            const treasuryMohamedVal = treasuryMohamedData?.reduce((sum, row) => sum + (Number(row.amount) || 0), 0) || 0;
+            
+            const treasuries: Record<string, number> = {};
+            if (accountsData) {
+                accountsData.forEach(acc => {
+                    if (acc.name) treasuries[acc.name] = 0;
+                });
+            }
+
+            let totalTreasuryVal = 0;
+            if (allTransactions) {
+                allTransactions.forEach(row => {
+                    if (row.account_name) {
+                        if (treasuries[row.account_name] === undefined) {
+                            treasuries[row.account_name] = 0;
+                        }
+                        const amt = Number(row.amount) || 0;
+                        treasuries[row.account_name] += amt;
+                        totalTreasuryVal += amt;
+                    }
+                });
+            }
+
             const stockVal = stockData?.reduce((sum, row) => sum + ((Number(row.cost_price) || 0) * (Number(row.stock_qty) || 0)), 0) || 0;
             const totalDebtsVal = supplierInvoicesData?.reduce((sum, row) => sum + ((Number(row.total_amount) || 0) - (Number(row.paid_amount) || 0)), 0) || 0;
 
-            const estimatedVal = treasuryAbdallahVal + treasuryMohamedVal + stockVal + pendingVal - totalDebtsVal;
+            const estimatedVal = totalTreasuryVal + stockVal + pendingVal - totalDebtsVal;
             const growthRatio = investVal ? ((estimatedVal - investVal) / investVal) * 100 : 0;
 
             setBusinessValue({
                 totalInvestment: investVal,
                 pendingOrdersValue: pendingVal,
                 stockValue: stockVal,
-                treasuryAbdallah: treasuryAbdallahVal,
-                treasuryMohamed: treasuryMohamedVal,
+                treasuries,
                 totalDebts: totalDebtsVal,
                 estimatedBusinessValue: estimatedVal,
                 investmentGrowthRatio: growthRatio
@@ -344,8 +370,9 @@ function InsightsContent() {
                         </div>
                         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                             <MetricCard title="Pending Orders Value" value={formatCurrency(businessValue.pendingOrdersValue)} sub="Prepared + Shipped only" />
-                            <MetricCard title="Treasury: Abdallah" value={formatCurrency(businessValue.treasuryAbdallah)} sub="Cash Balance" />
-                            <MetricCard title="Treasury: Mohamed" value={formatCurrency(businessValue.treasuryMohamed)} sub="Cash Balance" />
+                            {Object.entries(businessValue.treasuries).map(([name, val]) => (
+                                <MetricCard key={name} title={`Treasury: ${name}`} value={formatCurrency(val)} sub="Cash Balance" />
+                            ))}
                             <MetricCard title="Total Debts" value={formatCurrency(businessValue.totalDebts)} sub="Unpaid Supplier Invoices" neg className="bg-red-50/50" />
                         </div>
                     </div>
