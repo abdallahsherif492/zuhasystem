@@ -77,7 +77,7 @@ export default function EmployeeAttendancePage({ params }: { params: Promise<{ e
                 .from("attendance_logs")
                 .select("*")
                 .eq("business_id", activeBusiness.id)
-                .eq("user_email", email)
+                .eq("user_email", email.toLowerCase())
                 .gte("date", startDate)
                 .lte("date", endDate);
 

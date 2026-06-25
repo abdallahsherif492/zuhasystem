@@ -91,7 +91,7 @@ export default function AttendancePage() {
         const shifts = (shiftsData || []) as Shift[];
 
         const attendance: AttendanceRecord[] = users.map(user => {
-            const userShift = shifts.find(s => s.user_email === user.user_email) as any;
+            const userShift = shifts.find(s => s.user_email.toLowerCase() === user.user_email.toLowerCase()) as any;
             const isWeekend = (user.weekend_days || []).includes(dayOfWeek);
             
             let status: 'Present' | 'Absent' | 'Weekend' = 'Absent';
