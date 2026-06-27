@@ -22,6 +22,7 @@ import { DateRangePicker } from "@/components/date-range-picker";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { MultiSelect, Option } from "@/components/ui/multi-select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import { useDebounce } from "@/hooks/use-debounce";
 
@@ -72,7 +73,7 @@ function OrdersContent() {
 
     // Pagination State
     const [page, setPage] = useState(1);
-    const pageSize = 50;
+    const [pageSize, setPageSize] = useState(50);
 
     // Filters State
     const [searchQuery, setSearchQuery] = useState("");
@@ -96,11 +97,11 @@ function OrdersContent() {
     useEffect(() => {
         // Reset to page 1 when filters change
         setPage(1);
-    }, [debouncedSearch, statusFilter, productFilter, govFilter, channelFilter, fromDate, toDate]);
+    }, [debouncedSearch, statusFilter, productFilter, govFilter, channelFilter, fromDate, toDate, pageSize]);
 
     useEffect(() => {
         fetchOrders();
-    }, [page, debouncedSearch, statusFilter, productFilter, govFilter, channelFilter, fromDate, toDate, activeBusiness]);
+    }, [page, pageSize, debouncedSearch, statusFilter, productFilter, govFilter, channelFilter, fromDate, toDate, activeBusiness]);
 
     async function fetchProducts() {
         if (!activeBusiness) return;
@@ -499,34 +500,51 @@ function OrdersContent() {
             </div>
             
             {/* Pagination Controls */}
-            {totalPages > 1 && (
-                <div className="flex items-center justify-between">
-                    <div className="text-sm text-muted-foreground">
-                        Showing {(page - 1) * pageSize + 1} to {Math.min(page * pageSize, totalCount)} of {totalCount} orders
-                    </div>
-                    <div className="flex items-center space-x-2">
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => setPage(p => Math.max(1, p - 1))}
-                            disabled={page === 1 || loading}
-                        >
-                            <ChevronLeft className="h-4 w-4" />
-                            Previous
-                        </Button>
-                        <div className="text-sm font-medium">
-                            Page {page} of {totalPages}
+            {totalCount > 0 && (
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+                    <div className="flex items-center gap-4">
+                        <div className="text-sm text-muted-foreground">
+                            Showing {(page - 1) * pageSize + 1} to {Math.min(page * pageSize, totalCount)} of {totalCount} orders
                         </div>
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-                            disabled={page === totalPages || loading}
-                        >
-                            Next
-                            <ChevronRight className="h-4 w-4" />
-                        </Button>
+                        <div className="flex items-center gap-2">
+                            <span className="text-sm text-muted-foreground hidden sm:inline-block">Per page:</span>
+                            <Select value={pageSize.toString()} onValueChange={(v) => setPageSize(Number(v))}>
+                                <SelectTrigger className="h-8 w-[70px]">
+                                    <SelectValue placeholder={pageSize} />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {[50, 100, 250, 500].map(size => (
+                                        <SelectItem key={size} value={size.toString()}>{size}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
                     </div>
+                    {totalPages > 1 && (
+                        <div className="flex items-center space-x-2">
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setPage(p => Math.max(1, p - 1))}
+                                disabled={page === 1 || loading}
+                            >
+                                <ChevronLeft className="h-4 w-4" />
+                                Previous
+                            </Button>
+                            <div className="text-sm font-medium">
+                                Page {page} of {totalPages}
+                            </div>
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                                disabled={page === totalPages || loading}
+                            >
+                                Next
+                                <ChevronRight className="h-4 w-4" />
+                            </Button>
+                        </div>
+                    )}
                 </div>
             )}
         </div >
