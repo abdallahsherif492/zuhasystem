@@ -142,8 +142,7 @@ function OrdersContent() {
                 setTotalCount(0);
             }
             
-            // Clear selection when page changes or filters change
-            setSelectedOrders(new Set());
+            // Do NOT clear selection when page changes or filters change
             
         } catch (error) {
             console.error("Error fetching orders:", error);
@@ -160,9 +159,20 @@ function OrdersContent() {
             const hasSelection = selectedOrders.size > 0;
             
             if (hasSelection) {
-                // Export only selected from current page
-                const targetOrders = orders.filter(o => selectedOrders.has(o.id));
-                processExportData(targetOrders, 'selected');
+                // Fetch full data for selected orders
+                toast.loading("Fetching selected orders for export...");
+                const { data, error } = await supabase
+                    .from('orders')
+                    .select('*')
+                    .in('id', Array.from(selectedOrders));
+                
+                if (error) throw error;
+                if (!data || data.length === 0) {
+                    toast.dismiss();
+                    toast.error("No data found to export");
+                    return;
+                }
+                processExportData(data, 'selected');
             } else {
                 // Export ALL matching current filters using RPC
                 toast.loading("Fetching all filtered orders for export...");
@@ -272,15 +282,16 @@ function OrdersContent() {
     ];
     const channelOptions = CHANNELS.map(c => ({ label: c, value: c }));
 
-    const allSelected = orders.length > 0 && selectedOrders.size === orders.length;
+    const allSelected = orders.length > 0 && orders.every(o => selectedOrders.has(o.id));
 
     const handleSelectAll = (checked: boolean) => {
+        const newSet = new Set(selectedOrders);
         if (checked) {
-            const allIds = orders.map(o => o.id);
-            setSelectedOrders(new Set(allIds));
+            orders.forEach(o => newSet.add(o.id));
         } else {
-            setSelectedOrders(new Set());
+            orders.forEach(o => newSet.delete(o.id));
         }
+        setSelectedOrders(newSet);
     };
 
     const handleSelectRow = (id: string, checked: boolean) => {
@@ -368,7 +379,7 @@ function OrdersContent() {
 
                     <div className="flex justify-between items-center">
                         <div className="text-sm text-muted-foreground">
-                            {totalCount} orders found. {selectedOrders.size > 0 && <span className="text-primary font-bold">({selectedOrders.size} selected on this page)</span>}
+                            {totalCount} orders found. {selectedOrders.size > 0 && <span className="text-primary font-bold ml-2">({selectedOrders.size} selected)</span>}
                         </div>
                         <div className="flex gap-2">
                             <Button
