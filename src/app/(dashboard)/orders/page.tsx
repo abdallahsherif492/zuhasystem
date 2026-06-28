@@ -73,7 +73,7 @@ function OrdersContent() {
 
     // Pagination State
     const [page, setPage] = useState(1);
-    const [pageSize, setPageSize] = useState(50);
+    const [pageSize, setPageSize] = useState(100);
 
     // Filters State
     const [searchQuery, setSearchQuery] = useState("");
