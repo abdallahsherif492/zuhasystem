@@ -163,7 +163,7 @@ function OrdersContent() {
                 toast.loading("Fetching selected orders for export...");
                 const { data, error } = await supabase
                     .from('orders')
-                    .select('*')
+                    .select('*, items:order_items(quantity, variant:variants(title, product:products(id, name)))')
                     .in('id', Array.from(selectedOrders));
                 
                 if (error) throw error;
