@@ -52,7 +52,7 @@ import { toast } from "sonner";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 
-const ORDER_STATUSES = ["Pending", "Processing", "Shipped", "Delivered", "Cancelled", "Returned"];
+const ORDER_STATUSES = ["Pending", "Processing", "Prepared", "Shipped", "Delivered", "Cancelled", "Returned", "Unavailable"];
 const GOVERNORATES = [
     "Cairo", "New Cairo", "Giza", "Alexandria", "Dakahlia", "Red Sea", "Beheira", "Fayoum",
     "Gharbiya", "Ismailia", "Monufia", "Minya", "Qaliubiya", "New Valley", "Suez",
@@ -263,7 +263,7 @@ export default function OrderDetailsPage() {
             // New State Machine Definition
             // Pre-Deduction States: Pending, Cancelled (Cancelled before sending)
             // Post-Deduction States: Prepared, Shipped, Delivered, Collected, Returned (Returned represents physical stock, but logically it was deducted then added back by a transaction. For simple status transitions, moving FROM a pre-state TO a post-state triggers FULL DEDUCTION. Moving FROM a post-state TO a pre-state triggers FULL RESTOCK.)
-            const preStates = ["Pending", "Cancelled"];
+            const preStates = ["Pending", "Processing", "Cancelled", "Unavailable"];
             const oldIsPreState = preStates.includes(order.status);
             const newIsPreState = preStates.includes(editForm.status);
 

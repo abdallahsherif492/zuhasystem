@@ -274,7 +274,7 @@ function OrdersContent() {
         window.open(`/orders/print?ids=${ids}`, '_blank');
     }
 
-    const STATUSES = ["Pending", "Processing", "Prepared", "Shipped", "Delivered", "Cancelled", "Returned"];
+    const STATUSES = ["Pending", "Processing", "Prepared", "Shipped", "Delivered", "Cancelled", "Returned", "Unavailable"];
     const statusOptions = STATUSES.map(s => ({ label: s, value: s }));
     const govOptions: Option[] = [
         { label: "All Except Cairo & Giza", value: "ALL_EXCEPT_CAIRO_GIZA" },

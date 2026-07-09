@@ -224,7 +224,7 @@ function LogisticsContent() {
         };
 
         const order = orders.find(o => o.id === orderId);
-        const preStates = ["Pending", "Processing", "Cancelled"];
+        const preStates = ["Pending", "Processing", "Cancelled", "Unavailable"];
         const isDeductingAction = order && preStates.includes(order.status) && !preStates.includes(newStatus);
 
         if (isDeductingAction) {
@@ -253,7 +253,7 @@ function LogisticsContent() {
 
             // Handle Inventory Logic for each order (simplified loop)
             // Note: Ideally this should be a batch RPC for performance, but loop is acceptable for typical usage
-            const preStates = ["Pending", "Processing", "Cancelled"];
+            const preStates = ["Pending", "Processing", "Cancelled", "Unavailable"];
             const newIsPreState = preStates.includes(newStatus);
 
             for (const oid of orderIds) {
@@ -340,7 +340,7 @@ function LogisticsContent() {
             }
         };
 
-        const preStates = ["Pending", "Processing", "Cancelled"];
+        const preStates = ["Pending", "Processing", "Cancelled", "Unavailable"];
         const hasPendingOrders = ids.some(id => {
             const status = orders.find(o => o.id === id)?.status;
             return status && preStates.includes(status);
