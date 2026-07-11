@@ -106,6 +106,7 @@ function LogisticsContent() {
     const [govFilter, setGovFilter] = useState<string[]>([]);
     const [statusFilter, setStatusFilter] = useState<string[]>([]);
     const [productFilter, setProductFilter] = useState<string[]>([]);
+    const [companyFilter, setCompanyFilter] = useState<string[]>([]);
     const [selectedOrders, setSelectedOrders] = useState<Set<string>>(new Set());
 
     // Data for Filters/Actions
@@ -446,6 +447,11 @@ function LogisticsContent() {
         // Status Filter
         if (statusFilter.length > 0 && !statusFilter.includes(order.status)) return false;
 
+        // Company Filter
+        if (companyFilter.length > 0) {
+            if (!order.shipping_company_id || !companyFilter.includes(order.shipping_company_id)) return false;
+        }
+
         // Product Filter
         if (productFilter.length > 0) {
             const orderProductIds = order.items?.map((i: any) => i.variant?.product?.id).filter(Boolean) || [];
@@ -582,7 +588,7 @@ function LogisticsContent() {
                             onChange={(e) => setSearchQuery(e.target.value)}
                         />
                     </div>
-                    <div className="grid grid-cols-3 gap-2 flex-1">
+                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 flex-1">
                         <MultiSelect
                             options={STATUSES.map(s => ({ label: s, value: s }))}
                             selected={statusFilter}
@@ -605,8 +611,15 @@ function LogisticsContent() {
                             placeholder="Product"
                             className="bg-white"
                         />
+                        <MultiSelect
+                            options={shippingCompanies.map(c => ({ label: c.name, value: c.id }))}
+                            selected={companyFilter}
+                            onChange={setCompanyFilter}
+                            placeholder="Shipping Company"
+                            className="bg-white"
+                        />
                     </div>
-                    <Button variant="ghost" size="icon" onClick={() => { setSearchQuery(""); setGovFilter([]); setProductFilter([]); setStatusFilter([]); }}>
+                    <Button variant="ghost" size="icon" onClick={() => { setSearchQuery(""); setGovFilter([]); setProductFilter([]); setStatusFilter([]); setCompanyFilter([]); }}>
                         <FilterX className="h-4 w-4" />
                     </Button>
                 </div>
