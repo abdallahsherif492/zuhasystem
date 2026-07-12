@@ -1,4 +1,7 @@
 -- Update get_expenses_breakdown to remove sub_category and fix date comparison
+DROP FUNCTION IF EXISTS get_expenses_breakdown(timestamp with time zone, timestamp with time zone, uuid);
+DROP FUNCTION IF EXISTS get_expenses_breakdown(timestamp with time zone, timestamp with time zone);
+
 CREATE OR REPLACE FUNCTION get_expenses_breakdown(from_date TIMESTAMP WITH TIME ZONE, to_date TIMESTAMP WITH TIME ZONE, b_id UUID)
 RETURNS TABLE (
   category TEXT,
