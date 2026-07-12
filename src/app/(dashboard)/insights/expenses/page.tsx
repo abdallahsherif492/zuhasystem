@@ -35,7 +35,7 @@ function ExpensesAnalyticsContent() {
             return;
         }
         fetchData();
-    }, [fromDate, toDate]);
+    }, [fromDate, toDate, activeBusiness]);
 
     async function fetchData() {
         if (!activeBusiness) return;

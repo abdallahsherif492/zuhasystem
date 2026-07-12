@@ -32,7 +32,7 @@ function ChannelAnalyticsContent() {
             return;
         }
         fetchData();
-    }, [fromDate, toDate]);
+    }, [fromDate, toDate, activeBusiness]);
 
     async function fetchData() {
         setLoading(true);
