@@ -12,7 +12,10 @@ import {
 } from "recharts";
 import { format, startOfMonth } from "date-fns";
 
+import { useBusiness } from "@/contexts/BusinessContext";
+
 function ChannelAnalyticsContent() {
+    const { activeBusiness } = useBusiness();
     const router = useRouter();
     const searchParams = useSearchParams();
     const fromDate = searchParams.get("from");
@@ -37,9 +40,11 @@ function ChannelAnalyticsContent() {
             const start = `${fromDate}T00:00:00`;
             const end = `${toDate}T23:59:59`;
 
+            if (!activeBusiness) return;
             const { data, error } = await supabase.rpc('get_channel_performance', {
                 from_date: start,
-                to_date: end
+                to_date: end,
+                b_id: activeBusiness.id
             });
 
             if (error) throw error;

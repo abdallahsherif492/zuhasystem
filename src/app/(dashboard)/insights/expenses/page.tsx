@@ -14,8 +14,10 @@ import {
 import { format, startOfMonth } from "date-fns";
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d', '#ffc658', '#8dd1e1'];
+import { useBusiness } from "@/contexts/BusinessContext";
 
 function ExpensesAnalyticsContent() {
+    const { activeBusiness } = useBusiness();
     const router = useRouter();
     const searchParams = useSearchParams();
     const fromDate = searchParams.get("from");
@@ -36,6 +38,7 @@ function ExpensesAnalyticsContent() {
     }, [fromDate, toDate]);
 
     async function fetchData() {
+        if (!activeBusiness) return;
         setLoading(true);
         try {
             const start = `${fromDate}T00:00:00`;
@@ -44,14 +47,16 @@ function ExpensesAnalyticsContent() {
             // 1. Get Expenses Breakdown
             const { data: expData, error: expError } = await supabase.rpc('get_expenses_breakdown', {
                 from_date: start,
-                to_date: end
+                to_date: end,
+                b_id: activeBusiness.id
             });
             if (expError) throw expError;
 
             // 2. Get Total Orders for "Cost Per Order"
             const { data: ordData, error: ordError } = await supabase.rpc('get_insight_orders_stats', {
                 from_date: start,
-                to_date: end
+                to_date: end,
+                b_id: activeBusiness.id
             });
             if (ordError) throw ordError;
 
