@@ -89,7 +89,7 @@ function ProductAnalysisContent() {
             const { data: productsData, error: productsError } = await supabase
                 .from('products')
                 .select('id, name')
-                .eq('business_id', activeBusiness.id);
+                .eq('business_id', activeBusiness!.id);
             
             if (productsError) throw productsError;
             
@@ -126,7 +126,7 @@ function ProductAnalysisContent() {
                         )
                     )
                 `)
-                .eq('business_id', activeBusiness.id)
+                .eq('business_id', activeBusiness!.id)
                 .gte('created_at', start)
                 .lte('created_at', end)
                 .neq('status', 'Cancelled');
