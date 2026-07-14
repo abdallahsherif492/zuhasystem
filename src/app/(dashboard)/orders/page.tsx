@@ -281,6 +281,7 @@ function OrdersContent() {
     const STATUSES = ["Pending", "Processing", "Prepared", "Shipped", "Delivered", "Cancelled", "Returned", "Unavailable"];
     
     const getStatusColor = (status: string) => {
+        if (!status) return 'bg-gray-100 text-gray-800 hover:bg-gray-100/80 dark:bg-gray-800 dark:text-gray-400';
         switch (status.toLowerCase()) {
             case 'pending': return 'bg-yellow-100 text-yellow-800 hover:bg-yellow-100/80 dark:bg-yellow-900/50 dark:text-yellow-400';
             case 'processing': return 'bg-blue-100 text-blue-800 hover:bg-blue-100/80 dark:bg-blue-900/50 dark:text-blue-400';
