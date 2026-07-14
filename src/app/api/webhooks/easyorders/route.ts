@@ -42,7 +42,8 @@ export async function POST(request: Request) {
     try {
         const { searchParams } = new URL(request.url);
         const businessId = searchParams.get('business');
-        const token = searchParams.get('token');
+        // EasyOrders sends the token in the 'secret' header, but fallback to URL param if needed
+        const token = request.headers.get('secret') || searchParams.get('token');
 
         if (!businessId || !token) {
             return NextResponse.json({ error: 'Missing business or token' }, { status: 401 });
@@ -73,30 +74,36 @@ export async function POST(request: Request) {
         }
 
         // 2. Parse Payload
-        // We expect EasyOrders standard JSON structure. Let's assume a generic robust structure.
         const payload = await request.json();
+        
+        // Ignore status update events for now, we only want new orders
+        if (payload.event_type === 'order-status-update') {
+            return NextResponse.json({ message: 'Status update ignored' }, { status: 200 });
+        }
         
         // Basic check to prevent duplicate webhooks if easyorders provides an ID
         const easyOrderId = payload.id?.toString() || payload.order_id?.toString() || null;
-        if (easyOrderId) {
-            const { data: existingOrder } = await supabase
-                .from('orders')
-                .select('id')
-                .eq('easyorders_id', easyOrderId)
-                .eq('business_id', businessId)
-                .maybeSingle();
+        if (!easyOrderId) {
+            return NextResponse.json({ error: 'Missing order ID' }, { status: 400 });
+        }
 
-            if (existingOrder) {
-                return NextResponse.json({ message: 'Order already processed' }, { status: 200 });
-            }
+        const { data: existingOrder } = await supabase
+            .from('orders')
+            .select('id')
+            .eq('easyorders_id', easyOrderId)
+            .eq('business_id', businessId)
+            .maybeSingle();
+
+        if (existingOrder) {
+            return NextResponse.json({ message: 'Order already processed' }, { status: 200 });
         }
 
         // 3. Customer Info Mapping
-        const customerName = payload.customer_name || payload.customer?.name || "Unknown Customer";
+        const customerName = payload.full_name || payload.customer_name || payload.customer?.name || "Unknown Customer";
         const phone1 = payload.phone || payload.customer?.phone || "";
         const phone2 = payload.phone2 || payload.customer?.phone2 || "";
         const address = payload.address || payload.shipping?.address || "";
-        const rawGov = payload.governorate || payload.shipping?.city || payload.city || "";
+        const rawGov = payload.government || payload.governorate || payload.shipping?.city || payload.city || "";
         const mappedGov = GOVERNORATE_MAPPING[rawGov.trim()] || rawGov;
 
         const customerInfo = {
@@ -144,13 +151,12 @@ export async function POST(request: Request) {
         }
 
         // 4. Calculate Shipping and Total
-        // Some payloads put shipping in a specific field, others in totals.
         const shippingCost = parseFloat(payload.shipping_cost || payload.shipping || 0);
         let calculatedSubtotal = 0;
         let calculatedTotalCost = 0;
 
         // Extract items
-        const rawItems = payload.items || payload.line_items || [];
+        const rawItems = payload.cart_items || payload.items || payload.line_items || [];
         
         // We need to fetch all variants to match SKUs
         const { data: allVariants } = await supabase
@@ -168,10 +174,11 @@ export async function POST(request: Request) {
         const processedItems = [];
 
         for (const item of rawItems) {
-            const itemSku = (item.sku || "").toString().toLowerCase();
+            // EasyOrders puts sku in product.sku or variant.taager_code
+            let itemSku = (item.variant?.taager_code || item.product?.sku || item.sku || "").toString().toLowerCase();
             const itemQty = parseInt(item.quantity || item.qty || 1);
             let itemPrice = parseFloat(item.price || 0);
-            const itemName = item.name || item.title || "Unknown Item";
+            const itemName = item.product?.name || item.name || item.title || "Unknown Item";
 
             const matchedVariant = itemSku ? variantsMap.get(itemSku) : null;
             
