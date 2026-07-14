@@ -190,10 +190,13 @@ export async function POST(request: Request) {
             .select('id, sku, sale_price, cost_price, title, product_id')
             .eq('business_id', businessId);
 
+        // Helper to normalize strings for better matching
+        const normalizeStr = (str: any) => (str || "").toString().replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+
         const variantsMap = new Map();
         if (allVariants) {
             allVariants.forEach(v => {
-                if (v.sku) variantsMap.set(v.sku.toLowerCase(), v);
+                if (v.sku) variantsMap.set(normalizeStr(v.sku), v);
             });
         }
 
@@ -201,7 +204,7 @@ export async function POST(request: Request) {
 
         for (const item of rawItems) {
             // EasyOrders puts sku in product.sku or variant.taager_code
-            let itemSku = (item.variant?.taager_code || item.product?.sku || item.sku || "").toString().toLowerCase();
+            let itemSku = normalizeStr(item.variant?.taager_code || item.product?.sku || item.sku || "");
             const itemQty = parseInt(item.quantity || item.qty || 1);
             let itemPrice = parseFloat(item.price || 0);
             const itemName = item.product?.name || item.name || item.title || "Unknown Item";

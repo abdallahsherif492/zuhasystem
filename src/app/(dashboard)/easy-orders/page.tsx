@@ -94,6 +94,7 @@ export default function EasyOrdersPage() {
     const [addItemOpen, setAddItemOpen] = useState<Record<string, boolean>>({});
     const [selectedProductForAdd, setSelectedProductForAdd] = useState<Record<string, string>>({});
     const [selectedVariantForAdd, setSelectedVariantForAdd] = useState<Record<string, string>>({});
+    const [selectedProductOverride, setSelectedProductOverride] = useState<Record<string, string>>({});
 
     useEffect(() => {
         if (activeBusiness) {
