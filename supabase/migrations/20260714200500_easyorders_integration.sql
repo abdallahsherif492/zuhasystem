@@ -1,0 +1,10 @@
+ALTER TABLE orders
+ADD COLUMN IF NOT EXISTS easyorders_id VARCHAR(255),
+ADD COLUMN IF NOT EXISTS payment_status VARCHAR(50) DEFAULT 'Not Paid',
+ADD COLUMN IF NOT EXISTS paid_amount NUMERIC DEFAULT 0;
+
+CREATE INDEX IF NOT EXISTS idx_orders_easyorders_id ON orders(easyorders_id);
+
+ALTER TABLE order_items
+ADD COLUMN IF NOT EXISTS unmapped_name VARCHAR(255),
+ADD COLUMN IF NOT EXISTS unmapped_sku VARCHAR(255);

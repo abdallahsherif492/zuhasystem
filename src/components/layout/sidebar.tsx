@@ -7,7 +7,7 @@ import { useBusiness } from "@/contexts/BusinessContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { LayoutDashboard, AlertTriangle, Package, ShoppingCart, Settings, Users, Truck, Banknote, LineChart, ShoppingBag, Megaphone, Box, DollarSign, ShieldCheck, FileText, Ticket, CreditCard, Clock, Inbox, Calendar, LogOut } from "lucide-react";
+import { LayoutDashboard, AlertTriangle, Package, ShoppingCart, Settings, Users, Truck, Banknote, LineChart, ShoppingBag, Megaphone, Box, DollarSign, ShieldCheck, FileText, Ticket, CreditCard, Clock, Inbox, Calendar, LogOut, Globe } from "lucide-react";
 
 import Image from "next/image";
 
@@ -158,15 +158,26 @@ export function SidebarContent() {
                 </>
             )}
             {canAccess("/orders") && (
-                <Link href="/orders">
-                    <Button
-                        variant={pathname.startsWith("/orders") ? "default" : "ghost"}
-                        className="w-full justify-start"
-                    >
-                        <ShoppingCart className="mr-2 h-4 w-4" />
-                        {t("Orders")}
-                    </Button>
-                </Link>
+                <>
+                    <Link href="/orders">
+                        <Button
+                            variant={pathname.startsWith("/orders") && !pathname.startsWith("/easy-orders") ? "default" : "ghost"}
+                            className="w-full justify-start"
+                        >
+                            <ShoppingCart className="mr-2 h-4 w-4" />
+                            {t("Orders")}
+                        </Button>
+                    </Link>
+                    <Link href="/easy-orders">
+                        <Button
+                            variant={pathname.startsWith("/easy-orders") ? "default" : "ghost"}
+                            className="w-full justify-start pl-8 text-sm"
+                        >
+                            <Globe className="mr-2 h-3.5 w-3.5" />
+                            {t("Easy Orders")}
+                        </Button>
+                    </Link>
+                </>
             )}
             {canAccess("/purchases") && (
                 <Link href="/purchases">

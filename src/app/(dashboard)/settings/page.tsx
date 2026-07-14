@@ -10,6 +10,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
+import { toast } from "sonner";
 import { Loader2, Upload, Trash2, CheckCircle2 } from "lucide-react";
 import Image from "next/image";
 
@@ -138,6 +140,7 @@ export default function SettingsPage() {
             <Tabs defaultValue="theme" className="space-y-4">
                 <TabsList>
                     <TabsTrigger value="theme">{t("Theme & Appearance")}</TabsTrigger>
+                    <TabsTrigger value="api">{t("API Integrations")}</TabsTrigger>
                 </TabsList>
                 
                 <TabsContent value="theme" className="space-y-4">
@@ -280,6 +283,126 @@ export default function SettingsPage() {
                     </Card>
                 </TabsContent>
             </Tabs>
+
+            <TabsContent value="api" className="space-y-4">
+                <Card>
+                    <CardHeader>
+                        <CardTitle>{t("API Integrations")}</CardTitle>
+                        <CardDescription>
+                            {t("Connect Zuha System with external platforms like EasyOrders.")}
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-6">
+                        <div className="space-y-4 border rounded-md p-4 bg-muted/20">
+                            <h3 className="text-lg font-medium flex items-center">
+                                EasyOrders Integration
+                                {activeBusiness?.theme_config?.easyorders_token && (
+                                    <Badge variant="outline" className="ml-3 bg-green-50 text-green-700 border-green-200">Active</Badge>
+                                )}
+                            </h3>
+                            <p className="text-sm text-muted-foreground">
+                                {t("Copy the Webhook URL below and paste it into your EasyOrders dashboard settings to automatically receive new orders.")}
+                            </p>
+                            
+                            <div className="space-y-2">
+                                <Label>{t("Webhook URL")}</Label>
+                                <div className="flex gap-2">
+                                    <Input 
+                                        readOnly 
+                                        value={
+                                            activeBusiness?.theme_config?.easyorders_token 
+                                                ? `${typeof window !== 'undefined' ? window.location.origin : ''}/api/webhooks/easyorders?business=${activeBusiness.id}&token=${activeBusiness.theme_config.easyorders_token}`
+                                                : t("Generate a token to create the Webhook URL")
+                                        } 
+                                        className="font-mono text-xs bg-muted"
+                                    />
+                                    <Button 
+                                        variant="outline"
+                                        disabled={!activeBusiness?.theme_config?.easyorders_token}
+                                        onClick={() => {
+                                            const url = `${window.location.origin}/api/webhooks/easyorders?business=${activeBusiness?.id}&token=${activeBusiness?.theme_config?.easyorders_token}`;
+                                            navigator.clipboard.writeText(url);
+                                            toast.success(t("URL copied to clipboard"));
+                                        }}
+                                    >
+                                        Copy
+                                    </Button>
+                                </div>
+                            </div>
+                            
+                            <div className="pt-4 border-t flex gap-2">
+                                <Button 
+                                    onClick={async () => {
+                                        setSaving(true);
+                                        try {
+                                            const newToken = Array.from(crypto.getRandomValues(new Uint8Array(16)))
+                                                .map(b => b.toString(16).padStart(2, '0'))
+                                                .join('');
+                                                
+                                            const newThemeConfig = {
+                                                ...(activeBusiness?.theme_config || {}),
+                                                easyorders_token: newToken
+                                            };
+                                            
+                                            const { error } = await supabase
+                                                .from('businesses')
+                                                .update({ theme_config: newThemeConfig })
+                                                .eq('id', activeBusiness?.id);
+                                                
+                                            if (error) throw error;
+                                            
+                                            toast.success(t("Token generated successfully"));
+                                            setTimeout(() => window.location.reload(), 1000);
+                                        } catch (error) {
+                                            console.error("Error generating token:", error);
+                                            toast.error(t("Failed to generate token"));
+                                        } finally {
+                                            setSaving(false);
+                                        }
+                                    }}
+                                    disabled={saving}
+                                >
+                                    {activeBusiness?.theme_config?.easyorders_token ? t("Regenerate Token") : t("Generate Webhook URL")}
+                                </Button>
+                                
+                                {activeBusiness?.theme_config?.easyorders_token && (
+                                    <Button 
+                                        variant="destructive"
+                                        onClick={async () => {
+                                            if(!confirm("Are you sure? This will disconnect EasyOrders.")) return;
+                                            setSaving(true);
+                                            try {
+                                                const newThemeConfig = {
+                                                    ...(activeBusiness?.theme_config || {})
+                                                };
+                                                delete newThemeConfig.easyorders_token;
+                                                
+                                                const { error } = await supabase
+                                                    .from('businesses')
+                                                    .update({ theme_config: newThemeConfig })
+                                                    .eq('id', activeBusiness?.id);
+                                                    
+                                                if (error) throw error;
+                                                
+                                                toast.success(t("Integration disconnected"));
+                                                setTimeout(() => window.location.reload(), 1000);
+                                            } catch (error) {
+                                                console.error("Error removing token:", error);
+                                                toast.error(t("Failed to disconnect"));
+                                            } finally {
+                                                setSaving(false);
+                                            }
+                                        }}
+                                        disabled={saving}
+                                    >
+                                        {t("Disconnect")}
+                                    </Button>
+                                )}
+                            </div>
+                        </div>
+                    </CardContent>
+                </Card>
+            </TabsContent>
         </div>
     );
 }
