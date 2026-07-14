@@ -278,7 +278,14 @@ export default function EasyOrdersPage() {
         <div className="flex-1 space-y-4 p-8 pt-6">
             <div className="flex items-center justify-between">
                 <div>
-                    <h2 className="text-3xl font-bold tracking-tight">{t("EasyOrders")}</h2>
+                    <h2 className="text-3xl font-bold tracking-tight flex items-center">
+                        {t("EasyOrders")}
+                        {!loading && orders.length > 0 && (
+                            <Badge variant="secondary" className="ml-3 text-lg px-3 py-1 bg-primary/10 text-primary">
+                                {orders.length} {t("Waiting")}
+                            </Badge>
+                        )}
+                    </h2>
                     <p className="text-muted-foreground">{t("Manage incoming orders from EasyOrders that are waiting for review.")}</p>
                 </div>
             </div>
