@@ -26,8 +26,7 @@ function hexToHsl(hex: string) {
         }
         h /= 6;
     }
-
-    return `${(h * 360).toFixed(0)} ${(s * 100).toFixed(1)}% ${(l * 100).toFixed(1)}%`;
+    return `hsl(${(h * 360).toFixed(0)}, ${(s * 100).toFixed(1)}%, ${(l * 100).toFixed(1)}%)`;
 }
 
 function getForegroundForHex(hex: string) {
@@ -42,8 +41,8 @@ function getForegroundForHex(hex: string) {
     // Calculate luminance
     const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
     
-    // If the background is light, text should be dark (slate-900), else light (slate-50)
-    return luminance > 0.5 ? '222.2 47.4% 11.2%' : '210 40% 98%';
+    // If the background is light, text should be dark, else light
+    return luminance > 0.5 ? 'hsl(222.2, 47.4%, 11.2%)' : 'hsl(210, 40%, 98%)';
 }
 
 export function DynamicThemeProvider({ children }: { children: React.ReactNode }) {
@@ -58,20 +57,24 @@ export function DynamicThemeProvider({ children }: { children: React.ReactNode }
             
             // Primary Color
             if (config.primaryColor) {
-                root.style.setProperty('--primary', hexToHsl(config.primaryColor));
+                root.style.setProperty('--primary', config.primaryColor);
                 root.style.setProperty('--primary-foreground', getForegroundForHex(config.primaryColor));
             } else {
                 root.style.removeProperty('--primary');
                 root.style.removeProperty('--primary-foreground');
             }
 
-            // Secondary Color
+            // Secondary Color (Used for text color and secondary elements)
             if (config.secondaryColor) {
-                root.style.setProperty('--secondary', hexToHsl(config.secondaryColor));
+                root.style.setProperty('--secondary', config.secondaryColor);
                 root.style.setProperty('--secondary-foreground', getForegroundForHex(config.secondaryColor));
+                
+                // Also apply secondary as the global text foreground color
+                root.style.setProperty('--foreground', config.secondaryColor);
             } else {
                 root.style.removeProperty('--secondary');
                 root.style.removeProperty('--secondary-foreground');
+                root.style.removeProperty('--foreground');
             }
             
             // Dark Mode

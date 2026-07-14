@@ -25,7 +25,7 @@ export default function SettingsPage() {
     const [businessName, setBusinessName] = useState<string>("");
     const [language, setLanguage] = useState<string>("en");
     const [primaryColor, setPrimaryColor] = useState<string>("#0f172a"); // Default slate-900
-    const [secondaryColor, setSecondaryColor] = useState<string>("#e2e8f0"); // Default slate-200
+    const [secondaryColor, setSecondaryColor] = useState<string>("#000000"); // Default black text
     const [darkMode, setDarkMode] = useState<string>("system");
     const [logoFile, setLogoFile] = useState<File | null>(null);
     const [logoPreview, setLogoPreview] = useState<string | null>(null);
@@ -35,7 +35,7 @@ export default function SettingsPage() {
             setBusinessName(activeBusiness.name || "");
             setLanguage(activeBusiness.theme_config?.language || "en");
             setPrimaryColor(activeBusiness.theme_config?.primaryColor || "#0f172a");
-            setSecondaryColor(activeBusiness.theme_config?.secondaryColor || "#e2e8f0");
+            setSecondaryColor(activeBusiness.theme_config?.secondaryColor || "#000000");
             setDarkMode(activeBusiness.theme_config?.darkMode || "system");
             setLogoPreview(activeBusiness.logo_url);
         }
