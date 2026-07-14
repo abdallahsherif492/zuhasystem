@@ -30,6 +30,22 @@ function hexToHsl(hex: string) {
     return `${(h * 360).toFixed(0)} ${(s * 100).toFixed(1)}% ${(l * 100).toFixed(1)}%`;
 }
 
+function getForegroundForHex(hex: string) {
+    hex = hex.replace(/^#/, '');
+    if (hex.length === 3) {
+        hex = hex.split('').map(c => c + c).join('');
+    }
+    const r = parseInt(hex.substring(0, 2), 16);
+    const g = parseInt(hex.substring(2, 4), 16);
+    const b = parseInt(hex.substring(4, 6), 16);
+
+    // Calculate luminance
+    const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+    
+    // If the background is light, text should be dark (slate-900), else light (slate-50)
+    return luminance > 0.5 ? '222.2 47.4% 11.2%' : '210 40% 98%';
+}
+
 export function DynamicThemeProvider({ children }: { children: React.ReactNode }) {
     const { activeBusiness } = useBusiness();
     const { setTheme, theme } = useTheme();
@@ -43,15 +59,19 @@ export function DynamicThemeProvider({ children }: { children: React.ReactNode }
             // Primary Color
             if (config.primaryColor) {
                 root.style.setProperty('--primary', hexToHsl(config.primaryColor));
+                root.style.setProperty('--primary-foreground', getForegroundForHex(config.primaryColor));
             } else {
                 root.style.removeProperty('--primary');
+                root.style.removeProperty('--primary-foreground');
             }
 
             // Secondary Color
             if (config.secondaryColor) {
                 root.style.setProperty('--secondary', hexToHsl(config.secondaryColor));
+                root.style.setProperty('--secondary-foreground', getForegroundForHex(config.secondaryColor));
             } else {
                 root.style.removeProperty('--secondary');
+                root.style.removeProperty('--secondary-foreground');
             }
             
             // Dark Mode
@@ -62,7 +82,9 @@ export function DynamicThemeProvider({ children }: { children: React.ReactNode }
         } else {
             // Revert to defaults
             root.style.removeProperty('--primary');
+            root.style.removeProperty('--primary-foreground');
             root.style.removeProperty('--secondary');
+            root.style.removeProperty('--secondary-foreground');
             if (theme !== 'system') {
                 setTheme('system');
             }
