@@ -268,11 +268,11 @@ export default function SettingsPage() {
                                 </div>
                             </div>
                         </CardContent>
-                        <CardFooter className="flex justify-between border-t p-6">
-                            <p className="text-sm font-medium text-green-600 flex items-center">
+                        <CardFooter className="flex flex-col sm:flex-row justify-between items-center gap-4 border-t p-6">
+                            <p className="text-sm font-medium text-green-600 flex items-center w-full sm:w-auto">
                                 {successMessage && <><CheckCircle2 className="w-4 h-4 mr-2" /> {successMessage}</>}
                             </p>
-                            <Button onClick={handleSaveTheme} disabled={saving}>
+                            <Button onClick={handleSaveTheme} disabled={saving} className="w-full sm:w-auto">
                                 {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
                                 {t("Save Changes")}
                             </Button>
