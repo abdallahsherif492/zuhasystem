@@ -35,6 +35,7 @@ export interface PlatformSettings {
 interface BusinessContextType {
   activeBusiness: Business | null;
   userRole: string | null;
+  currentUser: any | null;
   allowedPages: string[];
   shiftStart: string | null;
   shiftEnd: string | null;
@@ -50,6 +51,7 @@ interface BusinessContextType {
 const BusinessContext = createContext<BusinessContextType>({
   activeBusiness: null,
   userRole: null,
+  currentUser: null,
   allowedPages: [],
   shiftStart: null,
   shiftEnd: null,
@@ -67,6 +69,7 @@ export const useBusiness = () => useContext(BusinessContext);
 export const BusinessProvider = ({ children }: { children: React.ReactNode }) => {
   const [activeBusiness, setActiveBusinessState] = useState<Business | null>(null);
   const [userRole, setUserRole] = useState<string | null>(null);
+  const [currentUser, setCurrentUser] = useState<any | null>(null);
   const [allowedPages, setAllowedPages] = useState<string[]>([]);
   const [shiftStart, setShiftStart] = useState<string | null>(null);
   const [shiftEnd, setShiftEnd] = useState<string | null>(null);
@@ -87,6 +90,7 @@ export const BusinessProvider = ({ children }: { children: React.ReactNode }) =>
         setLoading(false);
         return;
       }
+      setCurrentUser(user);
 
       // Check System Admin
       const { data: sysAdmin } = await supabase
@@ -209,7 +213,7 @@ export const BusinessProvider = ({ children }: { children: React.ReactNode }) =>
   };
 
   return (
-    <BusinessContext.Provider value={{ activeBusiness, userRole, allowedPages, shiftStart, shiftEnd, weekendDays, isSystemAdmin, businesses, platformSettings, setActiveBusiness, impersonateBusiness, loading }}>
+    <BusinessContext.Provider value={{ activeBusiness, userRole, currentUser, allowedPages, shiftStart, shiftEnd, weekendDays, isSystemAdmin, businesses, platformSettings, setActiveBusiness, impersonateBusiness, loading }}>
       {children}
     </BusinessContext.Provider>
   );

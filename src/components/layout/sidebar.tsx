@@ -15,6 +15,7 @@ interface SidebarProps extends React.HTMLAttributes<HTMLDivElement> { }
 
 export function Sidebar({ className }: SidebarProps) {
     const { t } = useLanguage();
+    const { currentUser, userRole } = useBusiness();
     const handleLogout = async () => {
         await supabase.auth.signOut();
         window.location.href = "/login";
@@ -39,7 +40,14 @@ export function Sidebar({ className }: SidebarProps) {
                 </div>
             </div>
 
-            <div className="p-4 mt-auto border-t">
+            <div className="p-4 mt-auto border-t flex flex-col gap-2">
+                {currentUser && (
+                    <div className="px-3 py-2 text-xs text-muted-foreground break-all">
+                        {t("Logged in as")}:<br />
+                        <span className="font-medium text-foreground">{currentUser.email}</span>
+                        {userRole && <div className="mt-1 capitalize text-primary">{userRole.replace('_', ' ')}</div>}
+                    </div>
+                )}
                 <Button
                     variant="ghost"
                     className="w-full justify-start h-10 text-red-600 hover:text-red-700 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/50"
@@ -62,7 +70,7 @@ export function SidebarContent() {
 
     const canAccess = (path: string) => {
         if (isSystemAdmin) return true;
-        if (role === "owner" || role === "admin" || role === "platform admin" || role === "super admin") return true;
+        if (role === "owner" || role === "admin" || role === "platform admin" || role === "super admin" || role === "super_admin") return true;
         
         // Always allow everyone to see the dashboard home
         if (path === "/dashboard") return true;
@@ -315,13 +323,13 @@ export function SidebarContent() {
                 </div>
             )}
 
-            {(role === "owner" || role === "admin" || role === "platform admin" || role === "super admin" || isSystemAdmin || canAccess("/team") || canAccess("/users")) && (
+            {(role === "owner" || role === "admin" || role === "platform admin" || role === "super admin" || role === "super_admin" || isSystemAdmin || canAccess("/team") || canAccess("/users")) && (
                 <div className="pt-4 pb-2 border-t mt-4">
                     <h4 className="mb-1 rounded-md px-2 py-1 text-sm font-semibold">
                         {t("Administration")}
                     </h4>
                     <div className="grid grid-flow-row auto-rows-max text-sm gap-1">
-                        {(role === "owner" || role === "admin" || role === "platform admin" || role === "super admin" || isSystemAdmin || canAccess("/team")) && (
+                        {(role === "owner" || role === "admin" || role === "platform admin" || role === "super admin" || role === "super_admin" || isSystemAdmin || canAccess("/team")) && (
                             <>
                                 <Link href="/team">
                                     <Button
@@ -369,7 +377,7 @@ export function SidebarContent() {
                         )}
                     </div>
                     
-                    {(role === "owner" || role === "super_admin") && (
+                    {(role === "owner" || role === "super_admin" || role === "super admin" || isSystemAdmin) && (
                         <div className="mt-2">
                             <Link href="/settings">
                                 <Button
