@@ -15,7 +15,7 @@ interface SidebarProps extends React.HTMLAttributes<HTMLDivElement> { }
 
 export function Sidebar({ className }: SidebarProps) {
     const { t } = useLanguage();
-    const { currentUser, userRole } = useBusiness();
+    const { currentUser, userRole, activeBusiness } = useBusiness();
     const handleLogout = async () => {
         await supabase.auth.signOut();
         window.location.href = "/login";
@@ -25,16 +25,21 @@ export function Sidebar({ className }: SidebarProps) {
         <div className={cn("pb-12 h-screen border-r flex flex-col", className)}>
             <div className="space-y-4 py-4 flex-1 overflow-auto">
                 <div className="px-3 py-2">
-                    <div className="flex items-center justify-center mb-8 px-2">
-                        <div className="relative h-20 w-40">
+                    <div className="flex items-center justify-center mb-8 px-2 flex-col gap-2">
+                        <div className="relative h-16 w-32">
                             <Image
-                                src="/logo.png"
-                                alt="Zuha Logo"
+                                src={activeBusiness?.logo_url || "/logo.png"}
+                                alt={activeBusiness?.name || "Zuha Logo"}
                                 fill
                                 className="object-contain"
                                 priority
                             />
                         </div>
+                        {activeBusiness?.name && (
+                            <h2 className="text-lg font-bold text-center leading-tight">
+                                {activeBusiness.name}
+                            </h2>
+                        )}
                     </div>
                     <SidebarContent />
                 </div>

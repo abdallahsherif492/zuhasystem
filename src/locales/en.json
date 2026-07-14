@@ -227,5 +227,10 @@
   "Recent Transactions": "Recent Transactions",
   "History of logged damages": "History of logged damages",
   "No transactions recorded.": "No transactions recorded.",
-  "Logged in as": "Logged in as"
+  "Logged in as": "Logged in as",
+  "Secondary Color": "Secondary Color",
+  "Theme Appearance": "Theme Appearance",
+  "System Default": "System Default",
+  "Light Mode": "Light Mode",
+  "Dark Mode": "Dark Mode"
 }

@@ -2,6 +2,7 @@
 
 import React, { useEffect } from "react";
 import { useBusiness } from "@/contexts/BusinessContext";
+import { useTheme } from "next-themes";
 
 function hexToHsl(hex: string) {
     hex = hex.replace(/^#/, '');
@@ -31,16 +32,42 @@ function hexToHsl(hex: string) {
 
 export function DynamicThemeProvider({ children }: { children: React.ReactNode }) {
     const { activeBusiness } = useBusiness();
+    const { setTheme, theme } = useTheme();
 
     useEffect(() => {
-        if (activeBusiness?.theme_config?.primaryColor) {
-            const hsl = hexToHsl(activeBusiness.theme_config.primaryColor);
-            document.documentElement.style.setProperty('--primary', hsl);
+        const root = document.documentElement;
+        
+        if (activeBusiness?.theme_config) {
+            const config = activeBusiness.theme_config;
+            
+            // Primary Color
+            if (config.primaryColor) {
+                root.style.setProperty('--primary', hexToHsl(config.primaryColor));
+            } else {
+                root.style.removeProperty('--primary');
+            }
+
+            // Secondary Color
+            if (config.secondaryColor) {
+                root.style.setProperty('--secondary', hexToHsl(config.secondaryColor));
+            } else {
+                root.style.removeProperty('--secondary');
+            }
+            
+            // Dark Mode
+            const desiredTheme = config.darkMode === true || config.darkMode === 'dark' ? 'dark' : (config.darkMode === false || config.darkMode === 'light' ? 'light' : 'system');
+            if (theme !== desiredTheme) {
+                 setTheme(desiredTheme);
+            }
         } else {
-            // Revert to default if no color set
-            document.documentElement.style.removeProperty('--primary');
+            // Revert to defaults
+            root.style.removeProperty('--primary');
+            root.style.removeProperty('--secondary');
+            if (theme !== 'system') {
+                setTheme('system');
+            }
         }
-    }, [activeBusiness]);
+    }, [activeBusiness, theme, setTheme]);
 
     return <>{children}</>;
 }

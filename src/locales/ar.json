@@ -227,5 +227,10 @@
   "Recent Transactions": "المعاملات الأخيرة",
   "History of logged damages": "سجل التلفيات المسجلة",
   "No transactions recorded.": "لم يتم تسجيل أي معاملات.",
-  "Logged in as": "مسجل دخول كـ"
+  "Logged in as": "مسجل دخول كـ",
+  "Secondary Color": "اللون الثانوي",
+  "Theme Appearance": "مظهر النظام",
+  "System Default": "افتراضي النظام",
+  "Light Mode": "الوضع الفاتح",
+  "Dark Mode": "الوضع الداكن"
 }

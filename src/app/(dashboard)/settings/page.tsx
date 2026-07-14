@@ -25,6 +25,8 @@ export default function SettingsPage() {
     const [businessName, setBusinessName] = useState<string>("");
     const [language, setLanguage] = useState<string>("en");
     const [primaryColor, setPrimaryColor] = useState<string>("#0f172a"); // Default slate-900
+    const [secondaryColor, setSecondaryColor] = useState<string>("#e2e8f0"); // Default slate-200
+    const [darkMode, setDarkMode] = useState<string>("system");
     const [logoFile, setLogoFile] = useState<File | null>(null);
     const [logoPreview, setLogoPreview] = useState<string | null>(null);
 
@@ -33,11 +35,13 @@ export default function SettingsPage() {
             setBusinessName(activeBusiness.name || "");
             setLanguage(activeBusiness.theme_config?.language || "en");
             setPrimaryColor(activeBusiness.theme_config?.primaryColor || "#0f172a");
+            setSecondaryColor(activeBusiness.theme_config?.secondaryColor || "#e2e8f0");
+            setDarkMode(activeBusiness.theme_config?.darkMode || "system");
             setLogoPreview(activeBusiness.logo_url);
         }
     }, [activeBusiness]);
 
-    if (userRole !== "owner" && userRole !== "super_admin") {
+    if (userRole !== "owner" && userRole !== "super_admin" && userRole !== "super admin") {
         return (
             <div className="flex items-center justify-center h-[60vh]">
                 <div className="text-center">
@@ -95,7 +99,9 @@ export default function SettingsPage() {
             const newThemeConfig = {
                 ...(activeBusiness.theme_config || {}),
                 language,
-                primaryColor
+                primaryColor,
+                secondaryColor,
+                darkMode
             };
 
             const { error: updateError } = await supabase
@@ -222,9 +228,43 @@ export default function SettingsPage() {
                                             type="text" 
                                             value={primaryColor} 
                                             onChange={(e) => setPrimaryColor(e.target.value)} 
-                                            className="flex-1 uppercase font-mono"
+                                            className="font-mono"
                                         />
                                     </div>
+                                </div>
+
+                                {/* Secondary Color */}
+                                <div className="space-y-2">
+                                    <Label>{t("Secondary Color")}</Label>
+                                    <div className="flex gap-3 items-center">
+                                        <Input 
+                                            type="color" 
+                                            value={secondaryColor} 
+                                            onChange={(e) => setSecondaryColor(e.target.value)} 
+                                            className="w-16 h-10 p-1 cursor-pointer"
+                                        />
+                                        <Input 
+                                            type="text" 
+                                            value={secondaryColor} 
+                                            onChange={(e) => setSecondaryColor(e.target.value)} 
+                                            className="font-mono"
+                                        />
+                                    </div>
+                                </div>
+
+                                {/* Dark Mode */}
+                                <div className="space-y-2">
+                                    <Label>{t("Theme Appearance")}</Label>
+                                    <Select value={darkMode} onValueChange={setDarkMode}>
+                                        <SelectTrigger>
+                                            <SelectValue placeholder={t("Select Theme")} />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="system">{t("System Default")}</SelectItem>
+                                            <SelectItem value="light">{t("Light Mode")}</SelectItem>
+                                            <SelectItem value="dark">{t("Dark Mode")}</SelectItem>
+                                        </SelectContent>
+                                    </Select>
                                 </div>
                             </div>
                         </CardContent>
