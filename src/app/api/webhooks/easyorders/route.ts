@@ -39,26 +39,47 @@ const GOVERNORATE_MAPPING: Record<string, string> = {
 };
 
 export async function POST(request: Request) {
+    let rawBody = "";
+    let requestHeaders: Record<string, string> = {};
+    
     try {
         const { searchParams } = new URL(request.url);
         const businessId = searchParams.get('business');
-        // We use our generated URL token for validation and ignore EasyOrders' secret header
         const token = searchParams.get('token');
 
-        if (!businessId || !token) {
-            return NextResponse.json({ error: 'Missing business or token' }, { status: 401 });
-        }
+        // Extract headers for debugging
+        request.headers.forEach((value, key) => {
+            requestHeaders[key] = value;
+        });
 
         const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
         const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
         
         const supabase = createClient(supabaseUrl, supabaseKey, {
-            auth: {
-                persistSession: false
-            }
+            auth: { persistSession: false }
         });
 
-        // 1. Verify token
+        // Try reading body early
+        rawBody = await request.text();
+
+        // 1. Log incoming request to database (best effort)
+        let parsedPayloadForLog = null;
+        try {
+            parsedPayloadForLog = rawBody ? JSON.parse(rawBody) : null;
+        } catch(e) {
+            parsedPayloadForLog = { raw: rawBody };
+        }
+
+        await supabase.from('webhook_logs').insert({
+            headers: requestHeaders,
+            payload: parsedPayloadForLog
+        });
+
+        if (!businessId || !token) {
+            return NextResponse.json({ success: false, error: 'Missing business or token query parameters in the URL' }, { status: 200 });
+        }
+
+        // 2. Verify token
         const { data: business, error: businessError } = await supabase
             .from('businesses')
             .select('theme_config')
@@ -66,26 +87,24 @@ export async function POST(request: Request) {
             .single();
 
         if (businessError || !business) {
-            return NextResponse.json({ error: 'Business not found' }, { status: 404 });
+            return NextResponse.json({ success: false, error: 'Business not found. Check if the business ID in URL is correct.' }, { status: 200 });
         }
 
         if (business.theme_config?.easyorders_token !== token) {
-            return NextResponse.json({ error: 'Invalid token' }, { status: 403 });
+            return NextResponse.json({ success: false, error: 'Invalid token. Please regenerate your Webhook URL in settings and update EasyOrders.' }, { status: 200 });
         }
 
-        // 2. Parse Payload
+        // 3. Parse Payload
         let payload;
         try {
-            const rawBody = await request.text();
             payload = JSON.parse(rawBody);
         } catch (e) {
-            console.error("Failed to parse JSON body:", e);
-            return NextResponse.json({ error: 'Invalid JSON payload' }, { status: 400 });
+            return NextResponse.json({ success: false, error: 'Invalid JSON payload structure received' }, { status: 200 });
         }
         
-        // Ignore status update events for now, we only want new orders
+        // Ignore status update events for now
         if (payload.event_type === 'order-status-update') {
-            return NextResponse.json({ message: 'Status update ignored' }, { status: 200 });
+            return NextResponse.json({ success: true, message: 'Status update ignored' }, { status: 200 });
         }
         
         // Basic check to prevent duplicate webhooks if easyorders provides an ID
@@ -239,7 +258,7 @@ export async function POST(request: Request) {
 
         if (orderError) {
             console.error("Order Insert Error:", orderError);
-            return NextResponse.json({ error: 'Failed to create order' }, { status: 500 });
+            return NextResponse.json({ success: false, error: 'Failed to create order in database', details: orderError.message }, { status: 200 });
         }
 
         // 6. Create Order Items
@@ -255,14 +274,13 @@ export async function POST(request: Request) {
 
             if (itemsError) {
                 console.error("Order Items Insert Error:", itemsError);
-                // We still return 200 because the webhook was received, but we logged the error.
             }
         }
 
         return NextResponse.json({ success: true, order_id: newOrder.id }, { status: 200 });
 
-    } catch (error) {
+    } catch (error: any) {
         console.error("Webhook Error:", error);
-        return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+        return NextResponse.json({ success: false, error: 'Internal Server Error', details: error?.message || String(error) }, { status: 200 });
     }
 }
