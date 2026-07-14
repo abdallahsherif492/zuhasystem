@@ -106,7 +106,7 @@ export function SidebarContent() {
         <div className="space-y-1">
             <Link href="/my-hr">
                 <Button
-                    variant={pathname.startsWith("/my-hr") ? "secondary" : "ghost"}
+                    variant={pathname.startsWith("/my-hr") ? "default" : "ghost"}
                     className="w-full justify-start"
                 >
                     <Calendar className="mr-2 h-4 w-4" />
@@ -116,7 +116,7 @@ export function SidebarContent() {
             {canAccess("/dashboard") && (
                 <Link href="/dashboard">
                     <Button
-                        variant={pathname === "/dashboard" ? "secondary" : "ghost"}
+                        variant={pathname === "/dashboard" ? "default" : "ghost"}
                         className="w-full justify-start"
                     >
                         <LayoutDashboard className="mr-2 h-4 w-4" />
@@ -127,7 +127,7 @@ export function SidebarContent() {
             {canAccess("/products") && (
                 <Link href="/products">
                     <Button
-                        variant={pathname.startsWith("/products") ? "secondary" : "ghost"}
+                        variant={pathname.startsWith("/products") ? "default" : "ghost"}
                         className="w-full justify-start"
                     >
                         <Package className="mr-2 h-4 w-4" />
@@ -139,7 +139,7 @@ export function SidebarContent() {
                 <>
                     <Link href="/inventory">
                         <Button
-                            variant={pathname === "/inventory" ? "secondary" : "ghost"}
+                            variant={pathname === "/inventory" ? "default" : "ghost"}
                             className="w-full justify-start"
                         >
                             <Box className="mr-2 h-4 w-4" />
@@ -148,7 +148,7 @@ export function SidebarContent() {
                     </Link>
                     <Link href="/inventory/damages">
                         <Button
-                            variant={pathname.startsWith("/inventory/damages") ? "secondary" : "ghost"}
+                            variant={pathname.startsWith("/inventory/damages") ? "default" : "ghost"}
                             className="w-full justify-start pl-8 text-sm text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950"
                         >
                             <AlertTriangle className="mr-2 h-3.5 w-3.5" />
@@ -160,7 +160,7 @@ export function SidebarContent() {
             {canAccess("/orders") && (
                 <Link href="/orders">
                     <Button
-                        variant={pathname.startsWith("/orders") ? "secondary" : "ghost"}
+                        variant={pathname.startsWith("/orders") ? "default" : "ghost"}
                         className="w-full justify-start"
                     >
                         <ShoppingCart className="mr-2 h-4 w-4" />
@@ -171,7 +171,7 @@ export function SidebarContent() {
             {canAccess("/purchases") && (
                 <Link href="/purchases">
                     <Button
-                        variant={pathname.startsWith("/purchases") ? "secondary" : "ghost"}
+                        variant={pathname.startsWith("/purchases") ? "default" : "ghost"}
                         className="w-full justify-start"
                     >
                         <ShoppingBag className="mr-2 h-4 w-4" />
@@ -182,7 +182,7 @@ export function SidebarContent() {
             {canAccess("/customers") && (
                 <Link href="/customers">
                     <Button
-                        variant={pathname.startsWith("/customers") ? "secondary" : "ghost"}
+                        variant={pathname.startsWith("/customers") ? "default" : "ghost"}
                         className="w-full justify-start"
                     >
                         <Users className="mr-2 h-4 w-4" />
@@ -193,7 +193,7 @@ export function SidebarContent() {
             {canAccess("/logistics") && (
                 <Link href="/logistics">
                     <Button
-                        variant={pathname.startsWith("/logistics") ? "secondary" : "ghost"}
+                        variant={pathname.startsWith("/logistics") ? "default" : "ghost"}
                         className="w-full justify-start"
                     >
                         <Truck className="mr-2 h-4 w-4" />
@@ -204,7 +204,7 @@ export function SidebarContent() {
             {canAccess("/support") && (
                 <Link href="/support">
                     <Button
-                        variant={pathname.startsWith("/support") ? "secondary" : "ghost"}
+                        variant={pathname.startsWith("/support") ? "default" : "ghost"}
                         className="w-full justify-start text-blue-600 hover:text-blue-700 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-950"
                     >
                         <Ticket className="mr-2 h-4 w-4" />
@@ -215,7 +215,7 @@ export function SidebarContent() {
             {canAccess("/accounting") && (
                 <Link href="/accounting">
                     <Button
-                        variant={pathname.startsWith("/accounting") ? "secondary" : "ghost"}
+                        variant={pathname.startsWith("/accounting") ? "default" : "ghost"}
                         className="w-full justify-start"
                     >
                         <Banknote className="mr-2 h-4 w-4" />
@@ -226,7 +226,7 @@ export function SidebarContent() {
             {canAccess("/insights") && (
                 <Link href="/insights">
                     <Button
-                        variant={pathname.startsWith("/insights") && !pathname.startsWith("/insights/") ? "secondary" : "ghost"}
+                        variant={pathname.startsWith("/insights") && !pathname.startsWith("/insights/") ? "default" : "ghost"}
                         className="w-full justify-start"
                     >
                         <LineChart className="mr-2 h-4 w-4" />
@@ -237,7 +237,7 @@ export function SidebarContent() {
             {canAccess("/shipping") && (
                 <Link href="/shipping">
                     <Button
-                        variant={pathname.startsWith("/shipping") ? "secondary" : "ghost"}
+                        variant={pathname.startsWith("/shipping") ? "default" : "ghost"}
                         className="w-full justify-start"
                     >
                         <Truck className="mr-2 h-4 w-4" />
@@ -248,7 +248,7 @@ export function SidebarContent() {
             {canAccess("/ads") && (
                 <Link href="/ads">
                     <Button
-                        variant={pathname.startsWith("/ads") ? "secondary" : "ghost"}
+                        variant={pathname.startsWith("/ads") ? "default" : "ghost"}
                         className="w-full justify-start"
                     >
                         <Megaphone className="mr-2 h-4 w-4" />
@@ -259,7 +259,7 @@ export function SidebarContent() {
             {canAccess("/payable") && (
                 <Link href="/payable">
                     <Button
-                        variant={pathname.startsWith("/payable") ? "secondary" : "ghost"}
+                        variant={pathname.startsWith("/payable") ? "default" : "ghost"}
                         className="w-full justify-start"
                     >
                         <FileText className="mr-2 h-4 w-4" />
@@ -276,7 +276,7 @@ export function SidebarContent() {
                     <div className="grid grid-flow-row auto-rows-max text-sm gap-1">
                         <Link href="/insights/revenues">
                             <Button
-                                variant={pathname.startsWith("/insights/revenues") ? "secondary" : "ghost"}
+                                variant={pathname.startsWith("/insights/revenues") ? "default" : "ghost"}
                                 className="w-full justify-start h-8"
                                 size="sm"
                             >
@@ -286,7 +286,7 @@ export function SidebarContent() {
                         </Link>
                         <Link href="/insights/actual-returns">
                             <Button
-                                variant={pathname.startsWith("/insights/actual-returns") ? "secondary" : "ghost"}
+                                variant={pathname.startsWith("/insights/actual-returns") ? "default" : "ghost"}
                                 className="w-full justify-start h-8"
                                 size="sm"
                             >
@@ -296,7 +296,7 @@ export function SidebarContent() {
                         </Link>
                         <Link href="/insights/expenses">
                             <Button
-                                variant={pathname.startsWith("/insights/expenses") ? "secondary" : "ghost"}
+                                variant={pathname.startsWith("/insights/expenses") ? "default" : "ghost"}
                                 className="w-full justify-start h-8"
                                 size="sm"
                             >
@@ -306,7 +306,7 @@ export function SidebarContent() {
                         </Link>
                         <Link href="/insights/channel-analytics">
                             <Button
-                                variant={pathname.startsWith("/insights/channel-analytics") ? "secondary" : "ghost"}
+                                variant={pathname.startsWith("/insights/channel-analytics") ? "default" : "ghost"}
                                 className="w-full justify-start h-8"
                                 size="sm"
                             >
@@ -316,7 +316,7 @@ export function SidebarContent() {
                         </Link>
                         <Link href="/insights/products-analysis">
                             <Button
-                                variant={pathname.startsWith("/insights/products-analysis") ? "secondary" : "ghost"}
+                                variant={pathname.startsWith("/insights/products-analysis") ? "default" : "ghost"}
                                 className="w-full justify-start h-8"
                                 size="sm"
                             >
@@ -338,7 +338,7 @@ export function SidebarContent() {
                             <>
                                 <Link href="/team">
                                     <Button
-                                        variant={pathname === "/team" ? "secondary" : "ghost"}
+                                        variant={pathname === "/team" ? "default" : "ghost"}
                                         className="w-full justify-start h-8"
                                         size="sm"
                                     >
@@ -348,7 +348,7 @@ export function SidebarContent() {
                                 </Link>
                                 <Link href="/team/attendance">
                                     <Button
-                                        variant={pathname.startsWith("/team/attendance") ? "secondary" : "ghost"}
+                                        variant={pathname.startsWith("/team/attendance") ? "default" : "ghost"}
                                         className="w-full justify-start h-8"
                                         size="sm"
                                     >
@@ -358,7 +358,7 @@ export function SidebarContent() {
                                 </Link>
                                 <Link href="/team/requests">
                                     <Button
-                                        variant={pathname.startsWith("/team/requests") ? "secondary" : "ghost"}
+                                        variant={pathname.startsWith("/team/requests") ? "default" : "ghost"}
                                         className="w-full justify-start h-8"
                                         size="sm"
                                     >
@@ -371,7 +371,7 @@ export function SidebarContent() {
                         {isSystemAdmin && (
                             <Link href="/users">
                                 <Button
-                                    variant={pathname.startsWith("/users") ? "secondary" : "ghost"}
+                                    variant={pathname.startsWith("/users") ? "default" : "ghost"}
                                     className="w-full justify-start h-8"
                                     size="sm"
                                 >
@@ -386,7 +386,7 @@ export function SidebarContent() {
                         <div className="mt-2">
                             <Link href="/settings">
                                 <Button
-                                    variant={pathname.startsWith("/settings") ? "secondary" : "ghost"}
+                                    variant={pathname.startsWith("/settings") ? "default" : "ghost"}
                                     className="w-full justify-start h-8 text-muted-foreground hover:text-foreground"
                                     size="sm"
                                 >
