@@ -44,9 +44,11 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { useBusiness } from "@/contexts/BusinessContext";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 export default function InventoryPage() {
     const { activeBusiness } = useBusiness();
+    const { t } = useLanguage();
     const [loading, setLoading] = useState(true);
     const [stockItems, setStockItems] = useState<any[]>([]);
     const [transactions, setTransactions] = useState<any[]>([]);
@@ -232,46 +234,46 @@ export default function InventoryPage() {
 
     return (
         <div className="space-y-6">
-            <h1 className="text-3xl font-bold tracking-tight">Inventory Management</h1>
+            <h1 className="text-3xl font-bold tracking-tight">{t("Inventory")}</h1>
 
             {/* KPIs */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Total Stock Value</CardTitle>
+                        <CardTitle className="text-sm font-medium">{t("Total Stock Value")}</CardTitle>
                         <Box className="h-4 w-4 text-muted-foreground" />
                     </CardHeader>
                     <CardContent>
                         <div className="text-2xl font-bold text-green-600">{formatCurrency(totalStockValue)}</div>
-                        <p className="text-xs text-muted-foreground">{totalItems} Total Units</p>
+                        <p className="text-xs text-muted-foreground">{totalItems} {t("Total Units")}</p>
                     </CardContent>
                 </Card>
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Low Stock Alerts</CardTitle>
+                        <CardTitle className="text-sm font-medium">{t("Low Stock Alerts")}</CardTitle>
                         <ArrowDownRight className="h-4 w-4 text-red-500" />
                     </CardHeader>
                     <CardContent>
                         <div className="text-2xl font-bold text-red-600">{lowStockCount}</div>
-                        <p className="text-xs text-muted-foreground">Variants with ≤ 5 units</p>
+                        <p className="text-xs text-muted-foreground">{t("Variants with ≤ 5 units")}</p>
                     </CardContent>
                 </Card>
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Recent Moves</CardTitle>
+                        <CardTitle className="text-sm font-medium">{t("Recent Moves")}</CardTitle>
                         <Package className="h-4 w-4 text-blue-500" />
                     </CardHeader>
                     <CardContent>
                         <div className="text-2xl font-bold">{transactions.length}</div>
-                        <p className="text-xs text-muted-foreground">Transactions (Last 50)</p>
+                        <p className="text-xs text-muted-foreground">{t("Transactions (Last 50)")}</p>
                     </CardContent>
                 </Card>
             </div>
 
             <Tabs defaultValue="stock">
                 <TabsList>
-                    <TabsTrigger value="stock">Current Stock</TabsTrigger>
-                    <TabsTrigger value="transactions">History Log</TabsTrigger>
+                    <TabsTrigger value="stock">{t("Current Stock")}</TabsTrigger>
+                    <TabsTrigger value="transactions">{t("History Log")}</TabsTrigger>
                 </TabsList>
 
                 <TabsContent value="stock" className="space-y-4">
@@ -279,7 +281,7 @@ export default function InventoryPage() {
                         <div className="relative flex-1 max-w-sm">
                             <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
                             <Input
-                                placeholder="Search products..."
+                                placeholder={t("Search products...")}
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
                                 className="pl-8"
@@ -292,13 +294,13 @@ export default function InventoryPage() {
                             <Table>
                                 <TableHeader>
                                     <TableRow>
-                                        <TableHead>Product</TableHead>
-                                        <TableHead>Variant</TableHead>
-                                        <TableHead>Tracking</TableHead>
-                                        <TableHead className="text-right">Quantity</TableHead>
-                                        <TableHead className="text-right">Unit Cost</TableHead>
-                                        <TableHead className="text-right">Total Value</TableHead>
-                                        <TableHead className="text-right">Actions</TableHead>
+                                        <TableHead>{t("Product")}</TableHead>
+                                        <TableHead>{t("Variant")}</TableHead>
+                                        <TableHead>{t("Tracking")}</TableHead>
+                                        <TableHead className="text-right">{t("Quantity")}</TableHead>
+                                        <TableHead className="text-right">{t("Unit Cost")}</TableHead>
+                                        <TableHead className="text-right">{t("Total Value")}</TableHead>
+                                        <TableHead className="text-right">{t("Actions")}</TableHead>
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
@@ -326,7 +328,7 @@ export default function InventoryPage() {
                                             <TableCell className="text-right font-bold">{formatCurrency(item.stock_qty * item.cost_price)}</TableCell>
                                             <TableCell className="text-right">
                                                 <Button size="sm" variant="outline" onClick={() => openRestock(item)}>
-                                                    <Edit className="h-4 w-4 mr-1" /> Adjust
+                                                    <Edit className="h-4 w-4 mr-1" /> {t("Adjust")}
                                                 </Button>
                                             </TableCell>
                                         </TableRow>
@@ -410,11 +412,11 @@ export default function InventoryPage() {
                             <Table>
                                 <TableHeader>
                                     <TableRow>
-                                        <TableHead>Date</TableHead>
-                                        <TableHead>Product</TableHead>
-                                        <TableHead>Type</TableHead>
-                                        <TableHead className="text-right">Change</TableHead>
-                                        <TableHead>Note</TableHead>
+                                        <TableHead>{t("Date")}</TableHead>
+                                        <TableHead>{t("Product")}</TableHead>
+                                        <TableHead>{t("Type")}</TableHead>
+                                        <TableHead className="text-right">{t("Change")}</TableHead>
+                                        <TableHead>{t("Note")}</TableHead>
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>

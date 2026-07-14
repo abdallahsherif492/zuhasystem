@@ -4,6 +4,7 @@ import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import { usePathname } from "next/navigation";
 import { useBusiness } from "@/contexts/BusinessContext";
+import { useLanguage } from "@/contexts/LanguageContext";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { LayoutDashboard, AlertTriangle, Package, ShoppingCart, Settings, Users, Truck, Banknote, LineChart, ShoppingBag, Megaphone, Box, DollarSign, ShieldCheck, FileText, Ticket, CreditCard, Clock, Inbox, Calendar, LogOut } from "lucide-react";
@@ -13,6 +14,7 @@ import Image from "next/image";
 interface SidebarProps extends React.HTMLAttributes<HTMLDivElement> { }
 
 export function Sidebar({ className }: SidebarProps) {
+    const { t } = useLanguage();
     const handleLogout = async () => {
         await supabase.auth.signOut();
         window.location.href = "/login";
@@ -44,7 +46,7 @@ export function Sidebar({ className }: SidebarProps) {
                     onClick={handleLogout}
                 >
                     <LogOut className="mr-2 h-4 w-4" />
-                    Log Out
+                    {t("Log Out")}
                 </Button>
             </div>
         </div>
@@ -54,6 +56,7 @@ export function Sidebar({ className }: SidebarProps) {
 export function SidebarContent() {
     const pathname = usePathname();
     const { userRole, allowedPages, isSystemAdmin, loading } = useBusiness();
+    const { t } = useLanguage();
 
     const role = userRole?.toLowerCase().trim() || "";
 
@@ -94,7 +97,7 @@ export function SidebarContent() {
                     className="w-full justify-start"
                 >
                     <Calendar className="mr-2 h-4 w-4" />
-                    My HR
+                    {t("My HR")}
                 </Button>
             </Link>
             {canAccess("/dashboard") && (
@@ -104,7 +107,7 @@ export function SidebarContent() {
                         className="w-full justify-start"
                     >
                         <LayoutDashboard className="mr-2 h-4 w-4" />
-                        Dashboard
+                        {t("Dashboard")}
                     </Button>
                 </Link>
             )}
@@ -115,7 +118,7 @@ export function SidebarContent() {
                         className="w-full justify-start"
                     >
                         <Package className="mr-2 h-4 w-4" />
-                        Products
+                        {t("Products")}
                     </Button>
                 </Link>
             )}
@@ -127,7 +130,7 @@ export function SidebarContent() {
                             className="w-full justify-start"
                         >
                             <Box className="mr-2 h-4 w-4" />
-                            Inventory
+                            {t("Inventory")}
                         </Button>
                     </Link>
                     <Link href="/inventory/damages">
@@ -136,7 +139,7 @@ export function SidebarContent() {
                             className="w-full justify-start pl-8 text-sm text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950"
                         >
                             <AlertTriangle className="mr-2 h-3.5 w-3.5" />
-                            Damages (التلفيات)
+                            {t("Damages (التلفيات)")}
                         </Button>
                     </Link>
                 </>
@@ -148,7 +151,7 @@ export function SidebarContent() {
                         className="w-full justify-start"
                     >
                         <ShoppingCart className="mr-2 h-4 w-4" />
-                        Orders
+                        {t("Orders")}
                     </Button>
                 </Link>
             )}
@@ -159,7 +162,7 @@ export function SidebarContent() {
                         className="w-full justify-start"
                     >
                         <ShoppingBag className="mr-2 h-4 w-4" />
-                        Purchases
+                        {t("Purchases")}
                     </Button>
                 </Link>
             )}
@@ -170,7 +173,7 @@ export function SidebarContent() {
                         className="w-full justify-start"
                     >
                         <Users className="mr-2 h-4 w-4" />
-                        Customers
+                        {t("Customers")}
                     </Button>
                 </Link>
             )}
@@ -181,7 +184,7 @@ export function SidebarContent() {
                         className="w-full justify-start"
                     >
                         <Truck className="mr-2 h-4 w-4" />
-                        Logistics
+                        {t("Logistics")}
                     </Button>
                 </Link>
             )}
@@ -192,7 +195,7 @@ export function SidebarContent() {
                         className="w-full justify-start text-blue-600 hover:text-blue-700 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-950"
                     >
                         <Ticket className="mr-2 h-4 w-4" />
-                        Support
+                        {t("Support")}
                     </Button>
                 </Link>
             )}
@@ -203,7 +206,7 @@ export function SidebarContent() {
                         className="w-full justify-start"
                     >
                         <Banknote className="mr-2 h-4 w-4" />
-                        Accounting
+                        {t("Accounting")}
                     </Button>
                 </Link>
             )}
@@ -214,7 +217,7 @@ export function SidebarContent() {
                         className="w-full justify-start"
                     >
                         <LineChart className="mr-2 h-4 w-4" />
-                        Insights
+                        {t("Insights")}
                     </Button>
                 </Link>
             )}
@@ -225,7 +228,7 @@ export function SidebarContent() {
                         className="w-full justify-start"
                     >
                         <Truck className="mr-2 h-4 w-4" />
-                        Shipping
+                        {t("Shipping")}
                     </Button>
                 </Link>
             )}
@@ -236,7 +239,7 @@ export function SidebarContent() {
                         className="w-full justify-start"
                     >
                         <Megaphone className="mr-2 h-4 w-4" />
-                        Ads Spent
+                        {t("Ads Spent")}
                     </Button>
                 </Link>
             )}
@@ -247,7 +250,7 @@ export function SidebarContent() {
                         className="w-full justify-start"
                     >
                         <FileText className="mr-2 h-4 w-4" />
-                        Accounts Payable
+                        {t("Accounts Payable")}
                     </Button>
                 </Link>
             )}
@@ -255,7 +258,7 @@ export function SidebarContent() {
             {canAccess("/insights") && (
                 <div className="pt-4 pb-2">
                     <h4 className="mb-1 rounded-md px-2 py-1 text-sm font-semibold">
-                        Detailed Analytics
+                        {t("Detailed Analytics")}
                     </h4>
                     <div className="grid grid-flow-row auto-rows-max text-sm gap-1">
                         <Link href="/insights/revenues">
@@ -265,7 +268,7 @@ export function SidebarContent() {
                                 size="sm"
                             >
                                 <DollarSign className="mr-2 h-3 w-3" />
-                                Revenues
+                                {t("Revenues")}
                             </Button>
                         </Link>
                         <Link href="/insights/actual-returns">
@@ -275,7 +278,7 @@ export function SidebarContent() {
                                 size="sm"
                             >
                                 <DollarSign className="mr-2 h-3 w-3" />
-                                Actual Returns
+                                {t("Actual Returns")}
                             </Button>
                         </Link>
                         <Link href="/insights/expenses">
@@ -285,7 +288,7 @@ export function SidebarContent() {
                                 size="sm"
                             >
                                 <Banknote className="mr-2 h-3 w-3" />
-                                Expenses
+                                {t("Expenses")}
                             </Button>
                         </Link>
                         <Link href="/insights/channel-analytics">
@@ -295,7 +298,7 @@ export function SidebarContent() {
                                 size="sm"
                             >
                                 <Megaphone className="mr-2 h-3 w-3" />
-                                Channels
+                                {t("Channels")}
                             </Button>
                         </Link>
                         <Link href="/insights/products-analysis">
@@ -305,7 +308,7 @@ export function SidebarContent() {
                                 size="sm"
                             >
                                 <Package className="mr-2 h-3 w-3" />
-                                Products
+                                {t("Products")}
                             </Button>
                         </Link>
                     </div>
@@ -315,7 +318,7 @@ export function SidebarContent() {
             {(role === "owner" || role === "admin" || role === "platform admin" || role === "super admin" || isSystemAdmin || canAccess("/team") || canAccess("/users")) && (
                 <div className="pt-4 pb-2 border-t mt-4">
                     <h4 className="mb-1 rounded-md px-2 py-1 text-sm font-semibold">
-                        Administration
+                        {t("Administration")}
                     </h4>
                     <div className="grid grid-flow-row auto-rows-max text-sm gap-1">
                         {(role === "owner" || role === "admin" || role === "platform admin" || role === "super admin" || isSystemAdmin || canAccess("/team")) && (
@@ -327,7 +330,7 @@ export function SidebarContent() {
                                         size="sm"
                                     >
                                         <Users className="mr-2 h-3 w-3" />
-                                        Team
+                                        {t("Team")}
                                     </Button>
                                 </Link>
                                 <Link href="/team/attendance">
@@ -337,7 +340,7 @@ export function SidebarContent() {
                                         size="sm"
                                     >
                                         <Clock className="mr-2 h-3 w-3" />
-                                        Attendance
+                                        {t("Attendance")}
                                     </Button>
                                 </Link>
                                 <Link href="/team/requests">
@@ -347,7 +350,7 @@ export function SidebarContent() {
                                         size="sm"
                                     >
                                         <Inbox className="mr-2 h-3 w-3" />
-                                        Leave Requests
+                                        {t("Leave Requests")}
                                     </Button>
                                 </Link>
                             </>
@@ -360,11 +363,26 @@ export function SidebarContent() {
                                     size="sm"
                                 >
                                     <ShieldCheck className="mr-2 h-3 w-3" />
-                                    Users & Permissions
+                                    {t("Users & Permissions")}
                                 </Button>
                             </Link>
                         )}
                     </div>
+                    
+                    {(role === "owner" || role === "super_admin") && (
+                        <div className="mt-2">
+                            <Link href="/settings">
+                                <Button
+                                    variant={pathname.startsWith("/settings") ? "secondary" : "ghost"}
+                                    className="w-full justify-start h-8 text-muted-foreground hover:text-foreground"
+                                    size="sm"
+                                >
+                                    <Settings className="mr-2 h-3 w-3" />
+                                    {t("Settings")}
+                                </Button>
+                            </Link>
+                        </div>
+                    )}
                 </div>
             )}
         </div>

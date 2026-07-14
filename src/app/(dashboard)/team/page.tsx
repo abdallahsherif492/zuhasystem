@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useBusiness } from "@/contexts/BusinessContext";
+import { useLanguage } from "@/contexts/LanguageContext";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
@@ -29,6 +30,7 @@ type BusinessUser = {
 
 export default function TeamManagementPage() {
     const { activeBusiness } = useBusiness();
+    const { t } = useLanguage();
     const [team, setTeam] = useState<BusinessUser[]>([]);
     const [loading, setLoading] = useState(true);
     
@@ -46,21 +48,21 @@ export default function TeamManagementPage() {
     const [editSaving, setEditSaving] = useState(false);
 
     const availablePages = [
-        { id: "/dashboard", label: "Dashboard" },
-        { id: "/orders", label: "Orders" },
-        { id: "/products", label: "Products" },
-        { id: "/inventory", label: "Inventory" },
-        { id: "/customers", label: "Customers" },
-        { id: "/purchases", label: "Purchases" },
-        { id: "/accounting", label: "Accounting" },
-        { id: "/shipping", label: "Shipping" },
-        { id: "/logistics", label: "Logistics" },
-        { id: "/payable", label: "Accounts Payable" },
-        { id: "/ads", label: "Ads Spent" },
-        { id: "/insights", label: "Insights" }
+        { id: "/dashboard", label: t("Dashboard") },
+        { id: "/orders", label: t("Orders") },
+        { id: "/products", label: t("Products") },
+        { id: "/inventory", label: t("Inventory") },
+        { id: "/customers", label: t("Customers") },
+        { id: "/purchases", label: t("Purchases") },
+        { id: "/accounting", label: t("Accounting") },
+        { id: "/shipping", label: t("Shipping") },
+        { id: "/logistics", label: t("Logistics") },
+        { id: "/payable", label: t("Accounts Payable") },
+        { id: "/ads", label: t("Ads Spent") },
+        { id: "/insights", label: t("Insights") }
     ];
 
-    const weekDays = ["Saturday", "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
+    const weekDays = [t("Saturday"), t("Sunday"), t("Monday"), t("Tuesday"), t("Wednesday"), t("Thursday"), t("Friday")];
 
 
     useEffect(() => {
@@ -179,25 +181,25 @@ export default function TeamManagementPage() {
         <div className="space-y-6 max-w-5xl mx-auto">
             <div className="flex justify-between items-center">
                 <div>
-                    <h1 className="text-3xl font-bold tracking-tight">Team Management</h1>
-                    <p className="text-muted-foreground mt-1">Manage your staff, cashiers, and managers.</p>
+                    <h1 className="text-3xl font-bold tracking-tight">{t("Team Management")}</h1>
+                    <p className="text-muted-foreground mt-1">{t("Manage your staff, cashiers, and managers.")}</p>
                 </div>
                 <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
                     <DialogTrigger asChild>
                         <Button>
-                            <UserPlus className="mr-2 h-4 w-4" /> Add Member
+                            <UserPlus className="mr-2 h-4 w-4" /> {t("Add Member")}
                         </Button>
                     </DialogTrigger>
                     <DialogContent>
                         <DialogHeader>
-                            <DialogTitle>Add Team Member</DialogTitle>
+                            <DialogTitle>{t("Add Team Member")}</DialogTitle>
                             <DialogDescription>
-                                Enter their email. If they don't have an account, tell them to sign up with this email.
+                                {t("Enter their email. If they don't have an account, tell them to sign up with this email.")}
                             </DialogDescription>
                         </DialogHeader>
                         <form onSubmit={handleAddMember} className="space-y-4 pt-4">
                             <div className="space-y-2">
-                                <label className="text-sm font-medium">Email Address</label>
+                                <label className="text-sm font-medium">{t("Email Address")}</label>
                                 <Input 
                                     type="email" 
                                     placeholder="staff@example.com" 
@@ -208,23 +210,23 @@ export default function TeamManagementPage() {
                             </div>
                             
                             <div className="space-y-2">
-                                <label className="text-sm font-medium">Role</label>
+                                <label className="text-sm font-medium">{t("Role")}</label>
                                 <Select value={newRole} onValueChange={setNewRole}>
                                     <SelectTrigger>
                                         <SelectValue />
                                     </SelectTrigger>
                                     <SelectContent>
-                                        <SelectItem value="owner">Owner</SelectItem>
-                                        <SelectItem value="manager">Manager</SelectItem>
-                                        <SelectItem value="accountant">Accountant</SelectItem>
-                                        <SelectItem value="staff">Staff (Cashier)</SelectItem>
+                                        <SelectItem value="owner">{t("Owner")}</SelectItem>
+                                        <SelectItem value="manager">{t("Manager")}</SelectItem>
+                                        <SelectItem value="accountant">{t("Accountant")}</SelectItem>
+                                        <SelectItem value="staff">{t("Staff (Cashier)")}</SelectItem>
                                     </SelectContent>
                                 </Select>
                             </div>
                             
                             {newRole !== 'owner' && newRole !== 'admin' && (
                                 <div className="space-y-4 border p-4 rounded-md">
-                                    <h4 className="text-sm font-semibold">Permissions (Allowed Pages)</h4>
+                                    <h4 className="text-sm font-semibold">{t("Permissions (Allowed Pages)")}</h4>
                                     <div className="grid grid-cols-2 gap-2">
                                         {availablePages.map(page => (
                                             <div key={page.id} className="flex items-center space-x-2">
@@ -244,19 +246,19 @@ export default function TeamManagementPage() {
                                         ))}
                                     </div>
                                     
-                                    <h4 className="text-sm font-semibold mt-4">Shift & Working Hours</h4>
+                                    <h4 className="text-sm font-semibold mt-4">{t("Shift & Working Hours")}</h4>
                                     <div className="grid grid-cols-2 gap-4">
                                         <div className="space-y-1">
-                                            <Label className="text-xs">Start Time</Label>
+                                            <Label className="text-xs">{t("Start Time")}</Label>
                                             <Input type="time" value={newShiftStart} onChange={e => setNewShiftStart(e.target.value)} />
                                         </div>
                                         <div className="space-y-1">
-                                            <Label className="text-xs">End Time</Label>
+                                            <Label className="text-xs">{t("End Time")}</Label>
                                             <Input type="time" value={newShiftEnd} onChange={e => setNewShiftEnd(e.target.value)} />
                                         </div>
                                     </div>
                                     
-                                    <h4 className="text-sm font-semibold mt-4">Weekend Days (Holidays)</h4>
+                                    <h4 className="text-sm font-semibold mt-4">{t("Weekend Days (Holidays)")}</h4>
                                     <div className="grid grid-cols-3 gap-2">
                                         {weekDays.map(day => (
                                             <div key={day} className="flex items-center space-x-2">
@@ -279,10 +281,10 @@ export default function TeamManagementPage() {
                             )}
 
                             <DialogFooter>
-                                <Button type="button" variant="outline" onClick={() => setIsAddOpen(false)}>Cancel</Button>
+                                <Button type="button" variant="outline" onClick={() => setIsAddOpen(false)}>{t("Cancel")}</Button>
                                 <Button type="submit" disabled={saving}>
                                     {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                                    Add Member
+                                    {t("Add Member")}
                                 </Button>
                             </DialogFooter>
                         </form>
@@ -292,29 +294,29 @@ export default function TeamManagementPage() {
                 <Dialog open={!!editingMember} onOpenChange={(open) => !open && setEditingMember(null)}>
                     <DialogContent>
                         <DialogHeader>
-                            <DialogTitle>Edit Team Member</DialogTitle>
-                            <DialogDescription>Update permissions, role, and working hours.</DialogDescription>
+                            <DialogTitle>{t("Edit Team Member")}</DialogTitle>
+                            <DialogDescription>{t("Update permissions, role, and working hours.")}</DialogDescription>
                         </DialogHeader>
                         {editingMember && (
                         <form onSubmit={handleSaveEdit} className="space-y-4 pt-4">
                             <div className="space-y-2">
-                                <label className="text-sm font-medium">Role</label>
+                                <label className="text-sm font-medium">{t("Role")}</label>
                                 <Select value={editingMember.role} onValueChange={v => setEditingMember({...editingMember, role: v})}>
                                     <SelectTrigger>
                                         <SelectValue />
                                     </SelectTrigger>
                                     <SelectContent>
-                                        <SelectItem value="owner">Owner</SelectItem>
-                                        <SelectItem value="manager">Manager</SelectItem>
-                                        <SelectItem value="accountant">Accountant</SelectItem>
-                                        <SelectItem value="staff">Staff (Cashier)</SelectItem>
+                                        <SelectItem value="owner">{t("Owner")}</SelectItem>
+                                        <SelectItem value="manager">{t("Manager")}</SelectItem>
+                                        <SelectItem value="accountant">{t("Accountant")}</SelectItem>
+                                        <SelectItem value="staff">{t("Staff (Cashier)")}</SelectItem>
                                     </SelectContent>
                                 </Select>
                             </div>
                             
                             {editingMember.role !== 'owner' && editingMember.role !== 'admin' && (
                                 <div className="space-y-4 border p-4 rounded-md">
-                                    <h4 className="text-sm font-semibold">Permissions (Allowed Pages)</h4>
+                                    <h4 className="text-sm font-semibold">{t("Permissions (Allowed Pages)")}</h4>
                                     <div className="grid grid-cols-2 gap-2">
                                         {availablePages.map(page => (
                                             <div key={page.id} className="flex items-center space-x-2">
@@ -334,19 +336,19 @@ export default function TeamManagementPage() {
                                         ))}
                                     </div>
                                     
-                                    <h4 className="text-sm font-semibold mt-4">Shift & Working Hours</h4>
+                                    <h4 className="text-sm font-semibold mt-4">{t("Shift & Working Hours")}</h4>
                                     <div className="grid grid-cols-2 gap-4">
                                         <div className="space-y-1">
-                                            <Label className="text-xs">Start Time</Label>
+                                            <Label className="text-xs">{t("Start Time")}</Label>
                                             <Input type="time" value={editingMember.shift_start || ""} onChange={e => setEditingMember({...editingMember, shift_start: e.target.value})} />
                                         </div>
                                         <div className="space-y-1">
-                                            <Label className="text-xs">End Time</Label>
+                                            <Label className="text-xs">{t("End Time")}</Label>
                                             <Input type="time" value={editingMember.shift_end || ""} onChange={e => setEditingMember({...editingMember, shift_end: e.target.value})} />
                                         </div>
                                     </div>
                                     
-                                    <h4 className="text-sm font-semibold mt-4">Weekend Days (Holidays)</h4>
+                                    <h4 className="text-sm font-semibold mt-4">{t("Weekend Days (Holidays)")}</h4>
                                     <div className="grid grid-cols-3 gap-2">
                                         {weekDays.map(day => (
                                             <div key={"edit-"+day} className="flex items-center space-x-2">
@@ -369,10 +371,10 @@ export default function TeamManagementPage() {
                             )}
 
                             <DialogFooter>
-                                <Button type="button" variant="outline" onClick={() => setEditingMember(null)}>Cancel</Button>
+                                <Button type="button" variant="outline" onClick={() => setEditingMember(null)}>{t("Cancel")}</Button>
                                 <Button type="submit" disabled={editSaving}>
                                     {editSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                                    Save Changes
+                                    {t("Save Changes")}
                                 </Button>
                             </DialogFooter>
                         </form>
@@ -386,24 +388,24 @@ export default function TeamManagementPage() {
                 <CardHeader>
                     <CardTitle className="flex items-center gap-2">
                         <Users className="h-5 w-5 text-primary" />
-                        Current Team
+                        {t("Current Team")}
                     </CardTitle>
                 </CardHeader>
                 <CardContent>
                     <Table>
                         <TableHeader>
                             <TableRow>
-                                <TableHead>Email</TableHead>
-                                <TableHead>Role</TableHead>
-                                <TableHead>Added On</TableHead>
-                                <TableHead className="text-right">Actions</TableHead>
+                                <TableHead>{t("Email Address")}</TableHead>
+                                <TableHead>{t("Role")}</TableHead>
+                                <TableHead>{t("Added On")}</TableHead>
+                                <TableHead className="text-right">{t("Actions")}</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
                             {team.length === 0 ? (
                                 <TableRow>
                                     <TableCell colSpan={4} className="text-center p-8 text-muted-foreground">
-                                        No team members found.
+                                        {t("No team members found.")}
                                     </TableCell>
                                 </TableRow>
                             ) : (

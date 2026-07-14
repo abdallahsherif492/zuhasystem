@@ -90,10 +90,11 @@ export const BusinessProvider = ({ children }: { children: React.ReactNode }) =>
 
       // Check System Admin
       const { data: sysAdmin } = await supabase
-        .from('system_admins')
+        .from('business_users')
         .select('*')
         .eq('user_email', user.email)
-        .single();
+        .eq('role', 'super_admin')
+        .maybeSingle();
         
       if (sysAdmin) {
         setIsSystemAdmin(true);

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useBusiness } from "@/contexts/BusinessContext";
+import { useLanguage } from "@/contexts/LanguageContext";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
@@ -53,6 +54,7 @@ function formatTime12(timeString: string | null) {
 
 export default function AttendancePage() {
     const { activeBusiness } = useBusiness();
+    const { t } = useLanguage();
     const [loading, setLoading] = useState(true);
     const [records, setRecords] = useState<AttendanceRecord[]>([]);
     const [date, setDate] = useState<string>(format(new Date(), "yyyy-MM-dd"));
@@ -162,8 +164,8 @@ export default function AttendancePage() {
         <div className="space-y-6 max-w-5xl mx-auto">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                 <div>
-                    <h1 className="text-3xl font-bold tracking-tight">Attendance & Tracking</h1>
-                    <p className="text-muted-foreground mt-1">Monitor staff attendance, delays, and absences.</p>
+                    <h1 className="text-3xl font-bold tracking-tight">{t("Attendance & Tracking")}</h1>
+                    <p className="text-muted-foreground mt-1">{t("Monitor staff attendance, delays, and absences.")}</p>
                 </div>
                 <div className="flex items-center gap-2 bg-background border rounded-md px-3 py-1">
                     <CalendarClock className="h-4 w-4 text-muted-foreground" />
@@ -179,7 +181,7 @@ export default function AttendancePage() {
             <div className="grid gap-4 md:grid-cols-3">
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Present Today</CardTitle>
+                        <CardTitle className="text-sm font-medium">{t("Present Today")}</CardTitle>
                         <Clock className="h-4 w-4 text-muted-foreground" />
                     </CardHeader>
                     <CardContent>
@@ -188,7 +190,7 @@ export default function AttendancePage() {
                 </Card>
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Absent</CardTitle>
+                        <CardTitle className="text-sm font-medium">{t("Absent")}</CardTitle>
                         <UserX className="h-4 w-4 text-destructive" />
                     </CardHeader>
                     <CardContent>
@@ -197,7 +199,7 @@ export default function AttendancePage() {
                 </Card>
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Late Arrivals</CardTitle>
+                        <CardTitle className="text-sm font-medium">{t("Late Arrivals")}</CardTitle>
                         <CalendarClock className="h-4 w-4 text-orange-500" />
                     </CardHeader>
                     <CardContent>
@@ -208,7 +210,7 @@ export default function AttendancePage() {
 
             <Card>
                 <CardHeader>
-                    <CardTitle>Attendance Records</CardTitle>
+                    <CardTitle>{t("Attendance Records")}</CardTitle>
                 </CardHeader>
                 <CardContent>
                     {loading ? (
@@ -217,35 +219,35 @@ export default function AttendancePage() {
                         <Table>
                             <TableHeader>
                                 <TableRow>
-                                    <TableHead>Staff Member</TableHead>
-                                    <TableHead>Expected Shift</TableHead>
-                                    <TableHead>Status</TableHead>
-                                    <TableHead>Clock In</TableHead>
-                                    <TableHead>Clock Out</TableHead>
-                                    <TableHead className="text-right">Delay</TableHead>
+                                    <TableHead>{t("Staff Member")}</TableHead>
+                                    <TableHead>{t("Expected Shift")}</TableHead>
+                                    <TableHead>{t("Status")}</TableHead>
+                                    <TableHead>{t("Clock In")}</TableHead>
+                                    <TableHead>{t("Clock Out")}</TableHead>
+                                    <TableHead className="text-right">{t("Delay")}</TableHead>
                                     <TableHead></TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
                                 {records.length === 0 ? (
-                                    <TableRow><TableCell colSpan={6} className="text-center">No records found.</TableCell></TableRow>
+                                    <TableRow><TableCell colSpan={6} className="text-center">{t("No records found.")}</TableCell></TableRow>
                                 ) : records.map((record) => (
                                     <TableRow key={record.email}>
                                         <TableCell>
                                             <div className="font-medium">{record.email}</div>
                                             <div className="text-xs text-muted-foreground uppercase">{record.role}</div>
                                         </TableCell>
-                                        <TableCell>{record.shiftStart ? formatTime12(record.shiftStart) : "No schedule"}</TableCell>
+                                        <TableCell>{record.shiftStart ? formatTime12(record.shiftStart) : t("No schedule")}</TableCell>
                                         <TableCell>
-                                            {record.status === 'Present' && <Badge variant="default" className="bg-green-500 hover:bg-green-600">Present</Badge>}
-                                            {record.status === 'Absent' && <Badge variant="destructive">Absent</Badge>}
-                                            {record.status === 'Weekend' && <Badge variant="secondary">Weekend/Off</Badge>}
+                                            {record.status === 'Present' && <Badge variant="default" className="bg-green-500 hover:bg-green-600">{t("Present")}</Badge>}
+                                            {record.status === 'Absent' && <Badge variant="destructive">{t("Absent")}</Badge>}
+                                            {record.status === 'Weekend' && <Badge variant="secondary">{t("Weekend/Off")}</Badge>}
                                         </TableCell>
                                         <TableCell>{record.clockIn ? format(parseISO(record.clockIn), 'hh:mm a') : '-'}</TableCell>
                                         <TableCell>{record.clockOut ? format(parseISO(record.clockOut), 'hh:mm a') : '-'}</TableCell>
                                         <TableCell className="text-right">
                                             {record.delayMinutes > 0 ? (
-                                                <span className="text-orange-500 font-medium">{record.delayMinutes} mins</span>
+                                                <span className="text-orange-500 font-medium">{record.delayMinutes} {t("mins")}</span>
                                             ) : (
                                                 <span className="text-muted-foreground">-</span>
                                             )}

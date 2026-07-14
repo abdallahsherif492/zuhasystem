@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useBusiness } from "@/contexts/BusinessContext";
+import { useLanguage } from "@/contexts/LanguageContext";
 import { formatCurrency } from "@/lib/utils";
 import { ProductWithVariants } from "@/types";
 import { Button } from "@/components/ui/button";
@@ -21,6 +22,7 @@ import { Input } from "@/components/ui/input";
 
 export default function ProductsPage() {
     const { activeBusiness } = useBusiness();
+    const { t } = useLanguage();
     const [products, setProducts] = useState<ProductWithVariants[]>([]);
     const [loading, setLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState("");
@@ -63,7 +65,7 @@ export default function ProductsPage() {
                 <div className="relative w-full max-w-sm">
                     <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
                     <Input
-                        placeholder="Search products..."
+                        placeholder={t("Search products...")}
                         className="pl-8"
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
@@ -71,7 +73,7 @@ export default function ProductsPage() {
                 </div>
                 <Link href="/products/new">
                     <Button>
-                        <Plus className="mr-2 h-4 w-4" /> Add Product
+                        <Plus className="mr-2 h-4 w-4" /> {t("New Product")}
                     </Button>
                 </Link>
             </div>
@@ -80,10 +82,10 @@ export default function ProductsPage() {
                 <Table>
                     <TableHeader>
                         <TableRow>
-                            <TableHead>Name</TableHead>
-                            <TableHead>Variants</TableHead>
-                            <TableHead>Total Stock</TableHead>
-                            <TableHead className="text-right">Actions</TableHead>
+                            <TableHead>{t("Name")}</TableHead>
+                            <TableHead>{t("Variants")}</TableHead>
+                            <TableHead>{t("Total Stock")}</TableHead>
+                            <TableHead className="text-right">{t("Actions")}</TableHead>
                         </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -92,14 +94,14 @@ export default function ProductsPage() {
                                 <TableCell colSpan={4} className="h-24 text-center">
                                     <div className="flex justify-center items-center">
                                         <Loader2 className="h-6 w-6 animate-spin mr-2" />
-                                        Loading...
+                                        {t("Loading...")}
                                     </div>
                                 </TableCell>
                             </TableRow>
                         ) : filteredProducts.length === 0 ? (
                             <TableRow>
                                 <TableCell colSpan={4} className="h-24 text-center">
-                                    No products found.
+                                    {t("No products found.")}
                                 </TableCell>
                             </TableRow>
                         ) : (

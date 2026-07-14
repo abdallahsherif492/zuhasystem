@@ -93,9 +93,11 @@ function LogisticsDashboard() {
 }
 
 import { useBusiness } from "@/contexts/BusinessContext";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 function LogisticsContent() {
     const { activeBusiness } = useBusiness();
+    const { t } = useLanguage();
     const searchParams = useSearchParams();
     const router = useRouter();
     const [orders, setOrders] = useState<any[]>([]);
@@ -569,7 +571,7 @@ function LogisticsContent() {
         <div className="space-y-6">
             <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
                 <div className="flex items-center gap-2">
-                    <h1 className="text-3xl font-bold tracking-tight">Logistics</h1>
+                    <h1 className="text-3xl font-bold tracking-tight">{t("Logistics")}</h1>
                 </div>
                 <div className="flex items-center gap-2 bg-background">
                     <DateRangePicker />
@@ -582,7 +584,7 @@ function LogisticsContent() {
                     <div className="relative flex-1">
                         <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                         <Input
-                            placeholder="Search orders (comma separated for multiple)..."
+                            placeholder={t("Search orders (comma separated for multiple)...")}
                             className="pl-8 bg-white"
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
@@ -593,14 +595,14 @@ function LogisticsContent() {
                             options={STATUSES.map(s => ({ label: s, value: s }))}
                             selected={statusFilter}
                             onChange={setStatusFilter}
-                            placeholder="Status"
+                            placeholder={t("Status")}
                             className="bg-white"
                         />
                         <MultiSelect
                             options={GOV_OPTIONS}
                             selected={govFilter}
                             onChange={setGovFilter}
-                            placeholder="Governorate"
+                            placeholder={t("Governorate")}
                             className="bg-white"
                             showSelectAll={true}
                         />
@@ -608,14 +610,14 @@ function LogisticsContent() {
                             options={productsOptions}
                             selected={productFilter}
                             onChange={setProductFilter}
-                            placeholder="Product"
+                            placeholder={t("Product")}
                             className="bg-white"
                         />
                         <MultiSelect
                             options={shippingCompanies.map(c => ({ label: c.name, value: c.id }))}
                             selected={companyFilter}
                             onChange={setCompanyFilter}
-                            placeholder="Shipping Company"
+                            placeholder={t("Shipping Company")}
                             className="bg-white"
                         />
                     </div>
@@ -626,11 +628,11 @@ function LogisticsContent() {
 
                 {selectedOrders.size > 0 && (
                     <div className="flex items-center justify-between bg-primary/10 p-2 rounded px-4">
-                        <span className="text-sm font-medium text-primary">{selectedOrders.size} Selected</span>
+                        <span className="text-sm font-medium text-primary">{selectedOrders.size} {t("Selected")}</span>
                         <div className="flex items-center gap-2">
                             <Select onValueChange={handleBulkStatusChange}>
                                 <SelectTrigger className="w-[180px] h-8 bg-white">
-                                    <SelectValue placeholder="Bulk Action" />
+                                    <SelectValue placeholder={t("Bulk Action")} />
                                 </SelectTrigger>
                                 <SelectContent>
                                     <SelectItem value="Pending">Mark Pending</SelectItem>
@@ -658,7 +660,7 @@ function LogisticsContent() {
                         />
                         <Button variant="outline" size="sm" onClick={() => document.getElementById('csv-upload')?.click()}>
                             <Upload className="h-4 w-4 mr-2" />
-                            {phoneFilter ? `Filtered (${phoneFilter.length} phones)` : "Upload Phones CSV"}
+                            {phoneFilter ? `${t("Filtered")} (${phoneFilter.length} ${t("phones")})` : t("Upload Phones CSV")}
                         </Button>
                     </div>
                     {phoneFilter && (
@@ -673,7 +675,7 @@ function LogisticsContent() {
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Total Orders</CardTitle>
+                        <CardTitle className="text-sm font-medium">{t("Total Orders")}</CardTitle>
                         <Package className="h-4 w-4 text-muted-foreground" />
                     </CardHeader>
                     <CardContent>
@@ -682,34 +684,34 @@ function LogisticsContent() {
                 </Card>
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Won Value (Rate)</CardTitle>
+                        <CardTitle className="text-sm font-medium">{t("Won Value (Rate)")}</CardTitle>
                         <CheckCircle className="h-4 w-4 text-green-500" />
                     </CardHeader>
                     <CardContent>
                         <div className="text-2xl font-bold text-green-600">{formatCurrency(wonStats.value)}</div>
                         <p className="text-xs text-muted-foreground">
-                            {wonStats.count} Orders ({wonRate.toFixed(1)}%)
+                            {wonStats.count} {t("Orders")} ({wonRate.toFixed(1)}%)
                         </p>
                     </CardContent>
                 </Card>
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Lost Value</CardTitle>
+                        <CardTitle className="text-sm font-medium">{t("Lost Value")}</CardTitle>
                         <AlertCircle className="h-4 w-4 text-red-500" />
                     </CardHeader>
                     <CardContent>
                         <div className="text-2xl font-bold text-red-600">{formatCurrency(lostStats.value)}</div>
-                        <p className="text-xs text-muted-foreground">{lostStats.count} Orders</p>
+                        <p className="text-xs text-muted-foreground">{lostStats.count} {t("Orders")}</p>
                     </CardContent>
                 </Card>
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Remaining</CardTitle>
+                        <CardTitle className="text-sm font-medium">{t("Remaining")}</CardTitle>
                         <TrendingUp className="h-4 w-4 text-blue-500" />
                     </CardHeader>
                     <CardContent>
                         <div className="text-2xl font-bold text-blue-600">{formatCurrency(remainingStats.value)}</div>
-                        <p className="text-xs text-muted-foreground">{remainingStats.count} Orders (Pending/Ship)</p>
+                        <p className="text-xs text-muted-foreground">{remainingStats.count} {t("Orders")} ({t("Pending/Ship")})</p>
                     </CardContent>
                 </Card>
             </div>
@@ -720,7 +722,7 @@ function LogisticsContent() {
                 {/* Status Distribution */}
                 <Card>
                     <CardHeader>
-                        <CardTitle>Order Status Distribution</CardTitle>
+                        <CardTitle>{t("Order Status Distribution")}</CardTitle>
                     </CardHeader>
                     <CardContent className="h-[300px]">
                         <ResponsiveContainer width="100%" height="100%">
@@ -748,7 +750,7 @@ function LogisticsContent() {
                 {/* Performance Trend */}
                 <Card>
                     <CardHeader>
-                        <CardTitle>Daily Status Breakdown</CardTitle>
+                        <CardTitle>{t("Daily Status Breakdown")}</CardTitle>
                     </CardHeader>
                     <CardContent className="h-[300px]">
                         <ResponsiveContainer width="100%" height="100%">
@@ -772,8 +774,8 @@ function LogisticsContent() {
                 {/* Top Governorates */}
                 <Card>
                     <CardHeader>
-                        <CardTitle>Top Regions</CardTitle>
-                        <CardDescription>Highest volume governorates</CardDescription>
+                        <CardTitle>{t("Top Regions")}</CardTitle>
+                        <CardDescription>{t("Highest volume governorates")}</CardDescription>
                     </CardHeader>
                     <CardContent>
                         <div className="space-y-4">
@@ -795,16 +797,16 @@ function LogisticsContent() {
                 {/* Status Breakdown List */}
                 <Card className="md:col-span-2">
                     <CardHeader>
-                        <CardTitle>Status Breakdown</CardTitle>
-                        <CardDescription>Net value excludes shipping & fees</CardDescription>
+                        <CardTitle>{t("Status Breakdown")}</CardTitle>
+                        <CardDescription>{t("Net value excludes shipping & fees")}</CardDescription>
                     </CardHeader>
                     <CardContent>
                         <Table>
                             <TableHeader>
                                 <TableRow>
-                                    <TableHead>Status</TableHead>
-                                    <TableHead>Count</TableHead>
-                                    <TableHead className="text-right">Net Value</TableHead>
+                                    <TableHead>{t("Status")}</TableHead>
+                                    <TableHead>{t("Count")}</TableHead>
+                                    <TableHead className="text-right">{t("Net Value")}</TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
@@ -828,7 +830,7 @@ function LogisticsContent() {
             {/* Complete Orders Table */}
             <Card>
                 <CardHeader>
-                    <CardTitle>All Orders</CardTitle>
+                    <CardTitle>{t("All Orders")}</CardTitle>
                 </CardHeader>
                 <CardContent>
                     <Table>
@@ -840,13 +842,13 @@ function LogisticsContent() {
                                         onCheckedChange={handleSelectAll}
                                     />
                                 </TableHead>
-                                <TableHead>Order ID</TableHead>
-                                <TableHead>Date</TableHead>
-                                <TableHead>Customer</TableHead>
-                                <TableHead>Gov</TableHead>
-                                <TableHead>Status</TableHead>
-                                <TableHead>Net Value</TableHead>
-                                <TableHead>Shipping</TableHead>
+                                <TableHead>{t("Order ID")}</TableHead>
+                                <TableHead>{t("Date")}</TableHead>
+                                <TableHead>{t("Customer")}</TableHead>
+                                <TableHead>{t("Gov")}</TableHead>
+                                <TableHead>{t("Status")}</TableHead>
+                                <TableHead>{t("Net Value")}</TableHead>
+                                <TableHead>{t("Shipping")}</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>

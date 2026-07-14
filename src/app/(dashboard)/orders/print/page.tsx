@@ -45,7 +45,7 @@ const chunk = <T,>(arr: T[], size: number): T[][] =>
         arr.slice(i * size, i * size + size)
     );
 
-function InvoiceCard({ order, isFirstOnPage }: { order: InvoiceData, isFirstOnPage: boolean }) {
+function InvoiceCard({ order, isFirstOnPage, business }: { order: InvoiceData, isFirstOnPage: boolean, business: any }) {
     const phone1 = order.customer_info?.phone || "";
     const phone2 = order.customer_info?.phone2;
     const combinedPhone = phone2 ? `${phone1} / ${phone2}` : phone1;
@@ -71,10 +71,10 @@ function InvoiceCard({ order, isFirstOnPage }: { order: InvoiceData, isFirstOnPa
             <div className="flex justify-between items-start mb-0">
                 <div className="flex items-center gap-2">
                     <div className="relative h-10 w-10 grayscale">
-                        <Image src="/logo.png" alt="Zuha" fill className="object-contain" />
+                        <Image src={business?.logo_url || "/logo.png"} alt={business?.name || "Logo"} fill className="object-contain" />
                     </div>
                     <div>
-                        <h1 className="text-base font-bold leading-none">Zuha Home</h1>
+                        <h1 className="text-base font-bold leading-none">{business?.name || "Zuha Home"}</h1>
                         <p className="text-[9px] text-gray-500">Fast & Reliable Shipping</p>
                     </div>
                 </div>
@@ -161,6 +161,8 @@ function PrintContent() {
     const idsParam = searchParams.get("ids");
     const [orders, setOrders] = useState<InvoiceData[]>([]);
     const [loading, setLoading] = useState(true);
+
+    const { activeBusiness } = require("@/contexts/BusinessContext").useBusiness();
 
     useEffect(() => {
         const fetchOrders = async () => {
@@ -256,7 +258,7 @@ function PrintContent() {
                         <div className="absolute top-0 right-0 bg-black text-white px-2 py-1 text-xs z-10">Page {pageIdx + 1}</div>
 
                         {pageOrders.map((order, idx) => (
-                            <InvoiceCard key={order.id} order={order} isFirstOnPage={idx === 0} />
+                            <InvoiceCard key={order.id} order={order} isFirstOnPage={idx === 0} business={activeBusiness} />
                         ))}
                     </div>
                 ))}
@@ -267,7 +269,7 @@ function PrintContent() {
                 {pages.map((pageOrders, pageIdx) => (
                     <div key={pageIdx} className="print-page">
                         {pageOrders.map((order, idx) => (
-                            <InvoiceCard key={order.id} order={order} isFirstOnPage={idx === 0} />
+                            <InvoiceCard key={order.id} order={order} isFirstOnPage={idx === 0} business={activeBusiness} />
                         ))}
                     </div>
                 ))}

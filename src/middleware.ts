@@ -86,9 +86,10 @@ export async function middleware(request: NextRequest) {
             if (pathname.startsWith('/system-admin')) {
                 // Explicit check for system-admin route
                 const { data: sysAdmin } = await supabase
-                    .from('system_admins')
+                    .from('business_users')
                     .select('id')
                     .eq('user_email', user.email)
+                    .eq('role', 'super_admin')
                     .maybeSingle();
                 
                 if (!sysAdmin) {

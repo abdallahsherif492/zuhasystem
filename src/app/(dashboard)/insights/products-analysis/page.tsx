@@ -2,6 +2,7 @@
 
 import { useEffect, useState, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
+import { useBusiness } from "@/contexts/BusinessContext";
 import { supabase } from "@/lib/supabase";
 import { formatCurrency } from "@/lib/utils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -31,6 +32,7 @@ interface VariantMetric {
 }
 
 function ProductAnalysisContent() {
+    const { activeBusiness } = useBusiness();
     const router = useRouter();
     const searchParams = useSearchParams();
     const fromDate = searchParams.get("from");
@@ -50,8 +52,10 @@ function ProductAnalysisContent() {
             router.replace(`?from=${start}&to=${end}`);
             return;
         }
-        fetchData();
-    }, [fromDate, toDate]);
+        if (activeBusiness) {
+            fetchData();
+        }
+    }, [fromDate, toDate, activeBusiness]);
 
     useEffect(() => {
         let result = [...data];
@@ -81,15 +85,30 @@ function ProductAnalysisContent() {
             const start = fromDate ? `${fromDate}T00:00:00` : new Date().toISOString();
             const end = toDate ? `${toDate}T23:59:59` : new Date().toISOString();
 
-            // 1. Fetch all variants
+            // 1. Fetch all products for this business
+            const { data: productsData, error: productsError } = await supabase
+                .from('products')
+                .select('id, name')
+                .eq('business_id', activeBusiness.id);
+            
+            if (productsError) throw productsError;
+            
+            const productIds = productsData?.map(p => p.id) || [];
+            if (productIds.length === 0) {
+                setData([]);
+                setLoading(false);
+                return;
+            }
+
+            // 2. Fetch all variants for those products
             const { data: variantsData, error: variantsError } = await supabase
                 .from('variants')
                 .select(`
                     id, 
                     title, 
-                    product_id, 
-                    products (name)
-                `);
+                    product_id
+                `)
+                .in('product_id', productIds);
 
             if (variantsError) throw variantsError;
 
@@ -107,6 +126,7 @@ function ProductAnalysisContent() {
                         )
                     )
                 `)
+                .eq('business_id', activeBusiness.id)
                 .gte('created_at', start)
                 .lte('created_at', end)
                 .neq('status', 'Cancelled');
@@ -118,9 +138,10 @@ function ProductAnalysisContent() {
 
             // Initialize all variants with 0
             variantsData?.forEach(v => {
+                const product = productsData?.find(p => p.id === v.product_id);
                 metricsMap.set(v.id, {
                     variant_id: v.id,
-                    product_name: (v.products as any)?.name || 'Unknown Product',
+                    product_name: product?.name || 'Unknown Product',
                     variant_name: v.title || 'Default',
                     total_orders: 0,
                     total_sales: 0,

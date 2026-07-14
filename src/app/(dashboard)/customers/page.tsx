@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import { useBusiness } from "@/contexts/BusinessContext";
+import { useLanguage } from "@/contexts/LanguageContext";
 import { Button } from "@/components/ui/button";
 import {
     Table,
@@ -33,6 +34,7 @@ const GOV_OPTIONS: Option[] = [
 
 export default function CustomersPage() {
     const { activeBusiness } = useBusiness();
+    const { t } = useLanguage();
     const [customers, setCustomers] = useState<any[]>([]);
     const [products, setProducts] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
@@ -202,10 +204,10 @@ export default function CustomersPage() {
     return (
         <div className="space-y-6">
             <div className="flex items-center justify-between">
-                <h1 className="text-3xl font-bold tracking-tight">Customers</h1>
+                <h1 className="text-3xl font-bold tracking-tight">{t("Customers")}</h1>
                 <Button onClick={exportToExcel}>
                     <Download className="mr-2 h-4 w-4" />
-                    Export {selectedIds.size > 0 ? 'Selected' : 'All Filtered'}
+                    {selectedIds.size > 0 ? t("Export Selected") : t("Export All")}
                 </Button>
             </div>
 
@@ -213,7 +215,7 @@ export default function CustomersPage() {
                 <div className="flex items-center gap-2">
                     <Search className="h-4 w-4 text-muted-foreground" />
                     <Input
-                        placeholder="Search by name, phone, or email..."
+                        placeholder={t("Search by name, phone, or email...")}
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
                         className="w-full"
@@ -224,13 +226,13 @@ export default function CustomersPage() {
                         options={GOV_OPTIONS}
                         selected={selectedGovs}
                         onChange={setSelectedGovs}
-                        placeholder="Filter by Governorate"
+                        placeholder={t("Filter by Governorate")}
                     />
                 </div>
                 <div>
                     <Input
                         type="number"
-                        placeholder="Min Orders Count"
+                        placeholder={t("Min Orders Count")}
                         value={minOrders}
                         onChange={(e) => setMinOrders(e.target.value)}
                         min="0"
@@ -241,7 +243,7 @@ export default function CustomersPage() {
                         options={productOptions}
                         selected={selectedProducts}
                         onChange={setSelectedProducts}
-                        placeholder="Filter by Product"
+                        placeholder={t("Filter by Product")}
                     />
                 </div>
             </div>
@@ -256,12 +258,12 @@ export default function CustomersPage() {
                                     onCheckedChange={handleSelectAll}
                                 />
                             </TableHead>
-                            <TableHead>Registration Date</TableHead>
-                            <TableHead>Name</TableHead>
-                            <TableHead>Phone</TableHead>
-                            <TableHead>Governorate</TableHead>
-                            <TableHead>Total Orders</TableHead>
-                            <TableHead className="text-right">Actions</TableHead>
+                            <TableHead>{t("Registration Date")}</TableHead>
+                            <TableHead>{t("Name")}</TableHead>
+                            <TableHead>{t("Phone")}</TableHead>
+                            <TableHead>{t("Governorate")}</TableHead>
+                            <TableHead>{t("Total Orders")}</TableHead>
+                            <TableHead className="text-right">{t("Actions")}</TableHead>
                         </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -270,14 +272,14 @@ export default function CustomersPage() {
                                 <TableCell colSpan={5} className="h-24 text-center">
                                     <div className="flex justify-center items-center">
                                         <Loader2 className="h-6 w-6 animate-spin mr-2" />
-                                        Loading...
+                                        {t("Loading...")}
                                     </div>
                                 </TableCell>
                             </TableRow>
                         ) : filteredCustomers.length === 0 ? (
                             <TableRow>
                                 <TableCell colSpan={5} className="h-24 text-center">
-                                    No customers found.
+                                    {t("No customers found.")}
                                 </TableCell>
                             </TableRow>
                         ) : (
@@ -305,7 +307,7 @@ export default function CustomersPage() {
                                     <TableCell className="text-right">
                                         <Link href={`/customers/${customer.id}`}>
                                             <Button variant="ghost" size="sm">
-                                                View
+                                                {t("View")}
                                             </Button>
                                         </Link>
                                     </TableCell>

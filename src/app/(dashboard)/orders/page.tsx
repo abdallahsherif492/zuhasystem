@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { useBusiness } from "@/contexts/BusinessContext";
+import { useLanguage } from "@/contexts/LanguageContext";
 import { formatCurrency } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
@@ -64,6 +65,7 @@ interface Order {
 
 function OrdersContent() {
     const { activeBusiness } = useBusiness();
+    const { t } = useLanguage();
     const searchParams = useSearchParams();
     const [orders, setOrders] = useState<Order[]>([]);
     const [loading, setLoading] = useState(true);
@@ -214,9 +216,11 @@ function OrdersContent() {
                 itemsArray = order.items;
             }
 
-            const content = itemsArray?.map((item: any) =>
-                `${item.variant?.product?.name} (${item.variant?.title}) x${item.quantity}`
-            ).join(" + ") || "No Items";
+            const content = itemsArray?.map((item: any) => {
+                const productName = item.variant?.product?.name || item.product?.name || item.product_name || "Product";
+                const variantTitle = item.variant?.title || item.variant_title || "N/A";
+                return `${productName} (${variantTitle}) x${item.quantity}`;
+            }).join(" + ") || "No Items";
 
             const phone1 = order.customer_info?.phone || "";
             const phone2 = order.customer_info?.phone2;
@@ -318,12 +322,12 @@ function OrdersContent() {
         <div className="space-y-6">
             <div className="flex flex-col gap-4">
                 <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                    <h1 className="text-3xl font-bold tracking-tight">Orders</h1>
+                    <h1 className="text-3xl font-bold tracking-tight">{t("Orders")}</h1>
                     <div className="flex items-center gap-2">
                         <DateRangePicker />
                         <Link href="/orders/new">
                             <Button>
-                                <Plus className="mr-2 h-4 w-4" /> New Order
+                                <Plus className="mr-2 h-4 w-4" /> {t("New Order")}
                             </Button>
                         </Link>
                     </div>
@@ -335,7 +339,7 @@ function OrdersContent() {
                         <div className="relative flex-1">
                             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                             <Input
-                                placeholder="Search orders..."
+                                placeholder={t("Search orders...")}
                                 className="pl-8 bg-white"
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
@@ -346,21 +350,21 @@ function OrdersContent() {
                                 options={statusOptions}
                                 selected={statusFilter}
                                 onChange={setStatusFilter}
-                                placeholder="Status"
+                                placeholder={t("Status")}
                                 className="bg-white"
                             />
                             <MultiSelect
                                 options={channelOptions}
                                 selected={channelFilter}
                                 onChange={setChannelFilter}
-                                placeholder="Channel"
+                                placeholder={t("Channel")}
                                 className="bg-white"
                             />
                             <MultiSelect
                                 options={govOptions}
                                 selected={govFilter}
                                 onChange={setGovFilter}
-                                placeholder="Governorate"
+                                placeholder={t("Governorate")}
                                 className="bg-white"
                                 showSelectAll={true}
                             />
@@ -368,7 +372,7 @@ function OrdersContent() {
                                 options={productsOptions}
                                 selected={productFilter}
                                 onChange={setProductFilter}
-                                placeholder="Product"
+                                placeholder={t("Product")}
                                 className="bg-white"
                             />
                         </div>
@@ -379,7 +383,7 @@ function OrdersContent() {
 
                     <div className="flex justify-between items-center">
                         <div className="text-sm text-muted-foreground">
-                            {totalCount} orders found. {selectedOrders.size > 0 && <span className="text-primary font-bold ml-2">({selectedOrders.size} selected)</span>}
+                            {totalCount} {t("orders found")}. {selectedOrders.size > 0 && <span className="text-primary font-bold ml-2">({selectedOrders.size} {t("selected")})</span>}
                         </div>
                         <div className="flex gap-2">
                             <Button
@@ -389,11 +393,11 @@ function OrdersContent() {
                                 className="bg-white"
                             >
                                 <Printer className="mr-2 h-4 w-4" />
-                                Print Selected
+                                {t("Print Selected")}
                             </Button>
                             <Button variant="outline" onClick={handleExport} className="bg-white">
                                 <Download className="mr-2 h-4 w-4" />
-                                {selectedOrders.size > 0 ? `Export Selected` : "Export All"}
+                                {selectedOrders.size > 0 ? t("Export Selected") : t("Export All")}
                             </Button>
                         </div>
                     </div>
@@ -411,14 +415,14 @@ function OrdersContent() {
                                 />
                             </TableHead>
                             <TableHead>Order ID</TableHead>
-                            <TableHead>Date</TableHead>
-                            <TableHead>Customer</TableHead>
-                            <TableHead>Channel</TableHead>
-                            <TableHead>Status</TableHead>
-                            <TableHead>Tags</TableHead>
-                            <TableHead>Total</TableHead>
-                            <TableHead>Profit</TableHead>
-                            <TableHead>Actions</TableHead>
+                            <TableHead>{t("Date")}</TableHead>
+                            <TableHead>{t("Customer")}</TableHead>
+                            <TableHead>{t("Channel")}</TableHead>
+                            <TableHead>{t("Status")}</TableHead>
+                            <TableHead>{t("Tags")}</TableHead>
+                            <TableHead>{t("Total")}</TableHead>
+                            <TableHead>{t("Profit")}</TableHead>
+                            <TableHead>{t("Actions")}</TableHead>
                         </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -433,14 +437,14 @@ function OrdersContent() {
                                 <TableCell colSpan={10} className="h-24 text-center">
                                     <div className="flex justify-center items-center">
                                         <Loader2 className="h-6 w-6 animate-spin mr-2" />
-                                        Loading...
+                                        {t("Loading...")}
                                     </div>
                                 </TableCell>
                             </TableRow>
                         ) : orders.length === 0 ? (
                             <TableRow>
                                 <TableCell colSpan={10} className="h-24 text-center">
-                                    No orders found.
+                                    {t("No orders found.")}
                                 </TableCell>
                             </TableRow>
                         ) : (

@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 import { useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { useBusiness } from "@/contexts/BusinessContext";
+import { useLanguage } from "@/contexts/LanguageContext";
 import { formatCurrency } from "@/lib/utils";
 import { format } from "date-fns";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -46,6 +47,7 @@ import {
 
 function AccountingContent() {
     const { activeBusiness } = useBusiness();
+    const { t } = useLanguage();
     const searchParams = useSearchParams();
     const [transactions, setTransactions] = useState<any[]>([]);
     const [allTransactions, setAllTransactions] = useState<any[]>([]); // For balance calc if we want total history, but usually query
@@ -150,7 +152,7 @@ function AccountingContent() {
     return (
         <div className="space-y-6">
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                <h1 className="text-3xl font-bold tracking-tight">Accounting</h1>
+                <h1 className="text-3xl font-bold tracking-tight">{t("Accounting")}</h1>
                 <DateRangePicker />
             </div>
 
@@ -159,9 +161,7 @@ function AccountingContent() {
                 {Object.entries(balances).map(([name, amount]) => (
                     <Card key={name}>
                         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-sm font-medium">
-                                {name} Account
-                            </CardTitle>
+                                {name} {t("Account")}
                             <Wallet className="h-4 w-4 text-muted-foreground" />
                         </CardHeader>
                         <CardContent>
@@ -187,7 +187,7 @@ function AccountingContent() {
                 <div className="relative flex-1">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                     <Input
-                        placeholder="Search descriptions, categories, or accounts..."
+                        placeholder={t("Search descriptions, categories, or accounts...")}
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
                         className="pl-9 bg-background"
@@ -196,10 +196,10 @@ function AccountingContent() {
                 <div className="flex flex-wrap gap-4">
                     <Select value={filterAccount} onValueChange={setFilterAccount}>
                         <SelectTrigger className="w-[180px] bg-background">
-                            <SelectValue placeholder="All Accounts" />
+                            <SelectValue placeholder={t("All Accounts")} />
                         </SelectTrigger>
                         <SelectContent>
-                            <SelectItem value="all">All Accounts</SelectItem>
+                            <SelectItem value="all">{t("All Accounts")}</SelectItem>
                             {uniqueAccounts.map(acc => typeof acc === 'string' && (
                                 <SelectItem key={acc} value={acc}>{acc}</SelectItem>
                             ))}
@@ -207,10 +207,10 @@ function AccountingContent() {
                     </Select>
                     <Select value={filterCategory} onValueChange={setFilterCategory}>
                         <SelectTrigger className="w-[180px] bg-background">
-                            <SelectValue placeholder="All Categories" />
+                            <SelectValue placeholder={t("All Categories")} />
                         </SelectTrigger>
                         <SelectContent>
-                            <SelectItem value="all">All Categories</SelectItem>
+                            <SelectItem value="all">{t("All Categories")}</SelectItem>
                             {uniqueCategories.map(cat => typeof cat === 'string' && (
                                 <SelectItem key={cat} value={cat}>{cat}</SelectItem>
                             ))}
@@ -222,10 +222,10 @@ function AccountingContent() {
             {/* Lists */}
             <Tabs defaultValue="all" className="space-y-4">
                 <TabsList>
-                    <TabsTrigger value="all">All</TabsTrigger>
-                    <TabsTrigger value="investment">Investments</TabsTrigger>
-                    <TabsTrigger value="revenue">Revenues</TabsTrigger>
-                    <TabsTrigger value="expense">Expenses</TabsTrigger>
+                    <TabsTrigger value="all">{t("All")}</TabsTrigger>
+                    <TabsTrigger value="investment">{t("Investments")}</TabsTrigger>
+                    <TabsTrigger value="revenue">{t("Revenues")}</TabsTrigger>
+                    <TabsTrigger value="expense">{t("Expenses")}</TabsTrigger>
                 </TabsList>
 
                 {["all", "investment", "revenue", "expense"].map((tab) => (
@@ -234,13 +234,13 @@ function AccountingContent() {
                             <Table>
                                 <TableHeader>
                                     <TableRow>
-                                        <TableHead>Date</TableHead>
-                                        <TableHead>Type</TableHead>
-                                        <TableHead>Category</TableHead>
-                                        <TableHead>Description</TableHead>
-                                        <TableHead>Account</TableHead>
-                                        <TableHead className="text-right">Amount</TableHead>
-                                        <TableHead className="text-right">Actions</TableHead>
+                                        <TableHead>{t("Date")}</TableHead>
+                                        <TableHead>{t("Type")}</TableHead>
+                                        <TableHead>{t("Category")}</TableHead>
+                                        <TableHead>{t("Description")}</TableHead>
+                                        <TableHead>{t("Account")}</TableHead>
+                                        <TableHead className="text-right">{t("Amount")}</TableHead>
+                                        <TableHead className="text-right">{t("Actions")}</TableHead>
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
@@ -271,7 +271,7 @@ function AccountingContent() {
                                                 return (
                                                     <TableRow>
                                                         <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
-                                                            No transactions found matching your filters.
+                                                            {t("No transactions found matching your filters.")}
                                                         </TableCell>
                                                     </TableRow>
                                                 );
@@ -287,7 +287,7 @@ function AccountingContent() {
                                                                     t.type.includes('transfer') ? 'outline' :
                                                                         'secondary'
                                                         }>
-                                                            {t.type.replace('_', ' ')}
+                                                            {t(t.type.replace('_', ' '))}
                                                         </Badge>
                                                     </TableCell>
                                                     <TableCell>{t.category}</TableCell>
@@ -305,14 +305,14 @@ function AccountingContent() {
                                                             </AlertDialogTrigger>
                                                             <AlertDialogContent>
                                                                 <AlertDialogHeader>
-                                                                    <AlertDialogTitle>Delete Transaction?</AlertDialogTitle>
+                                                                    <AlertDialogTitle>{t("Delete Transaction?")}</AlertDialogTitle>
                                                                     <AlertDialogDescription>
-                                                                        This action cannot be undone. This will permanently remove this transaction from the database.
+                                                                        {t("This action cannot be undone. This will permanently remove this transaction from the database.")}
                                                                     </AlertDialogDescription>
                                                                 </AlertDialogHeader>
                                                                 <AlertDialogFooter>
-                                                                    <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                                                    <AlertDialogAction className="bg-destructive hover:bg-destructive/90" onClick={() => deleteTransaction(t.id)}>Delete</AlertDialogAction>
+                                                                    <AlertDialogCancel>{t("Cancel")}</AlertDialogCancel>
+                                                                    <AlertDialogAction className="bg-destructive hover:bg-destructive/90" onClick={() => deleteTransaction(t.id)}>{t("Delete")}</AlertDialogAction>
                                                                 </AlertDialogFooter>
                                                             </AlertDialogContent>
                                                         </AlertDialog>

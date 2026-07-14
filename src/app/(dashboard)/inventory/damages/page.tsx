@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { formatCurrency } from "@/lib/utils";
 import { useBusiness } from "@/contexts/BusinessContext";
+import { useLanguage } from "@/contexts/LanguageContext";
 import {
     Card,
     CardContent,
@@ -48,6 +49,7 @@ import { Loader2, Plus, AlertTriangle, FileText } from "lucide-react";
 
 export default function DamagesPage() {
     const { activeBusiness } = useBusiness();
+    const { t } = useLanguage();
     const [damages, setDamages] = useState<any[]>([]);
     const [variants, setVariants] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
@@ -92,21 +94,21 @@ export default function DamagesPage() {
             setDamages(damagesData || []);
 
         } catch (error: any) {
-            toast.error("Error fetching data: " + error.message);
+            toast.error(t("Error fetching data") + ": " + error.message);
         } finally {
             setLoading(false);
         }
     };
 
     const handleAddDamage = async () => {
-        if (!formData.variant_id) return toast.error("Select a product");
-        if (formData.quantity <= 0) return toast.error("Quantity must be greater than 0");
-        if (!formData.date) return toast.error("Date is required");
+        if (!formData.variant_id) return toast.error(t("Select a product"));
+        if (formData.quantity <= 0) return toast.error(t("Quantity must be greater than 0"));
+        if (!formData.date) return toast.error(t("Date is required"));
 
         setIsSubmitting(true);
         try {
             const selectedVariant = variants.find(v => v.id === formData.variant_id);
-            if (!selectedVariant) throw new Error("Variant not found");
+            if (!selectedVariant) throw new Error(t("Variant not found"));
 
             const costAtTime = selectedVariant.cost_price;
 
@@ -123,7 +125,7 @@ export default function DamagesPage() {
 
             if (error) throw error;
 
-            toast.success("Damage recorded successfully");
+            toast.success(t("Damage recorded successfully"));
             setIsAddOpen(false);
             setFormData({
                 variant_id: "",
@@ -133,7 +135,7 @@ export default function DamagesPage() {
             });
             fetchData();
         } catch (error: any) {
-            toast.error("Failed to add damage: " + error.message);
+            toast.error(t("Failed to add damage") + ": " + error.message);
         } finally {
             setIsSubmitting(false);
         }
@@ -162,27 +164,27 @@ export default function DamagesPage() {
         <div className="flex flex-col gap-6 w-full p-4 md:p-6 max-w-7xl mx-auto">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                 <div>
-                    <h1 className="text-3xl font-bold tracking-tight">Damaged Products</h1>
-                    <p className="text-muted-foreground">Track inventory losses and damaged items.</p>
+                    <h1 className="text-3xl font-bold tracking-tight">{t("Damaged Products")}</h1>
+                    <p className="text-muted-foreground">{t("Track inventory losses and damaged items.")}</p>
                 </div>
                 
                 <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
                     <DialogTrigger asChild>
                         <Button className="gap-2">
                             <Plus className="h-4 w-4" />
-                            Record Damage
+                            {t("Record Damage")}
                         </Button>
                     </DialogTrigger>
                     <DialogContent>
                         <DialogHeader>
-                            <DialogTitle>Record Damaged Product</DialogTitle>
+                            <DialogTitle>{t("Record Damaged Product")}</DialogTitle>
                             <DialogDescription>
-                                This will log a financial loss but will NOT deduct from current active stock automatically.
+                                {t("This will log a financial loss but will NOT deduct from current active stock automatically.")}
                             </DialogDescription>
                         </DialogHeader>
                         <div className="grid gap-4 py-4">
                             <div className="flex flex-col gap-2">
-                                <label className="text-sm font-medium">Product / Variant</label>
+                                <label className="text-sm font-medium">{t("Product / Variant")}</label>
                                 <Popover open={openPopover} onOpenChange={setOpenPopover}>
                                     <PopoverTrigger asChild>
                                         <Button
@@ -194,17 +196,17 @@ export default function DamagesPage() {
                                             {formData.variant_id
                                                 ? (() => {
                                                     const v = variants.find((variant) => variant.id === formData.variant_id);
-                                                    return v ? `${v.products?.name} - ${v.title} (${formatCurrency(v.cost_price)})` : "Select product...";
+                                                    return v ? `${v.products?.name} - ${v.title} (${formatCurrency(v.cost_price)})` : t("Select product...");
                                                 })()
-                                                : "Search product..."}
+                                                : t("Search product...")}
                                             <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                                         </Button>
                                     </PopoverTrigger>
                                     <PopoverContent className="w-[400px] p-0" align="start">
                                         <Command>
-                                            <CommandInput placeholder="Search by name..." />
+                                            <CommandInput placeholder={t("Search by name...")} />
                                             <CommandList>
-                                                <CommandEmpty>No product found.</CommandEmpty>
+                                                <CommandEmpty>{t("No product found.")}</CommandEmpty>
                                                 <CommandGroup>
                                                     {variants.map((v) => (
                                                         <CommandItem
@@ -232,7 +234,7 @@ export default function DamagesPage() {
                             </div>
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="flex flex-col gap-2">
-                                    <label className="text-sm font-medium">Quantity Damaged</label>
+                                    <label className="text-sm font-medium">{t("Quantity Damaged")}</label>
                                     <Input 
                                         type="number" 
                                         min="1" 
@@ -241,7 +243,7 @@ export default function DamagesPage() {
                                     />
                                 </div>
                                 <div className="flex flex-col gap-2">
-                                    <label className="text-sm font-medium">Date</label>
+                                    <label className="text-sm font-medium">{t("Date")}</label>
                                     <Input 
                                         type="date" 
                                         value={formData.date}
@@ -250,18 +252,18 @@ export default function DamagesPage() {
                                 </div>
                             </div>
                             <div className="flex flex-col gap-2">
-                                <label className="text-sm font-medium">Notes / Reason (Optional)</label>
+                                <label className="text-sm font-medium">{t("Notes / Reason (Optional)")}</label>
                                 <Input 
-                                    placeholder="e.g. Broken during shipping"
+                                    placeholder={t("e.g. Broken during shipping")}
                                     value={formData.notes}
                                     onChange={(e) => setFormData({...formData, notes: e.target.value})}
                                 />
                             </div>
                         </div>
                         <DialogFooter>
-                            <Button variant="outline" onClick={() => setIsAddOpen(false)}>Cancel</Button>
+                            <Button variant="outline" onClick={() => setIsAddOpen(false)}>{t("Cancel")}</Button>
                             <Button onClick={handleAddDamage} disabled={isSubmitting}>
-                                {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save"}
+                                {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : t("Save")}
                             </Button>
                         </DialogFooter>
                     </DialogContent>
@@ -275,17 +277,17 @@ export default function DamagesPage() {
                     <div className="grid gap-4 md:grid-cols-2">
                         <Card className="bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-900">
                             <CardHeader className="pb-2">
-                                <CardTitle className="text-sm font-medium text-red-600 dark:text-red-400">Total Damaged Items</CardTitle>
+                                <CardTitle className="text-sm font-medium text-red-600 dark:text-red-400">{t("Total Damaged Items")}</CardTitle>
                             </CardHeader>
                             <CardContent>
                                 <div className="text-3xl font-bold text-red-700 dark:text-red-300">
-                                    {totalDamagesCount} <span className="text-lg font-normal">pcs</span>
+                                    {totalDamagesCount} <span className="text-lg font-normal">{t("pcs")}</span>
                                 </div>
                             </CardContent>
                         </Card>
                         <Card className="bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-900">
                             <CardHeader className="pb-2">
-                                <CardTitle className="text-sm font-medium text-red-600 dark:text-red-400">Total Financial Loss</CardTitle>
+                                <CardTitle className="text-sm font-medium text-red-600 dark:text-red-400">{t("Total Financial Loss")}</CardTitle>
                             </CardHeader>
                             <CardContent>
                                 <div className="text-3xl font-bold text-red-700 dark:text-red-300">
@@ -298,16 +300,16 @@ export default function DamagesPage() {
                     <div className="grid gap-6 md:grid-cols-2">
                         <Card>
                             <CardHeader>
-                                <CardTitle className="flex items-center gap-2"><AlertTriangle className="h-5 w-5 text-orange-500"/> Damages by Product</CardTitle>
-                                <CardDescription>Aggregate losses per product</CardDescription>
+                                <CardTitle className="flex items-center gap-2"><AlertTriangle className="h-5 w-5 text-orange-500"/> {t("Damages by Product")}</CardTitle>
+                                <CardDescription>{t("Aggregate losses per product")}</CardDescription>
                             </CardHeader>
                             <CardContent>
                                 <Table>
                                     <TableHeader>
                                         <TableRow>
-                                            <TableHead>Product</TableHead>
-                                            <TableHead className="text-right">Qty</TableHead>
-                                            <TableHead className="text-right">Loss</TableHead>
+                                            <TableHead>{t("Product")}</TableHead>
+                                            <TableHead className="text-right">{t("Qty")}</TableHead>
+                                            <TableHead className="text-right">{t("Loss")}</TableHead>
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
@@ -320,7 +322,7 @@ export default function DamagesPage() {
                                         ))}
                                         {Object.keys(groupedDamages).length === 0 && (
                                             <TableRow>
-                                                <TableCell colSpan={3} className="text-center py-4 text-muted-foreground">No damaged products found.</TableCell>
+                                                <TableCell colSpan={3} className="text-center py-4 text-muted-foreground">{t("No damaged products found.")}</TableCell>
                                             </TableRow>
                                         )}
                                     </TableBody>
@@ -330,17 +332,17 @@ export default function DamagesPage() {
 
                         <Card>
                             <CardHeader>
-                                <CardTitle className="flex items-center gap-2"><FileText className="h-5 w-5"/> Recent Transactions</CardTitle>
-                                <CardDescription>History of logged damages</CardDescription>
+                                <CardTitle className="flex items-center gap-2"><FileText className="h-5 w-5"/> {t("Recent Transactions")}</CardTitle>
+                                <CardDescription>{t("History of logged damages")}</CardDescription>
                             </CardHeader>
                             <CardContent>
                                 <Table>
                                     <TableHeader>
                                         <TableRow>
-                                            <TableHead>Date</TableHead>
-                                            <TableHead>Product</TableHead>
-                                            <TableHead className="text-right">Qty</TableHead>
-                                            <TableHead className="text-right">Loss</TableHead>
+                                            <TableHead>{t("Date")}</TableHead>
+                                            <TableHead>{t("Product")}</TableHead>
+                                            <TableHead className="text-right">{t("Qty")}</TableHead>
+                                            <TableHead className="text-right">{t("Loss")}</TableHead>
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
@@ -350,7 +352,7 @@ export default function DamagesPage() {
                                                 <TableCell>
                                                     <div className="font-medium">{d.variants?.products?.name}</div>
                                                     <div className="text-xs text-muted-foreground">{d.variants?.title}</div>
-                                                    {d.notes && <div className="text-xs italic text-gray-500 mt-1">Note: {d.notes}</div>}
+                                                    {d.notes && <div className="text-xs italic text-gray-500 mt-1">{t("Note")}: {d.notes}</div>}
                                                 </TableCell>
                                                 <TableCell className="text-right">{d.quantity}</TableCell>
                                                 <TableCell className="text-right text-red-600">{formatCurrency(d.total_loss)}</TableCell>
@@ -358,7 +360,7 @@ export default function DamagesPage() {
                                         ))}
                                         {damages.length === 0 && (
                                             <TableRow>
-                                                <TableCell colSpan={4} className="text-center py-4 text-muted-foreground">No transactions recorded.</TableCell>
+                                                <TableCell colSpan={4} className="text-center py-4 text-muted-foreground">{t("No transactions recorded.")}</TableCell>
                                             </TableRow>
                                         )}
                                     </TableBody>
