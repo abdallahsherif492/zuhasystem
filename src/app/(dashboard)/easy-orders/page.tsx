@@ -116,11 +116,11 @@ export default function EasyOrdersPage() {
     
     const fetchProducts = async () => {
         if (!activeBusiness) return;
-        const { data } = await supabase
+        const { data, error } = await supabase
             .from('products')
             .select('id, name, variants(id, title, sale_price, stock_qty, track_inventory)')
-            .eq('business_id', activeBusiness.id)
-            .eq('is_active', true);
+            .order('name');
+        if (error) console.error("Error fetching products:", error);
         if (data) setProducts(data);
     };
 
