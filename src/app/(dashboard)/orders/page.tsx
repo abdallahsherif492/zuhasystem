@@ -279,6 +279,21 @@ function OrdersContent() {
     }
 
     const STATUSES = ["Pending", "Processing", "Prepared", "Shipped", "Delivered", "Cancelled", "Returned", "Unavailable"];
+    
+    const getStatusColor = (status: string) => {
+        switch (status.toLowerCase()) {
+            case 'pending': return 'bg-yellow-100 text-yellow-800 hover:bg-yellow-100/80 dark:bg-yellow-900/50 dark:text-yellow-400';
+            case 'processing': return 'bg-blue-100 text-blue-800 hover:bg-blue-100/80 dark:bg-blue-900/50 dark:text-blue-400';
+            case 'prepared': return 'bg-purple-100 text-purple-800 hover:bg-purple-100/80 dark:bg-purple-900/50 dark:text-purple-400';
+            case 'shipped': return 'bg-indigo-100 text-indigo-800 hover:bg-indigo-100/80 dark:bg-indigo-900/50 dark:text-indigo-400';
+            case 'delivered': return 'bg-emerald-100 text-emerald-800 hover:bg-emerald-100/80 dark:bg-emerald-900/50 dark:text-emerald-400';
+            case 'cancelled': return 'bg-red-100 text-red-800 hover:bg-red-100/80 dark:bg-red-900/50 dark:text-red-400';
+            case 'returned': return 'bg-orange-100 text-orange-800 hover:bg-orange-100/80 dark:bg-orange-900/50 dark:text-orange-400';
+            case 'unavailable': return 'bg-slate-100 text-slate-800 hover:bg-slate-100/80 dark:bg-slate-800 dark:text-slate-400';
+            default: return 'bg-gray-100 text-gray-800 hover:bg-gray-100/80 dark:bg-gray-800 dark:text-gray-400';
+        }
+    };
+    
     const statusOptions = STATUSES.map(s => ({ label: s, value: s }));
     const govOptions: Option[] = [
         { label: "All Except Cairo & Giza", value: "ALL_EXCEPT_CAIRO_GIZA" },
@@ -468,7 +483,7 @@ function OrdersContent() {
                                         <Badge variant="outline">{order.channel || "N/A"}</Badge>
                                     </TableCell>
                                     <TableCell>
-                                        <Badge variant={order.status === 'Delivered' ? 'default' : 'secondary'}>
+                                        <Badge className={`${getStatusColor(order.status)} border-0 font-semibold shadow-none`}>
                                             {order.status}
                                         </Badge>
                                     </TableCell>
