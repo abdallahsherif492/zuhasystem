@@ -50,6 +50,7 @@ interface Order {
     id: string;
     customer_info: any;
     status: string;
+    subtotal: number;
     total_amount: number;
     shipping_cost: number;
     easyorders_id: string;
@@ -249,8 +250,9 @@ export default function EasyOrdersPage() {
             if (o.id === orderId) {
                 const newItems = o.order_items.map(i => i.id === itemId ? { ...i, [field]: value } : i);
                 const newTotal = newItems.reduce((sum, item) => sum + (item.price_at_sale * item.quantity), 0) + o.shipping_cost;
-                updatedOrder = { ...o, order_items: newItems, total_amount: newTotal, subtotal: newTotal - o.shipping_cost };
-                return updatedOrder;
+                const newOrderObj = { ...o, order_items: newItems, total_amount: newTotal, subtotal: newTotal - o.shipping_cost };
+                updatedOrder = newOrderObj;
+                return newOrderObj;
             }
             return o;
         }));
