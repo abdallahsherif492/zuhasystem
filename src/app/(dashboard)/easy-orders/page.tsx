@@ -1,10 +1,12 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, Suspense } from "react";
 import { supabase } from "@/lib/supabase";
 import { useBusiness } from "@/contexts/BusinessContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { formatCurrency } from "@/lib/utils";
+import { DateRangePicker } from "@/components/date-range-picker";
+import { useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -76,7 +78,7 @@ const GOVERNORATES = [
     "Kafr Al Sheikh", "Matrouh", "Luxor", "Qena", "North Sinai", "Sohag"
 ];
 
-export default function EasyOrdersPage() {
+function EasyOrdersContent() {
     const { activeBusiness } = useBusiness();
     const { t } = useLanguage();
     
@@ -96,6 +98,11 @@ export default function EasyOrdersPage() {
     const [selectedProductForAdd, setSelectedProductForAdd] = useState<Record<string, string>>({});
     const [selectedVariantForAdd, setSelectedVariantForAdd] = useState<Record<string, string>>({});
     const [selectedProductOverride, setSelectedProductOverride] = useState<Record<string, string>>({});
+    
+    const searchParams = useSearchParams();
+    const fromDate = searchParams.get("from");
+    const toDate = searchParams.get("to");
+    const [searchQuery, setSearchQuery] = useState("");
 
     useEffect(() => {
         if (activeBusiness) {
@@ -291,6 +298,41 @@ export default function EasyOrdersPage() {
         }
     };
 
+    const filteredOrders = useMemo(() => {
+        return orders.filter(order => {
+            let matchesSearch = true;
+            if (searchQuery) {
+                const query = searchQuery.toLowerCase();
+                const name = (order.customer_info?.name || "").toLowerCase();
+                const phone = (order.customer_info?.phone || "").toLowerCase();
+                const easyId = (order.easyorders_id || "").toLowerCase();
+                const id = (order.id || "").toLowerCase();
+                
+                matchesSearch = name.includes(query) || phone.includes(query) || easyId.includes(query) || id.includes(query);
+            }
+            
+            let matchesDate = true;
+            if (fromDate || toDate) {
+                const orderDate = new Date(order.created_at);
+                orderDate.setHours(0, 0, 0, 0);
+                
+                if (fromDate) {
+                    const from = new Date(fromDate);
+                    from.setHours(0, 0, 0, 0);
+                    if (orderDate < from) matchesDate = false;
+                }
+                
+                if (toDate) {
+                    const to = new Date(toDate);
+                    to.setHours(0, 0, 0, 0);
+                    if (orderDate > to) matchesDate = false;
+                }
+            }
+            
+            return matchesSearch && matchesDate;
+        });
+    }, [orders, searchQuery, fromDate, toDate]);
+
     if (loading) {
         return <div className="flex justify-center p-20"><Loader2 className="h-8 w-8 animate-spin" /></div>;
     }
@@ -309,6 +351,20 @@ export default function EasyOrdersPage() {
                     </h2>
                     <p className="text-muted-foreground">{t("Manage incoming orders from EasyOrders that are waiting for review.")}</p>
                 </div>
+            </div>
+            
+            <div className="flex items-center gap-4 py-4">
+                <div className="relative flex-1 max-w-sm">
+                    <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                    <Input
+                        type="search"
+                        placeholder="Search by name, phone, or order ID..."
+                        className="pl-8"
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                    />
+                </div>
+                <DateRangePicker />
             </div>
 
             
@@ -347,7 +403,7 @@ export default function EasyOrdersPage() {
                 </AlertDialogContent>
             </AlertDialog>
 
-            {orders.length === 0 ? (
+            {filteredOrders.length === 0 ? (
                 <div className="flex flex-col items-center justify-center p-20 text-muted-foreground bg-muted/20 rounded-lg border border-dashed">
                     <PackageSearch className="h-12 w-12 mb-4 opacity-20" />
                     <p className="text-lg font-medium">{t("No waiting orders from EasyOrders")}</p>
@@ -355,7 +411,7 @@ export default function EasyOrdersPage() {
                 </div>
             ) : (
                 <div className="grid gap-6">
-                    {orders.map(order => (
+                    {filteredOrders.map(order => (
                         <Card key={order.id} className="border-2 border-primary/20 shadow-md">
                             <CardHeader className="bg-muted/30 pb-4 border-b">
                                 <div className="flex justify-between items-start">
@@ -796,5 +852,14 @@ export default function EasyOrdersPage() {
                 </div>
             )}
         </div>
+    );
+}
+
+
+export default function EasyOrdersPage() {
+    return (
+        <Suspense fallback={<div className="flex justify-center p-20"><Loader2 className="h-8 w-8 animate-spin" /></div>}>
+            <EasyOrdersContent />
+        </Suspense>
     );
 }
