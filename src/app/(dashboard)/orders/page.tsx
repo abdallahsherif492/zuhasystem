@@ -494,9 +494,9 @@ function OrdersContent() {
                                                 <span key={tag} className="text-[10px] bg-muted px-1 rounded border">
                                                     {String(tag)}
                                                 </span>
-                                            )) : (typeof order.tags === 'string' && order.tags.length > 0 ? (
+                                            )) : (typeof (order.tags as any) === 'string' && (order.tags as any).length > 0 ? (
                                                 <span className="text-[10px] bg-muted px-1 rounded border">
-                                                    {order.tags}
+                                                    {String(order.tags)}
                                                 </span>
                                             ) : null)}
                                         </div>
