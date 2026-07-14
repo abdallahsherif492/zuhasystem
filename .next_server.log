@@ -9,6 +9,6 @@
 
 ✓ Starting...
 ⚠ The "middleware" file convention is deprecated. Please use "proxy" instead. Learn more: https://nextjs.org/docs/messages/middleware-to-proxy
-✓ Ready in 1525ms
- POST /api/webhooks/easyorders?business=test&token=test 404 in 1820ms (compile: 1127ms, proxy.ts: 77ms, render: 615ms)
+✓ Ready in 1406ms
+ POST /api/webhooks/easyorders?business=96e0b0f1-2a87-4b2d-90ba-cc5e9d9ce363&token=edd4e439cf2768343bc435b85618cfb3 200 in 1689ms (compile: 993ms, proxy.ts: 71ms, render: 625ms)
 [?25h
