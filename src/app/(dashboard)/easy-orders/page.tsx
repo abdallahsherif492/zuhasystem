@@ -267,6 +267,30 @@ export default function EasyOrdersPage() {
         }
     };
 
+    const handleRemoveItem = async (orderId: string, itemId: string) => {
+        let updatedOrder: Order | undefined;
+        setOrders(prev => prev.map(o => {
+            if (o.id === orderId) {
+                const newItems = o.order_items.filter(i => i.id !== itemId);
+                const newTotal = newItems.reduce((sum, item) => sum + (item.price_at_sale * item.quantity), 0) + o.shipping_cost;
+                const newOrderObj = { ...o, order_items: newItems, total_amount: newTotal, subtotal: newTotal - o.shipping_cost };
+                updatedOrder = newOrderObj;
+                return newOrderObj;
+            }
+            return o;
+        }));
+        
+        try {
+            await supabase.from('order_items').delete().eq('id', itemId);
+            if (updatedOrder) {
+                await handleUpdateOrder(orderId, { subtotal: updatedOrder.subtotal, total_amount: updatedOrder.total_amount });
+            }
+            toast.success(t("Item removed"));
+        } catch(e) {
+            toast.error(t("Failed to remove item"));
+        }
+    };
+
     if (loading) {
         return <div className="flex justify-center p-20"><Loader2 className="h-8 w-8 animate-spin" /></div>;
     }
@@ -463,15 +487,20 @@ export default function EasyOrdersPage() {
                                                                                         key={v.id}
                                                                                         value={v.products?.name + " " + v.title + " " + v.sku}
                                                                                         onSelect={() => {
-                                                                                            const newOrders = [...orders];
-                                                                                            const oIndex = newOrders.findIndex(o => o.id === order.id);
-                                                                                            const iIndex = newOrders[oIndex].order_items.findIndex(i => i.id === item.id);
-                                                                                            newOrders[oIndex].order_items[iIndex] = {
-                                                                                                ...item,
-                                                                                                variant_id: v.id,
-                                                                                                variants: v as any
-                                                                                            };
-                                                                                            setOrders(newOrders);
+                                                                                            const prodId = selectedProductOverride[item.id] || item.variants?.product_id;
+                                                                                            const prod = products.find(p => p.id === prodId);
+                                                                                            setOrders(prev => prev.map(o => {
+                                                                                                if (o.id === order.id) {
+                                                                                                    const newItems = o.order_items.map(i => i.id === item.id ? {
+                                                                                                        ...i,
+                                                                                                        variant_id: v.id,
+                                                                                                        price_at_sale: v.sale_price,
+                                                                                                        variants: { ...v, product_id: prodId, products: { name: prod?.name } } as any
+                                                                                                    } : i);
+                                                                                                    return { ...o, order_items: newItems };
+                                                                                                }
+                                                                                                return o;
+                                                                                            }));
                                                                                             handleUpdateItem(item.id, { variant_id: v.id });
                                                                                         }}
                                                                                     >
