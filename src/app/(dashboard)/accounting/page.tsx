@@ -277,24 +277,24 @@ function AccountingContent() {
                                                 );
                                             }
 
-                                            return filteredTransactions.map((t) => (
-                                                <TableRow key={t.id}>
-                                                    <TableCell>{format(new Date(t.transaction_date), "PPP")}</TableCell>
+                                            return filteredTransactions.map((txn) => (
+                                                <TableRow key={txn.id}>
+                                                    <TableCell>{format(new Date(txn.transaction_date), "PPP")}</TableCell>
                                                     <TableCell>
                                                         <Badge variant={
-                                                            t.type === 'expense' ? 'destructive' :
-                                                                t.type === 'revenue' ? 'default' :
-                                                                    t.type.includes('transfer') ? 'outline' :
+                                                            txn.type === 'expense' ? 'destructive' :
+                                                                txn.type === 'revenue' ? 'default' :
+                                                                    txn.type.includes('transfer') ? 'outline' :
                                                                         'secondary'
                                                         }>
-                                                            {t(t.type.replace('_', ' '))}
+                                                            {t(txn.type.replace('_', ' '))}
                                                         </Badge>
                                                     </TableCell>
-                                                    <TableCell>{t.category}</TableCell>
-                                                    <TableCell>{t.description}</TableCell>
-                                                    <TableCell>{t.account_name}</TableCell>
-                                                    <TableCell className={cn("text-right font-medium", t.amount > 0 ? "text-green-600" : "text-destructive")}>
-                                                        {formatCurrency(t.amount)}
+                                                    <TableCell>{txn.category}</TableCell>
+                                                    <TableCell>{txn.description}</TableCell>
+                                                    <TableCell>{txn.account_name}</TableCell>
+                                                    <TableCell className={cn("text-right font-medium", txn.amount > 0 ? "text-green-600" : "text-destructive")}>
+                                                        {formatCurrency(txn.amount)}
                                                     </TableCell>
                                                     <TableCell className="text-right">
                                                         <AlertDialog>
@@ -312,7 +312,7 @@ function AccountingContent() {
                                                                 </AlertDialogHeader>
                                                                 <AlertDialogFooter>
                                                                     <AlertDialogCancel>{t("Cancel")}</AlertDialogCancel>
-                                                                    <AlertDialogAction className="bg-destructive hover:bg-destructive/90" onClick={() => deleteTransaction(t.id)}>{t("Delete")}</AlertDialogAction>
+                                                                    <AlertDialogAction className="bg-destructive hover:bg-destructive/90" onClick={() => deleteTransaction(txn.id)}>{t("Delete")}</AlertDialogAction>
                                                                 </AlertDialogFooter>
                                                             </AlertDialogContent>
                                                         </AlertDialog>
