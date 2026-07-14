@@ -10,10 +10,13 @@ import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/componen
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Check, X, AlertTriangle, Search, PackageSearch } from "lucide-react";
+import { Loader2, Check, X, AlertTriangle, Search, PackageSearch, ChevronsUpDown } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { cn } from "@/lib/utils";
 import {
     AlertDialog,
     AlertDialogAction,
@@ -51,6 +54,7 @@ interface Order {
     shipping_cost: number;
     easyorders_id: string;
     payment_status: string;
+    paid_amount: number;
     created_at: string;
     order_items: OrderItem[];
 }
@@ -63,6 +67,14 @@ interface Variant {
     products: { name: string };
 }
 
+
+const GOVERNORATES = [
+    "Cairo", "New Cairo", "Giza", "Alexandria", "Dakahlia", "Red Sea", "Beheira", "Fayoum",
+    "Gharbiya", "Ismailia", "Monufia", "Minya", "Qaliubiya", "New Valley", "Suez",
+    "Aswan", "Assiut", "Beni Suef", "Port Said", "Damietta", "Sharkia", "South Sinai",
+    "Kafr Al Sheikh", "Matrouh", "Luxor", "Qena", "North Sinai", "Sohag"
+];
+
 export default function EasyOrdersPage() {
     const { activeBusiness } = useBusiness();
     const { t } = useLanguage();
@@ -71,11 +83,23 @@ export default function EasyOrdersPage() {
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState<string | null>(null);
     const [variants, setVariants] = useState<Variant[]>([]);
+    const [products, setProducts] = useState<any[]>([]);
+    
+    // Treasury Modal state
+    const [treasuryModalOpen, setTreasuryModalOpen] = useState(false);
+    const [pendingOrder, setPendingOrder] = useState<Order | null>(null);
+    const [transactionAccount, setTransactionAccount] = useState("");
+    
+    // Add Item state per order
+    const [addItemOpen, setAddItemOpen] = useState<Record<string, boolean>>({});
+    const [selectedProductForAdd, setSelectedProductForAdd] = useState<Record<string, string>>({});
+    const [selectedVariantForAdd, setSelectedVariantForAdd] = useState<Record<string, string>>({});
 
     useEffect(() => {
         if (activeBusiness) {
             fetchOrders();
             fetchVariants();
+            fetchProducts();
         }
     }, [activeBusiness]);
 
@@ -86,6 +110,17 @@ export default function EasyOrdersPage() {
             .select('id, title, sku, sale_price, products!inner(name)')
             .eq('products.business_id', activeBusiness.id);
         if (data) setVariants(data as any[]);
+    };
+
+    
+    const fetchProducts = async () => {
+        if (!activeBusiness) return;
+        const { data } = await supabase
+            .from('products')
+            .select('id, name, variants(id, title, sale_price, stock_qty, track_inventory)')
+            .eq('business_id', activeBusiness.id)
+            .eq('is_active', true);
+        if (data) setProducts(data);
     };
 
     const fetchOrders = async () => {
@@ -126,6 +161,38 @@ export default function EasyOrdersPage() {
         if (error) throw error;
     };
 
+    
+    const executeMoveToPending = async (order: Order, accountName?: string) => {
+        setSaving(order.id);
+        try {
+            await handleUpdateOrder(order.id, { status: 'Pending' });
+            
+            // Create transaction if paid
+            if (accountName && order.paid_amount > 0) {
+                await supabase.from('transactions').insert({
+                    business_id: activeBusiness?.id,
+                    transaction_date: new Date().toISOString().split('T')[0],
+                    type: 'revenue',
+                    category: 'orders_collection',
+                    amount: order.paid_amount,
+                    description: `Payment collection for Order ${order.easyorders_id || order.id.slice(0,8)}`,
+                    account_name: accountName
+                });
+            }
+            
+            toast.success(t("Order moved to Pending successfully"));
+            setOrders(orders.filter(o => o.id !== order.id));
+            setTreasuryModalOpen(false);
+            setPendingOrder(null);
+            setTransactionAccount("");
+        } catch (error) {
+            console.error("Error moving to pending:", error);
+            toast.error(t("Failed to move order"));
+        } finally {
+            setSaving(null);
+        }
+    };
+
     const handleMoveToPending = async (order: Order) => {
         // Validate unmapped items
         const hasUnmapped = order.order_items.some(item => !item.variant_id);
@@ -134,16 +201,11 @@ export default function EasyOrdersPage() {
             return;
         }
 
-        setSaving(order.id);
-        try {
-            await handleUpdateOrder(order.id, { status: 'Pending' });
-            toast.success(t("Order moved to Pending successfully"));
-            setOrders(orders.filter(o => o.id !== order.id));
-        } catch (error) {
-            console.error("Error moving to pending:", error);
-            toast.error(t("Failed to move order"));
-        } finally {
-            setSaving(null);
+        if (order.payment_status === 'Paid' || order.payment_status === 'Partially Paid') {
+            setPendingOrder(order);
+            setTreasuryModalOpen(true);
+        } else {
+            executeMoveToPending(order);
         }
     };
 
@@ -220,6 +282,42 @@ export default function EasyOrdersPage() {
                 </div>
             </div>
 
+            
+            {/* Treasury Transaction Modal */}
+            <AlertDialog open={treasuryModalOpen} onOpenChange={setTreasuryModalOpen}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Payment Collection</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            This order has a payment of {formatCurrency(pendingOrder?.paid_amount || 0)}. Select the treasury account to deposit this amount into.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <div className="space-y-4 py-4">
+                        <div className="space-y-2">
+                            <Label>Select Account</Label>
+                            <Select value={transactionAccount} onValueChange={setTransactionAccount}>
+                                <SelectTrigger><SelectValue placeholder="Choose Account" /></SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="Mohamed Adel">Mohamed Adel</SelectItem>
+                                    <SelectItem value="Abdallah Sherif">Abdallah Sherif</SelectItem>
+                                    <SelectItem value="Split">Split (50/50)</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+                    </div>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel onClick={() => { setPendingOrder(null); setTransactionAccount(""); }}>Cancel</AlertDialogCancel>
+                        <AlertDialogAction 
+                            disabled={!transactionAccount || saving === pendingOrder?.id}
+                            onClick={() => pendingOrder && executeMoveToPending(pendingOrder, transactionAccount)}
+                        >
+                            {saving === pendingOrder?.id && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                            Confirm & Deposit
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+
             {orders.length === 0 ? (
                 <div className="flex flex-col items-center justify-center p-20 text-muted-foreground bg-muted/20 rounded-lg border border-dashed">
                     <PackageSearch className="h-12 w-12 mb-4 opacity-20" />
@@ -264,11 +362,19 @@ export default function EasyOrdersPage() {
                                             </div>
                                             <div className="space-y-2">
                                                 <Label>{t("Governorate")}</Label>
-                                                <Input 
+                                                <Select 
                                                     value={order.customer_info?.governorate || ""} 
-                                                    onChange={e => updateCustomerInfo(order, 'governorate', e.target.value)}
-                                                    className={!order.customer_info?.governorate ? "border-destructive" : ""}
-                                                />
+                                                    onValueChange={val => updateCustomerInfo(order, 'governorate', val)}
+                                                >
+                                                    <SelectTrigger className={!order.customer_info?.governorate ? "border-destructive" : ""}>
+                                                        <SelectValue placeholder="Select Governorate" />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        {GOVERNORATES.map(g => (
+                                                            <SelectItem key={g} value={g}>{g}</SelectItem>
+                                                        ))}
+                                                    </SelectContent>
+                                                </Select>
                                                 {!order.customer_info?.governorate && <p className="text-xs text-destructive">Required</p>}
                                             </div>
                                             <div className="space-y-2">
@@ -299,7 +405,20 @@ export default function EasyOrdersPage() {
                                     <div className="space-y-4">
                                         <h3 className="font-semibold text-lg flex justify-between items-center border-b pb-2">
                                             <span>{t("Products")}</span>
-                                            <span className="text-sm font-normal text-muted-foreground">Shipping: {formatCurrency(order.shipping_cost)}</span>
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-sm font-normal text-muted-foreground">Shipping:</span>
+                                                <Input 
+                                                    type="number"
+                                                    className="w-24 h-8"
+                                                    value={order.shipping_cost}
+                                                    onChange={e => {
+                                                        const val = parseFloat(e.target.value) || 0;
+                                                        const newTotal = order.order_items.reduce((sum, item) => sum + (item.price_at_sale * item.quantity), 0) + val;
+                                                        updateOrderField(order, 'shipping_cost', val);
+                                                        updateOrderField(order, 'total_amount', newTotal);
+                                                    }}
+                                                />
+                                            </div>
                                         </h3>
                                         <div className="space-y-3">
                                             {order.order_items.map(item => (
@@ -321,34 +440,45 @@ export default function EasyOrdersPage() {
                                                     <div className="grid grid-cols-[1fr,80px,100px] gap-2 items-center">
                                                         <div>
                                                             {!item.variant_id && (
-                                                                <Select 
-                                                                    onValueChange={(val) => {
-                                                                        const v = variants.find(vr => vr.id === val);
-                                                                        if (v) {
-                                                                            const newOrders = [...orders];
-                                                                            const oIndex = newOrders.findIndex(o => o.id === order.id);
-                                                                            const iIndex = newOrders[oIndex].order_items.findIndex(i => i.id === item.id);
-                                                                            newOrders[oIndex].order_items[iIndex] = {
-                                                                                ...item,
-                                                                                variant_id: val,
-                                                                                variants: v as any
-                                                                            };
-                                                                            setOrders(newOrders);
-                                                                            handleUpdateItem(item.id, { variant_id: val });
-                                                                        }
-                                                                    }}
-                                                                >
-                                                                    <SelectTrigger className="h-8 text-xs border-destructive">
-                                                                        <SelectValue placeholder="Select Match" />
-                                                                    </SelectTrigger>
-                                                                    <SelectContent>
-                                                                        {variants.map(v => (
-                                                                            <SelectItem key={v.id} value={v.id}>
-                                                                                {v.products?.name} - {v.title} ({v.sku})
-                                                                            </SelectItem>
-                                                                        ))}
-                                                                    </SelectContent>
-                                                                </Select>
+                                                                <Popover>
+                                                                    <PopoverTrigger asChild>
+                                                                        <Button variant="outline" className="w-full h-8 text-xs justify-between border-destructive font-normal">
+                                                                            Select Match
+                                                                            <ChevronsUpDown className="ml-2 h-3 w-3 shrink-0 opacity-50" />
+                                                                        </Button>
+                                                                    </PopoverTrigger>
+                                                                    <PopoverContent className="w-[300px] p-0" align="start">
+                                                                        <Command>
+                                                                            <CommandInput placeholder="Search variant..." />
+                                                                            <CommandEmpty>No variant found.</CommandEmpty>
+                                                                            <CommandGroup className="max-h-60 overflow-auto">
+                                                                                <CommandList>
+                                                                                {variants.map(v => (
+                                                                                    <CommandItem
+                                                                                        key={v.id}
+                                                                                        value={v.products?.name + " " + v.title + " " + v.sku}
+                                                                                        onSelect={() => {
+                                                                                            const newOrders = [...orders];
+                                                                                            const oIndex = newOrders.findIndex(o => o.id === order.id);
+                                                                                            const iIndex = newOrders[oIndex].order_items.findIndex(i => i.id === item.id);
+                                                                                            newOrders[oIndex].order_items[iIndex] = {
+                                                                                                ...item,
+                                                                                                variant_id: v.id,
+                                                                                                variants: v as any
+                                                                                            };
+                                                                                            setOrders(newOrders);
+                                                                                            handleUpdateItem(item.id, { variant_id: v.id });
+                                                                                        }}
+                                                                                    >
+                                                                                        <Check className={cn("mr-2 h-4 w-4", item.variant_id === v.id ? "opacity-100" : "opacity-0")} />
+                                                                                        {v.products?.name} - {v.title} ({v.sku})
+                                                                                    </CommandItem>
+                                                                                ))}
+                                                                                </CommandList>
+                                                                            </CommandGroup>
+                                                                        </Command>
+                                                                    </PopoverContent>
+                                                                </Popover>
                                                             )}
                                                         </div>
                                                         <div>
@@ -371,18 +501,160 @@ export default function EasyOrdersPage() {
                                                 </div>
                                             ))}
                                         </div>
-                                        <div className="flex justify-between items-center pt-2 mt-4 border-t">
-                                            <Label>{t("Payment Status")}</Label>
-                                            <Select value={order.payment_status || "Not Paid"} onValueChange={(val) => updateOrderField(order, 'payment_status', val)}>
-                                                <SelectTrigger className="w-[150px] h-8">
-                                                    <SelectValue />
-                                                </SelectTrigger>
-                                                <SelectContent>
-                                                    <SelectItem value="Not Paid">Not Paid</SelectItem>
-                                                    <SelectItem value="Paid">Paid</SelectItem>
-                                                    <SelectItem value="Partial">Partial</SelectItem>
-                                                </SelectContent>
-                                            </Select>
+                                        
+                                            {/* Add Extra Item */}
+                                            <div className="mt-4 pt-4 border-t border-dashed">
+                                                <Button 
+                                                    variant="outline" 
+                                                    size="sm" 
+                                                    className="w-full border-dashed"
+                                                    onClick={() => setAddItemOpen(prev => ({...prev, [order.id]: !prev[order.id]}))}
+                                                >
+                                                    {addItemOpen[order.id] ? "Cancel Adding" : "+ Add Item"}
+                                                </Button>
+                                                
+                                                {addItemOpen[order.id] && (
+                                                    <div className="mt-3 p-3 bg-muted/20 border rounded-md space-y-3">
+                                                        <div className="grid grid-cols-2 gap-3">
+                                                            <div className="space-y-1">
+                                                                <Label className="text-xs">Product</Label>
+                                                                <Popover>
+                                                                    <PopoverTrigger asChild>
+                                                                        <Button variant="outline" className="w-full justify-between h-8 text-xs font-normal">
+                                                                            {selectedProductForAdd[order.id] ? products.find(p => p.id === selectedProductForAdd[order.id])?.name : "Select product..."}
+                                                                            <ChevronsUpDown className="ml-2 h-3 w-3 shrink-0 opacity-50" />
+                                                                        </Button>
+                                                                    </PopoverTrigger>
+                                                                    <PopoverContent className="w-[250px] p-0" align="start">
+                                                                        <Command>
+                                                                            <CommandInput placeholder="Search product..." />
+                                                                            <CommandEmpty>No product found.</CommandEmpty>
+                                                                            <CommandGroup className="max-h-60 overflow-auto">
+                                                                                <CommandList>
+                                                                                {products.map(p => (
+                                                                                    <CommandItem
+                                                                                        key={p.id}
+                                                                                        value={p.name}
+                                                                                        onSelect={() => {
+                                                                                            setSelectedProductForAdd(prev => ({...prev, [order.id]: p.id}));
+                                                                                            setSelectedVariantForAdd(prev => ({...prev, [order.id]: ""}));
+                                                                                        }}
+                                                                                    >
+                                                                                        <Check className={cn("mr-2 h-4 w-4", selectedProductForAdd[order.id] === p.id ? "opacity-100" : "opacity-0")} />
+                                                                                        {p.name}
+                                                                                    </CommandItem>
+                                                                                ))}
+                                                                                </CommandList>
+                                                                            </CommandGroup>
+                                                                        </Command>
+                                                                    </PopoverContent>
+                                                                </Popover>
+                                                            </div>
+                                                            <div className="space-y-1">
+                                                                <Label className="text-xs">Variant</Label>
+                                                                <Select 
+                                                                    value={selectedVariantForAdd[order.id] || ""}
+                                                                    onValueChange={(val) => setSelectedVariantForAdd(prev => ({...prev, [order.id]: val}))}
+                                                                    disabled={!selectedProductForAdd[order.id]}
+                                                                >
+                                                                    <SelectTrigger className="h-8 text-xs">
+                                                                        <SelectValue placeholder="Variant" />
+                                                                    </SelectTrigger>
+                                                                    <SelectContent>
+                                                                        {products.find(p => p.id === selectedProductForAdd[order.id])?.variants.map((v: any) => (
+                                                                            <SelectItem key={v.id} value={v.id}>
+                                                                                {v.title} - {formatCurrency(v.sale_price)}
+                                                                            </SelectItem>
+                                                                        ))}
+                                                                    </SelectContent>
+                                                                </Select>
+                                                            </div>
+                                                        </div>
+                                                        <Button 
+                                                            size="sm" 
+                                                            className="w-full h-8"
+                                                            disabled={!selectedVariantForAdd[order.id]}
+                                                            onClick={async () => {
+                                                                const vId = selectedVariantForAdd[order.id];
+                                                                const pId = selectedProductForAdd[order.id];
+                                                                const prod = products.find(p => p.id === pId);
+                                                                const vari = prod?.variants.find((v:any) => v.id === vId);
+                                                                if (!prod || !vari) return;
+                                                                
+                                                                const { data: newItem, error } = await supabase.from('order_items').insert({
+                                                                    order_id: order.id,
+                                                                    variant_id: vari.id,
+                                                                    quantity: 1,
+                                                                    price_at_sale: vari.sale_price,
+                                                                    business_id: activeBusiness?.id
+                                                                }).select('id').single();
+                                                                
+                                                                if (error) {
+                                                                    toast.error("Failed to add item");
+                                                                    return;
+                                                                }
+                                                                
+                                                                const newItemObj = {
+                                                                    id: newItem.id,
+                                                                    variant_id: vari.id,
+                                                                    quantity: 1,
+                                                                    price_at_sale: vari.sale_price,
+                                                                    variants: {
+                                                                        title: vari.title,
+                                                                        sku: "",
+                                                                        product_id: prod.id,
+                                                                        products: { name: prod.name }
+                                                                    }
+                                                                };
+                                                                
+                                                                const newOrders = [...orders];
+                                                                const oIndex = newOrders.findIndex(o => o.id === order.id);
+                                                                newOrders[oIndex].order_items.push(newItemObj);
+                                                                
+                                                                const newTotal = newOrders[oIndex].order_items.reduce((sum, item) => sum + (item.price_at_sale * item.quantity), 0) + newOrders[oIndex].shipping_cost;
+                                                                newOrders[oIndex].total_amount = newTotal;
+                                                                setOrders(newOrders);
+                                                                handleUpdateOrder(order.id, { subtotal: newTotal - newOrders[oIndex].shipping_cost, total_amount: newTotal });
+                                                                
+                                                                setAddItemOpen(prev => ({...prev, [order.id]: false}));
+                                                                toast.success("Item added");
+                                                            }}
+                                                        >
+                                                            Add to Order
+                                                        </Button>
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                        <div className="flex flex-col gap-3 pt-2 mt-4 border-t">
+                                            <div className="flex justify-between items-center">
+                                                <Label>{t("Payment Status")}</Label>
+                                                <Select value={order.payment_status === 'Partial' ? 'Partially Paid' : (order.payment_status || "Not Paid")} onValueChange={(val) => {
+                                                    updateOrderField(order, 'payment_status', val);
+                                                    if (val === 'Paid') updateOrderField(order, 'paid_amount', order.total_amount);
+                                                    if (val === 'Not Paid') updateOrderField(order, 'paid_amount', 0);
+                                                }}>
+                                                    <SelectTrigger className="w-[150px] h-8">
+                                                        <SelectValue />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem value="Not Paid">Not Paid</SelectItem>
+                                                        <SelectItem value="Partially Paid">Partially Paid</SelectItem>
+                                                        <SelectItem value="Paid">Paid</SelectItem>
+                                                    </SelectContent>
+                                                </Select>
+                                            </div>
+                                            {order.payment_status === 'Partially Paid' && (
+                                                <div className="flex justify-between items-center">
+                                                    <Label>{t("Paid Amount")}</Label>
+                                                    <Input 
+                                                        type="number" 
+                                                        className="w-[150px] h-8" 
+                                                        value={order.paid_amount || 0}
+                                                        onChange={(e) => updateOrderField(order, 'paid_amount', parseFloat(e.target.value) || 0)}
+                                                    />
+                                                </div>
+                                            )}
                                         </div>
                                     </div>
                                 </div>
