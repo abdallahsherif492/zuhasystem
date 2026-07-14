@@ -89,7 +89,7 @@ export async function middleware(request: NextRequest) {
                     .from('business_users')
                     .select('id')
                     .eq('user_email', user.email)
-                    .in('role', ['super_admin', 'Super Admin', 'super admin'])
+                    .ilike('role', '%super%')
                     .maybeSingle();
                 
                 if (!sysAdmin) {

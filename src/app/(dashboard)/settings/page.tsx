@@ -41,7 +41,7 @@ export default function SettingsPage() {
         }
     }, [activeBusiness]);
 
-    if (userRole !== "owner" && userRole !== "super_admin" && userRole !== "super admin") {
+    if (!userRole || (userRole !== "owner" && !userRole.toLowerCase().includes("super"))) {
         return (
             <div className="flex items-center justify-center h-[60vh]">
                 <div className="text-center">

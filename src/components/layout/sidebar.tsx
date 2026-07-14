@@ -75,7 +75,7 @@ export function SidebarContent() {
 
     const canAccess = (path: string) => {
         if (isSystemAdmin) return true;
-        if (role === "owner" || role === "admin" || role === "platform admin" || role === "super admin" || role === "super_admin") return true;
+        if (role === "owner" || role === "admin" || role === "platform admin" || role.includes("super")) return true;
         
         // Always allow everyone to see the dashboard home
         if (path === "/dashboard") return true;

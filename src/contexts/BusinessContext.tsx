@@ -97,7 +97,7 @@ export const BusinessProvider = ({ children }: { children: React.ReactNode }) =>
         .from('business_users')
         .select('*')
         .eq('user_email', user.email)
-        .in('role', ['super_admin', 'Super Admin', 'super admin'])
+        .ilike('role', '%super%')
         .maybeSingle();
         
       if (sysAdmin) {
