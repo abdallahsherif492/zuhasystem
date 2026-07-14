@@ -235,7 +235,7 @@ export default function EasyOrdersPage() {
     };
     
     const updateOrderField = async (order: Order, field: string, value: any) => {
-        setOrders(orders.map(o => o.id === order.id ? { ...o, [field]: value } : o));
+        setOrders(prev => prev.map(o => o.id === order.id ? { ...o, [field]: value } : o));
         try {
             await handleUpdateOrder(order.id, { [field]: value });
         } catch(e) {
@@ -244,27 +244,22 @@ export default function EasyOrdersPage() {
     };
 
     const updateItemField = async (orderId: string, itemId: string, field: string, value: any) => {
-        const orderIndex = orders.findIndex(o => o.id === orderId);
-        if (orderIndex === -1) return;
-        const newOrders = [...orders];
-        const itemIndex = newOrders[orderIndex].order_items.findIndex(i => i.id === itemId);
-        if (itemIndex === -1) return;
-        
-        newOrders[orderIndex].order_items[itemIndex] = { ...newOrders[orderIndex].order_items[itemIndex], [field]: value };
-        
-        // Recalculate totals
-        let newSubtotal = 0;
-        newOrders[orderIndex].order_items.forEach(item => {
-            newSubtotal += (item.price_at_sale * item.quantity);
-        });
-        const newTotal = newSubtotal + newOrders[orderIndex].shipping_cost;
-        newOrders[orderIndex].total_amount = newTotal;
-        
-        setOrders(newOrders);
+        let updatedOrder: Order | undefined;
+        setOrders(prev => prev.map(o => {
+            if (o.id === orderId) {
+                const newItems = o.order_items.map(i => i.id === itemId ? { ...i, [field]: value } : i);
+                const newTotal = newItems.reduce((sum, item) => sum + (item.price_at_sale * item.quantity), 0) + o.shipping_cost;
+                updatedOrder = { ...o, order_items: newItems, total_amount: newTotal, subtotal: newTotal - o.shipping_cost };
+                return updatedOrder;
+            }
+            return o;
+        }));
         
         try {
             await handleUpdateItem(itemId, { [field]: value });
-            await handleUpdateOrder(orderId, { subtotal: newSubtotal, total_amount: newTotal });
+            if (updatedOrder) {
+                await handleUpdateOrder(orderId, { subtotal: updatedOrder.subtotal, total_amount: updatedOrder.total_amount });
+            }
         } catch(e) {
             toast.error(t("Failed to save item"));
         }
@@ -594,6 +589,7 @@ export default function EasyOrdersPage() {
                                                                     variant_id: vari.id,
                                                                     quantity: 1,
                                                                     price_at_sale: vari.sale_price,
+                                                                    cost_at_sale: vari.cost_price || 0,
                                                                     business_id: activeBusiness?.id
                                                                 }).select('id').single();
                                                                 
@@ -607,6 +603,7 @@ export default function EasyOrdersPage() {
                                                                     variant_id: vari.id,
                                                                     quantity: 1,
                                                                     price_at_sale: vari.sale_price,
+                                                                    cost_at_sale: vari.cost_price || 0,
                                                                     variants: {
                                                                         title: vari.title,
                                                                         sku: "",
@@ -615,14 +612,21 @@ export default function EasyOrdersPage() {
                                                                     }
                                                                 };
                                                                 
-                                                                const newOrders = [...orders];
-                                                                const oIndex = newOrders.findIndex(o => o.id === order.id);
-                                                                newOrders[oIndex].order_items.push(newItemObj);
+                                                                const newTotal = order.order_items.reduce((sum, item) => sum + (item.price_at_sale * item.quantity), 0) + vari.sale_price + order.shipping_cost;
                                                                 
-                                                                const newTotal = newOrders[oIndex].order_items.reduce((sum, item) => sum + (item.price_at_sale * item.quantity), 0) + newOrders[oIndex].shipping_cost;
-                                                                newOrders[oIndex].total_amount = newTotal;
-                                                                setOrders(newOrders);
-                                                                handleUpdateOrder(order.id, { subtotal: newTotal - newOrders[oIndex].shipping_cost, total_amount: newTotal });
+                                                                setOrders(prev => prev.map(o => {
+                                                                    if (o.id === order.id) {
+                                                                        return {
+                                                                            ...o,
+                                                                            total_amount: newTotal,
+                                                                            subtotal: newTotal - o.shipping_cost,
+                                                                            order_items: [...o.order_items, newItemObj as any]
+                                                                        };
+                                                                    }
+                                                                    return o;
+                                                                }));
+                                                                
+                                                                handleUpdateOrder(order.id, { subtotal: newTotal - order.shipping_cost, total_amount: newTotal });
                                                                 
                                                                 setAddItemOpen(prev => ({...prev, [order.id]: false}));
                                                                 toast.success("Item added");
