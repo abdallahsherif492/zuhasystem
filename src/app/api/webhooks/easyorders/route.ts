@@ -42,8 +42,8 @@ export async function POST(request: Request) {
     try {
         const { searchParams } = new URL(request.url);
         const businessId = searchParams.get('business');
-        // EasyOrders sends the token in the 'secret' header, but fallback to URL param if needed
-        const token = request.headers.get('secret') || searchParams.get('token');
+        // We use our generated URL token for validation and ignore EasyOrders' secret header
+        const token = searchParams.get('token');
 
         if (!businessId || !token) {
             return NextResponse.json({ error: 'Missing business or token' }, { status: 401 });
@@ -74,7 +74,14 @@ export async function POST(request: Request) {
         }
 
         // 2. Parse Payload
-        const payload = await request.json();
+        let payload;
+        try {
+            const rawBody = await request.text();
+            payload = JSON.parse(rawBody);
+        } catch (e) {
+            console.error("Failed to parse JSON body:", e);
+            return NextResponse.json({ error: 'Invalid JSON payload' }, { status: 400 });
+        }
         
         // Ignore status update events for now, we only want new orders
         if (payload.event_type === 'order-status-update') {
