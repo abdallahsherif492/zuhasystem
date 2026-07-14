@@ -245,6 +245,7 @@ export async function POST(request: Request) {
                 business_id: businessId,
                 customer_id: customerId,
                 customer_info: customerInfo,
+                created_at: payload.created_at || payload.date || payload.order_date || new Date().toISOString(),
                 status: 'Waiting',
                 channel: 'Website',
                 tags: ['easyorders'],
