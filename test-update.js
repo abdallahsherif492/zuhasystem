@@ -1,10 +1,15 @@
 const { createClient } = require('@supabase/supabase-js');
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL || "https://telkkknuygjejmqcvyev.supabase.co",
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRlbGtra251eWdqZWptcWN2eWV2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjY1MTU5NDAsImV4cCI6MjA4MjA5MTk0MH0.7q4Vyfz0CxAHCy49bKU6iy9xay0IxsqtMe4UATcg_cU"
-);
-async function test() {
-  const { data, error } = await supabase.from("business_users").select("*").limit(1);
-  console.log("Select:", data, error);
+const fs = require('fs');
+
+const envFile = fs.readFileSync('.env.local', 'utf8');
+const envUrl = envFile.match(/NEXT_PUBLIC_SUPABASE_URL=(.*)/)[1].trim();
+const envKey = envFile.match(/NEXT_PUBLIC_SUPABASE_ANON_KEY=(.*)/)[1].trim();
+
+const supabase = createClient(envUrl, envKey);
+
+async function check() {
+  const { data, error } = await supabase.from('business_users').update({ allowed_pages: ['/easy-orders'] }).eq('user_email', 'nonexistent@example.com').select();
+  console.log("Error:", error);
+  console.log("Data:", data);
 }
-test();
+check();
