@@ -158,23 +158,25 @@ export default function TeamManagementPage() {
         }
 
         setEditSaving(true);
-        const result = await updateTeamMemberAction(editingMember.id, {
-            role: editingMember.role || 'staff',
-            allowed_pages: editingMember.role === 'owner' || editingMember.role === 'admin' ? [] : (editingMember.allowed_pages || []),
-            shift_start: editingMember.shift_start || null,
-            shift_end: editingMember.shift_end || null,
-            weekend_days: editingMember.weekend_days || []
-        });
-        
-        const error = result.error ? new Error(result.error) : null;
+        const { data, error } = await supabase
+            .from("business_users")
+            .update({
+                role: editingMember.role || 'staff',
+                allowed_pages: editingMember.role === 'owner' || editingMember.role === 'super admin' ? [] : (editingMember.allowed_pages || []),
+                shift_start: editingMember.shift_start || null,
+                shift_end: editingMember.shift_end || null,
+                weekend_days: editingMember.weekend_days || []
+            })
+            .eq("id", editingMember.id)
+            .select();
         
         setEditSaving(false);
         if (error) {
             toast.error("Failed to update member: " + error.message);
         } else {
             toast.success("Member updated successfully.");
-            if (result.data && result.data.length > 0) {
-                setTeam(prev => prev.map(m => m.id === editingMember.id ? result.data![0] as BusinessUser : m));
+            if (data && data.length > 0) {
+                setTeam(prev => prev.map(m => m.id === editingMember.id ? data[0] as BusinessUser : m));
             } else {
                 toast.error("Warning: Member was not found or updated in the database.");
                 fetchTeam();
