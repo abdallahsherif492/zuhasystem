@@ -167,7 +167,8 @@ export default function TeamManagementPage() {
                 shift_end: editingMember.shift_end || null,
                 weekend_days: editingMember.weekend_days || []
             })
-            .eq("id", editingMember.id)
+            .eq("user_email", editingMember.user_email)
+            .eq("business_id", activeBusiness?.id)
             .select();
         
         setEditSaving(false);

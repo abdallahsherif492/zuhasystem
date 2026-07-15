@@ -7,9 +7,4 @@ const envKey = envFile.match(/NEXT_PUBLIC_SUPABASE_ANON_KEY=(.*)/)[1].trim();
 
 const supabase = createClient(envUrl, envKey);
 
-async function check() {
-  const { data, error } = await supabase.from('business_users').select('*').limit(1);
-  console.log("Error:", error);
-  console.log("Data:", data);
-}
-check();
+console.log(supabase.from('business_users').update({role: 'staff'}).eq('id', undefined).url.toString());
