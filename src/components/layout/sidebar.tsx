@@ -168,16 +168,18 @@ export function SidebarContent() {
                             {t("Orders")}
                         </Button>
                     </Link>
-                    <Link href="/easy-orders">
-                        <Button
-                            variant={pathname.startsWith("/easy-orders") ? "default" : "ghost"}
-                            className="w-full justify-start pl-8 text-sm"
-                        >
-                            <Globe className="mr-2 h-3.5 w-3.5" />
-                            {t("Easy Orders")}
-                        </Button>
-                    </Link>
                 </>
+            )}
+            {canAccess("/easy-orders") && (
+                <Link href="/easy-orders">
+                    <Button
+                        variant={pathname.startsWith("/easy-orders") ? "default" : "ghost"}
+                        className="w-full justify-start pl-8 text-sm"
+                    >
+                        <Globe className="mr-2 h-3.5 w-3.5" />
+                        {t("Easy Orders")}
+                    </Button>
+                </Link>
             )}
             {canAccess("/purchases") && (
                 <Link href="/purchases">

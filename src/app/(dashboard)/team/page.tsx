@@ -50,6 +50,7 @@ export default function TeamManagementPage() {
     const availablePages = [
         { id: "/dashboard", label: t("Dashboard") },
         { id: "/orders", label: t("Orders") },
+        { id: "/easy-orders", label: t("Easy Orders") },
         { id: "/products", label: t("Products") },
         { id: "/inventory", label: t("Inventory") },
         { id: "/customers", label: t("Customers") },
