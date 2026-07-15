@@ -169,11 +169,17 @@ export default function TeamManagementPage() {
         const error = result.error ? new Error(result.error) : null;
         
         setEditSaving(false);
-        if (error) toast.error("Failed to update member: " + error.message);
-        else {
+        if (error) {
+            toast.error("Failed to update member: " + error.message);
+        } else {
             toast.success("Member updated successfully.");
+            if (result.data && result.data.length > 0) {
+                setTeam(prev => prev.map(m => m.id === editingMember.id ? result.data![0] as BusinessUser : m));
+            } else {
+                toast.error("Warning: Member was not found or updated in the database.");
+                fetchTeam();
+            }
             setEditingMember(null);
-            fetchTeam();
         }
     }
 
@@ -221,14 +227,13 @@ export default function TeamManagementPage() {
                                     </SelectTrigger>
                                     <SelectContent>
                                         <SelectItem value="owner">{t("Owner")}</SelectItem>
-                                        <SelectItem value="manager">{t("Manager")}</SelectItem>
-                                        <SelectItem value="accountant">{t("Accountant")}</SelectItem>
-                                        <SelectItem value="staff">{t("Staff (Cashier)")}</SelectItem>
+                                        <SelectItem value="super admin">{t("Super Admin")}</SelectItem>
+                                        <SelectItem value="staff">{t("Staff")}</SelectItem>
                                     </SelectContent>
                                 </Select>
                             </div>
                             
-                            {newRole !== 'owner' && newRole !== 'admin' && (
+                            {newRole !== 'owner' && newRole !== 'super admin' && (
                                 <div className="space-y-4 border p-4 rounded-md">
                                     <h4 className="text-sm font-semibold">{t("Permissions (Allowed Pages)")}</h4>
                                     <div className="grid grid-cols-2 gap-2">
@@ -311,14 +316,13 @@ export default function TeamManagementPage() {
                                     </SelectTrigger>
                                     <SelectContent>
                                         <SelectItem value="owner">{t("Owner")}</SelectItem>
-                                        <SelectItem value="manager">{t("Manager")}</SelectItem>
-                                        <SelectItem value="accountant">{t("Accountant")}</SelectItem>
-                                        <SelectItem value="staff">{t("Staff (Cashier)")}</SelectItem>
+                                        <SelectItem value="super admin">{t("Super Admin")}</SelectItem>
+                                        <SelectItem value="staff">{t("Staff")}</SelectItem>
                                     </SelectContent>
                                 </Select>
                             </div>
                             
-                            {editingMember.role !== 'owner' && editingMember.role !== 'admin' && (
+                            {editingMember.role !== 'owner' && editingMember.role !== 'super admin' && (
                                 <div className="space-y-4 border p-4 rounded-md">
                                     <h4 className="text-sm font-semibold">{t("Permissions (Allowed Pages)")}</h4>
                                     <div className="grid grid-cols-2 gap-2">

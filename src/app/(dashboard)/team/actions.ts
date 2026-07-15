@@ -50,16 +50,7 @@ export async function updateTeamMemberAction(memberId: string, updates: any) {
             .select()
 
         if (error) return { error: error.message }
-        
-        // TEMPORARY: Return error to force UI to show the updated row so we can debug
-        if (data && data.length > 0) {
-             const updatedPages = data[0].allowed_pages;
-             return { error: `DEBUG: Row updated. allowed_pages=${JSON.stringify(updatedPages)}` }
-        } else {
-             return { error: `DEBUG: Update returned 0 rows! memberId=${memberId}` }
-        }
-        
-        // return { success: true, data }
+        return { success: true, data }
     } catch (err: any) {
         return { error: "Action error: " + err?.message + "\n" + err?.stack }
     }
