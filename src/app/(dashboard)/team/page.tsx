@@ -159,11 +159,11 @@ export default function TeamManagementPage() {
 
         setEditSaving(true);
         const result = await updateTeamMemberAction(editingMember.id, {
-            role: editingMember.role,
-            allowed_pages: editingMember.role === 'owner' || editingMember.role === 'admin' ? [] : editingMember.allowed_pages,
+            role: editingMember.role || 'staff',
+            allowed_pages: editingMember.role === 'owner' || editingMember.role === 'admin' ? [] : (editingMember.allowed_pages || []),
             shift_start: editingMember.shift_start || null,
             shift_end: editingMember.shift_end || null,
-            weekend_days: editingMember.weekend_days
+            weekend_days: editingMember.weekend_days || []
         });
         
         const error = result.error ? new Error(result.error) : null;
