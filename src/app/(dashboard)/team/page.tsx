@@ -1,5 +1,6 @@
 "use client";
 
+import { updateTeamMemberAction } from "./actions";
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useBusiness } from "@/contexts/BusinessContext";
@@ -157,7 +158,6 @@ export default function TeamManagementPage() {
         }
 
         setEditSaving(true);
-        const { updateTeamMemberAction } = await import("./actions");
         const result = await updateTeamMemberAction(editingMember.id, {
             role: editingMember.role,
             allowed_pages: editingMember.role === 'owner' || editingMember.role === 'admin' ? [] : editingMember.allowed_pages,
