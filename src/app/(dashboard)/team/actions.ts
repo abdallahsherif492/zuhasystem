@@ -47,21 +47,42 @@ export async function updateTeamMemberAction(memberId: string, userEmail: string
         if (!updates.weekend_days) updates.weekend_days = [];
         if (!updates.role) updates.role = 'staff';
 
-        // Just use admin client to update the business user to bypass RLS issues
-        const { data, error } = await supabaseAdmin
+        // 1. Fetch the exact row first
+        const { data: existingUser, error: fetchError } = await supabaseAdmin
             .from("business_users")
-            .update(updates)
+            .select("*")
             .eq("user_email", userEmail)
             .eq("business_id", businessId)
-            .select()
+            .single();
 
-        if (error) return { error: error.message }
+        if (fetchError || !existingUser) {
+             return { error: `DEBUG ERROR: Could not fetch user before update. Email: ${userEmail}. Error: ${fetchError?.message}` };
+        }
+
+        // 2. Perform the update
+        const { data, error } = await supabaseAdmin
+            .from("business_users")
+            .update({
+                role: updates.role,
+                allowed_pages: updates.allowed_pages, // Storing as JSONB
+                shift_start: updates.shift_start,
+                shift_end: updates.shift_end,
+                weekend_days: updates.weekend_days
+            })
+            .eq("id", existingUser.id) // using the precise ID from the fetched row
+            .select();
+
+        if (error) return { error: `DEBUG ERROR: Update failed. ${error.message}` }
         
         if (!data || data.length === 0) {
-            return { error: `DEBUG ERROR: Server action executed successfully but matched 0 rows. No row found with email ${userEmail} and business_id ${businessId}.` }
+            return { error: `DEBUG ERROR: Update executed but matched 0 rows using ID ${existingUser.id}` }
         }
         
-        return { success: true, data }
+        return { 
+            success: true, 
+            data, 
+            debug: `Found ${userEmail}. Old allowed_pages: ${JSON.stringify(existingUser.allowed_pages)}. New: ${JSON.stringify(data[0].allowed_pages)}` 
+        }
     } catch (err: any) {
         return { error: "Action error: " + err?.message + "\n" + err?.stack }
     }

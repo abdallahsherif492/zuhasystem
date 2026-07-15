@@ -170,7 +170,7 @@ export default function TeamManagementPage() {
         if (result.error) {
             toast.error("Failed to update member: " + result.error);
         } else {
-            toast.success("Member updated successfully.");
+            toast.success("✅ Member updated successfully (V4). " + (result.debug || ""));
             if (result.data && result.data.length > 0) {
                 setTeam(prev => prev.map(m => m.id === editingMember.id ? result.data![0] as BusinessUser : m));
             } else {
