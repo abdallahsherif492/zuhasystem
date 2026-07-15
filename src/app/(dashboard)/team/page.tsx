@@ -157,13 +157,16 @@ export default function TeamManagementPage() {
         }
 
         setEditSaving(true);
-        const { error } = await supabase.from("business_users").update({
+        const { updateTeamMemberAction } = await import("./actions");
+        const result = await updateTeamMemberAction(editingMember.id, {
             role: editingMember.role,
             allowed_pages: editingMember.role === 'owner' || editingMember.role === 'admin' ? [] : editingMember.allowed_pages,
             shift_start: editingMember.shift_start || null,
             shift_end: editingMember.shift_end || null,
             weekend_days: editingMember.weekend_days
-        }).eq("id", editingMember.id);
+        });
+        
+        const error = result.error ? new Error(result.error) : null;
         
         setEditSaving(false);
         if (error) toast.error("Failed to update member: " + error.message);
