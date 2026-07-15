@@ -16,11 +16,13 @@ export async function updateTeamMemberAction(memberId: string, userEmail: string
 
         const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey)
 
+        const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRlbGtra251eWdqZWptcWN2eWV2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjY1MTU5NDAsImV4cCI6MjA4MjA5MTk0MH0.7q4Vyfz0CxAHCy49bKU6iy9xay0IxsqtMe4UATcg_cU"
+
         // Verify the caller is authorized
         const cookieStore = await cookies()
         const supabase = createServerClient(
             supabaseUrl,
-            process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "",
+            anonKey,
             {
                 cookies: {
                     getAll() {
