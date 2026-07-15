@@ -75,7 +75,6 @@ export default function TeamManagementPage() {
 
     async function fetchTeam() {
         if (!activeBusiness) return;
-        if (!activeBusiness) return;
         setLoading(true);
         const { data, error } = await supabase
             .from("business_users")
@@ -83,9 +82,10 @@ export default function TeamManagementPage() {
             .eq("business_id", activeBusiness.id)
             .order("created_at", { ascending: false });
 
-        if (!error && data) {
-            setTeam(data as BusinessUser[]);
-        }
+        if (error) console.error("Error fetching team:", error);
+        console.log("=== DEBUG: Fetched Team Data ===");
+        console.log("Team data from DB:", data);
+        setTeam((data as BusinessUser[]) || []);
         setLoading(false);
     }
 
@@ -149,6 +149,9 @@ export default function TeamManagementPage() {
         e.preventDefault();
         if (!editingMember) return;
         
+        console.log("=== DEBUG: Saving Edit ===");
+        console.log("editingMember full object before save:", editingMember);
+        
         if (team.find(t => t.id === editingMember.id)?.role === "owner" && editingMember.role !== "owner") {
             const ownerCount = team.filter(t => t.role === "owner").length;
             if (ownerCount <= 1) {
@@ -157,23 +160,31 @@ export default function TeamManagementPage() {
             }
         }
 
-        setEditSaving(true);
-        const result = await updateTeamMemberAction(editingMember.id, editingMember.user_email, activeBusiness?.id || '', {
+        const updatesToSend = {
             role: editingMember.role || 'staff',
             allowed_pages: editingMember.role === 'owner' || editingMember.role === 'super admin' ? [] : (editingMember.allowed_pages || []),
             shift_start: editingMember.shift_start || null,
             shift_end: editingMember.shift_end || null,
             weekend_days: editingMember.weekend_days || []
-        });
+        };
+        console.log("Updates payload being sent to server action:", updatesToSend);
+
+        setEditSaving(true);
+        const result = await updateTeamMemberAction(editingMember.id, editingMember.user_email, activeBusiness?.id || '', updatesToSend);
+        console.log("Result received from server action:", result);
         
         setEditSaving(false);
         if (result.error) {
+            console.error("Server Action returned an error:", result.error);
             toast.error("Failed to update member: " + result.error);
         } else {
+            console.log("Server Action Success! Debug Message:", result.debug);
             toast.success("✅ Member updated successfully (V4). " + (result.debug || ""));
             if (result.data && result.data.length > 0) {
+                console.log("Data returned from server:", result.data[0]);
                 setTeam(prev => prev.map(m => m.id === editingMember.id ? result.data![0] as BusinessUser : m));
             } else {
+                console.warn("Server action returned success but empty data array.");
                 toast.error("Warning: Member was not found or updated in the database.");
                 fetchTeam();
             }
@@ -330,11 +341,16 @@ export default function TeamManagementPage() {
                                                     id={"edit-"+page.id} 
                                                     checked={editingMember.allowed_pages?.includes(page.id)}
                                                     onCheckedChange={(checked) => {
+                                                        let newAllowedPages = [];
                                                         if (checked) {
-                                                            setEditingMember({...editingMember, allowed_pages: [...(editingMember.allowed_pages||[]), page.id]});
+                                                            newAllowedPages = [...(editingMember.allowed_pages||[]), page.id];
                                                         } else {
-                                                            setEditingMember({...editingMember, allowed_pages: (editingMember.allowed_pages||[]).filter(p => p !== page.id)});
+                                                            newAllowedPages = (editingMember.allowed_pages||[]).filter(p => p !== page.id);
                                                         }
+                                                        console.log("=== DEBUG: Permission Toggled ===");
+                                                        console.log(`Toggled page: ${page.id}, Checked: ${checked}`);
+                                                        console.log("New allowed_pages array:", newAllowedPages);
+                                                        setEditingMember({...editingMember, allowed_pages: newAllowedPages});
                                                     }}
                                                 />
                                                 <Label htmlFor={"edit-"+page.id} className="text-xs">{page.label}</Label>
