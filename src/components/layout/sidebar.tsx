@@ -287,6 +287,16 @@ export function SidebarContent() {
                         {t("Detailed Analytics")}
                     </h4>
                     <div className="grid grid-flow-row auto-rows-max text-sm gap-1">
+                        <Link href="/insights/easyorders">
+                            <Button
+                                variant={pathname.startsWith("/insights/easyorders") ? "default" : "ghost"}
+                                className="w-full justify-start h-8"
+                                size="sm"
+                            >
+                                <Globe className="mr-2 h-3 w-3" />
+                                {t("EasyOrders")}
+                            </Button>
+                        </Link>
                         <Link href="/insights/revenues">
                             <Button
                                 variant={pathname.startsWith("/insights/revenues") ? "default" : "ghost"}
