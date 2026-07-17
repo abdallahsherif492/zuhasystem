@@ -26,6 +26,7 @@ import { MultiSelect, Option } from "@/components/ui/multi-select";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import { useDebounce } from "@/hooks/use-debounce";
+import { ShippingSyncModal } from "@/components/shipping-sync-modal";
 
 // Reuse standard lists
 const GOVERNORATES = [
@@ -278,7 +279,7 @@ function OrdersContent() {
         window.open(`/orders/print?ids=${ids}`, '_blank');
     }
 
-    const STATUSES = ["Pending", "Processing", "Prepared", "Shipped", "Delivered", "Cancelled", "Returned", "Unavailable"];
+    const STATUSES = ["Pending", "Processing", "Prepared", "Waiting for Shipping", "Shipped", "Delivered", "Returning", "Cancelled", "Returned", "Unavailable"];
     
     const getStatusColor = (status: any) => {
         if (!status || typeof status !== 'string') return 'bg-gray-100 text-gray-800 hover:bg-gray-100/80 dark:bg-gray-800 dark:text-gray-400';
@@ -415,6 +416,9 @@ function OrdersContent() {
                                 <Download className="mr-2 h-4 w-4" />
                                 {selectedOrders.size > 0 ? t("Export Selected") : t("Export All")}
                             </Button>
+                            {activeBusiness && (
+                                <ShippingSyncModal businessId={activeBusiness.id} onSyncComplete={fetchOrders} />
+                            )}
                         </div>
                     </div>
                 </div>

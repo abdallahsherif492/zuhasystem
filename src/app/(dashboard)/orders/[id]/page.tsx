@@ -52,7 +52,7 @@ import { toast } from "sonner";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 
-const ORDER_STATUSES = ["Pending", "Processing", "Prepared", "Shipped", "Delivered", "Cancelled", "Returned", "Unavailable"];
+const ORDER_STATUSES = ["Pending", "Processing", "Prepared", "Waiting for Shipping", "Shipped", "Delivered", "Returning", "Cancelled", "Returned", "Unavailable"];
 const GOVERNORATES = [
     "Cairo", "New Cairo", "Giza", "Alexandria", "Dakahlia", "Red Sea", "Beheira", "Fayoum",
     "Gharbiya", "Ismailia", "Monufia", "Minya", "Qaliubiya", "New Valley", "Suez",

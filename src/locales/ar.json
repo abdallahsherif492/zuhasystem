@@ -188,6 +188,8 @@
   "Reason": "السبب",
   "No requests found.": "لا توجد طلبات.",
   "Pending": "قيد الانتظار",
+  "Waiting for Shipping": "قيد الانتظار في الشحن",
+  "Returning": "قيد الإرجاع للراسل",
   "Approved": "مقبول",
   "Rejected": "مرفوض",
   "Approve": "قبول",
