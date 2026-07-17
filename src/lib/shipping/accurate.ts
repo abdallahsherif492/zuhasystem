@@ -45,40 +45,51 @@ export async function fetchAccurateShipments(token: string, refNumbers: string[]
     // Let's fetch recent shipments (first 200). In production, fetching by specific refNumbers is better.
     // Assuming refNumber is a single string in the input, we can do parallel queries or just fetch the latest.
     
-    // Let's query recent shipments (first 500)
-    const query = `
-        query {
-            listShipments(first: 500, page: 1) {
-                data {
-                    id
-                    code
-                    refNumber
-                    status {
+    const allShipments: AccurateShipment[] = [];
+    let page = 1;
+    const maxPages = 10; // Fetch up to 1000 recent shipments to ensure we catch active ones
+
+    while (page <= maxPages) {
+        const query = `
+            query {
+                listShipments(first: 100, page: ${page}) {
+                    data {
                         id
                         code
-                        name
+                        refNumber
+                        status {
+                            id
+                            code
+                            name
+                        }
                     }
                 }
             }
+        `;
+
+        const res = await fetch("https://system.telegraphex.com:8443/graphql", {
+            method: "POST",
+            headers: { 
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${token}`
+            },
+            body: JSON.stringify({ query }),
+            cache: "no-store"
+        });
+
+        const json = await res.json();
+        if (json.errors) {
+            throw new Error(json.errors[0].message || "Failed to fetch shipments from Accurate API");
         }
-    `;
 
-    const res = await fetch("https://system.telegraphex.com:8443/graphql", {
-        method: "POST",
-        headers: { 
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${token}`
-        },
-        body: JSON.stringify({ query }),
-        cache: "no-store"
-    });
-
-    const json = await res.json();
-    if (json.errors) {
-        throw new Error(json.errors[0].message || "Failed to fetch shipments from Accurate API");
+        const shipments = json.data.listShipments.data || [];
+        allShipments.push(...shipments);
+        
+        if (shipments.length < 100) {
+            break; // No more pages
+        }
+        page++;
     }
-
-    const allShipments: AccurateShipment[] = json.data.listShipments.data || [];
     
     // Filter to those that match our refNumbers
     return allShipments.filter(s => s.refNumber && refNumbers.includes(s.refNumber));
