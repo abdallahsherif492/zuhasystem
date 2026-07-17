@@ -89,9 +89,10 @@ function EasyOrdersContent() {
     const [products, setProducts] = useState<any[]>([]);
     
     // Treasury Modal state
-    const [treasuryModalOpen, setTreasuryModalOpen] = useState(false);
-    const [pendingOrder, setPendingOrder] = useState<Order | null>(null);
+    const [depositModalOpen, setDepositModalOpen] = useState(false);
+    const [depositOrder, setDepositOrder] = useState<Order | null>(null);
     const [transactionAccount, setTransactionAccount] = useState("");
+    const [depositLoading, setDepositLoading] = useState(false);
     
     // Add Item state per order
     const [addItemOpen, setAddItemOpen] = useState<Record<string, boolean>>({});
@@ -170,30 +171,37 @@ function EasyOrdersContent() {
         if (error) throw error;
     };
 
-    
-    const executeMoveToPending = async (order: Order, accountName?: string) => {
+    const handleRecordDeposit = async (order: Order, accountName: string) => {
+        setDepositLoading(true);
+        try {
+            await supabase.from('transactions').insert({
+                business_id: activeBusiness?.id,
+                transaction_date: new Date().toISOString().split('T')[0],
+                type: 'revenue',
+                category: 'orders_collection',
+                amount: order.paid_amount,
+                description: `Payment collection for EasyOrder ${order.easyorders_id || order.id.slice(0,8)}`,
+                account_name: accountName
+            });
+            toast.success(t("Deposit recorded successfully"));
+            setDepositModalOpen(false);
+            setDepositOrder(null);
+            setTransactionAccount("");
+        } catch (e) {
+            console.error("Error recording deposit:", e);
+            toast.error(t("Failed to record deposit"));
+        } finally {
+            setDepositLoading(false);
+        }
+    };
+
+    const executeMoveToPending = async (order: Order) => {
         setSaving(order.id);
         try {
             await handleUpdateOrder(order.id, { status: 'Pending' });
             
-            // Create transaction if paid
-            if (accountName && order.paid_amount > 0) {
-                await supabase.from('transactions').insert({
-                    business_id: activeBusiness?.id,
-                    transaction_date: new Date().toISOString().split('T')[0],
-                    type: 'revenue',
-                    category: 'orders_collection',
-                    amount: order.paid_amount,
-                    description: `Payment collection for Order ${order.easyorders_id || order.id.slice(0,8)}`,
-                    account_name: accountName
-                });
-            }
-            
             toast.success(t("Order moved to Pending successfully"));
             setOrders(orders.filter(o => o.id !== order.id));
-            setTreasuryModalOpen(false);
-            setPendingOrder(null);
-            setTransactionAccount("");
         } catch (error) {
             console.error("Error moving to pending:", error);
             toast.error(t("Failed to move order"));
@@ -210,12 +218,7 @@ function EasyOrdersContent() {
             return;
         }
 
-        if (order.payment_status === 'Paid' || order.payment_status === 'Partially Paid') {
-            setPendingOrder(order);
-            setTreasuryModalOpen(true);
-        } else {
-            executeMoveToPending(order);
-        }
+        executeMoveToPending(order);
     };
 
     const handleCancelOrder = async (orderId: string) => {
@@ -369,12 +372,12 @@ function EasyOrdersContent() {
 
             
             {/* Treasury Transaction Modal */}
-            <AlertDialog open={treasuryModalOpen} onOpenChange={setTreasuryModalOpen}>
+            <AlertDialog open={depositModalOpen} onOpenChange={setDepositModalOpen}>
                 <AlertDialogContent>
                     <AlertDialogHeader>
-                        <AlertDialogTitle>Payment Collection</AlertDialogTitle>
+                        <AlertDialogTitle>Record Deposit?</AlertDialogTitle>
                         <AlertDialogDescription>
-                            This order has a payment of {formatCurrency(pendingOrder?.paid_amount || 0)}. Select the treasury account to deposit this amount into.
+                            This order has a paid amount of {formatCurrency(depositOrder?.paid_amount || 0)}. Select the treasury account to deposit this amount into.
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <div className="space-y-4 py-4">
@@ -391,12 +394,12 @@ function EasyOrdersContent() {
                         </div>
                     </div>
                     <AlertDialogFooter>
-                        <AlertDialogCancel onClick={() => { setPendingOrder(null); setTransactionAccount(""); }}>Cancel</AlertDialogCancel>
+                        <AlertDialogCancel onClick={() => { setDepositOrder(null); setTransactionAccount(""); }}>Cancel</AlertDialogCancel>
                         <AlertDialogAction 
-                            disabled={!transactionAccount || saving === pendingOrder?.id}
-                            onClick={() => pendingOrder && executeMoveToPending(pendingOrder, transactionAccount)}
+                            disabled={!transactionAccount || depositLoading}
+                            onClick={() => depositOrder && handleRecordDeposit(depositOrder, transactionAccount)}
                         >
-                            {saving === pendingOrder?.id && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                            {depositLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                             Confirm & Deposit
                         </AlertDialogAction>
                     </AlertDialogFooter>
@@ -771,7 +774,11 @@ function EasyOrdersContent() {
                                                 <Label>{t("Payment Status")}</Label>
                                                 <Select value={order.payment_status === 'Partial' ? 'Partially Paid' : (order.payment_status || "Not Paid")} onValueChange={(val) => {
                                                     updateOrderField(order, 'payment_status', val);
-                                                    if (val === 'Paid') updateOrderField(order, 'paid_amount', order.total_amount);
+                                                    if (val === 'Paid') {
+                                                        updateOrderField(order, 'paid_amount', order.total_amount);
+                                                        setDepositOrder({ ...order, paid_amount: order.total_amount, payment_status: 'Paid' });
+                                                        setDepositModalOpen(true);
+                                                    }
                                                     if (val === 'Not Paid') updateOrderField(order, 'paid_amount', 0);
                                                 }}>
                                                     <SelectTrigger className="w-[150px] h-8">
@@ -794,6 +801,19 @@ function EasyOrdersContent() {
                                                         onChange={(e) => updateOrderField(order, 'paid_amount', parseFloat(e.target.value) || 0)}
                                                     />
                                                 </div>
+                                            )}
+                                            {(order.payment_status === 'Paid' || order.payment_status === 'Partially Paid') && order.paid_amount > 0 && (
+                                                <Button 
+                                                    className="w-full mt-2" 
+                                                    variant="secondary"
+                                                    size="sm"
+                                                    onClick={() => {
+                                                        setDepositOrder(order);
+                                                        setDepositModalOpen(true);
+                                                    }}
+                                                >
+                                                    Record Deposit ({formatCurrency(order.paid_amount)})
+                                                </Button>
                                             )}
                                         </div>
                                     </div>
