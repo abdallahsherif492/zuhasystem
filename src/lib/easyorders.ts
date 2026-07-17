@@ -1,6 +1,10 @@
 "use server";
 
-import { supabase } from "@/lib/supabase";
+import { createServerClient } from "@supabase/ssr";
+import { cookies } from "next/headers";
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://telkkknuygjejmqcvyev.supabase.co";
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRlbGtra251eWdqZWptcWN2eWV2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjY1MTU5NDAsImV4cCI6MjA4MjA5MTk0MH0.7q4Vyfz0CxAHCy49bKU6iy9xay0IxsqtMe4UATcg_cU";
 
 const STATUS_MAPPING: Record<string, string> = {
     "Pending": "pending",
@@ -18,6 +22,17 @@ const STATUS_MAPPING: Record<string, string> = {
 
 export async function syncStatusToEasyOrders(orderId: string, newStatus: string, businessId: string) {
     try {
+        const cookieStore = await cookies();
+        const supabase = createServerClient(
+            supabaseUrl,
+            supabaseKey,
+            {
+                cookies: {
+                    get(name: string) { return cookieStore.get(name)?.value; },
+                },
+            }
+        );
+
         // 1. Get the business config to check for API key
         const { data: business } = await supabase
             .from('businesses')
