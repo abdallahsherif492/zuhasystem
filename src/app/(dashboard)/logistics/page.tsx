@@ -66,7 +66,7 @@ const STATUSES = [
     "Pending",
     "Processing",
     "Prepared",
-    "Waiting for Shipping",
+    "Hold To redeliver",
     "Shipped",
     "Delivered",
     "Collected",
@@ -79,6 +79,7 @@ const STATUSES = [
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d', '#ffc658', '#d0ed57'];
 
 import { Suspense } from "react";
+import { ShippingSyncModal } from "@/components/shipping-sync-modal";
 
 export default function LogisticsPage() {
     return (
@@ -576,6 +577,9 @@ function LogisticsContent() {
                     <h1 className="text-3xl font-bold tracking-tight">{t("Logistics")}</h1>
                 </div>
                 <div className="flex items-center gap-2 bg-background">
+                    {activeBusiness && (
+                        <ShippingSyncModal businessId={activeBusiness.id} onSyncComplete={fetchOrders} />
+                    )}
                     <DateRangePicker />
                 </div>
             </div>

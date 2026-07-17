@@ -95,23 +95,22 @@ export async function fetchAccurateShipments(token: string, refNumbers: string[]
     return allShipments.filter(s => s.refNumber && refNumbers.includes(s.refNumber));
 }
 
-export function mapAccurateStatusToZuha(accurateStatusName: string): string | null {
-    // We map accurateStatusName (which is Arabic in the API e.g. "طلب شحن") to Zuha Status.
-    // Based on user feedback:
-    // Returning = قيد الإرجاع للراسل / قيد الارجاع
-    // Returned = تم الإرجاع للراسل / مسترجع
-    // Waiting for Shipping = قيد الانتظار / طلب شحن / الخ
-    // Delivered = تم التسليم
-    // Any other is ignored (null) or "Shipped". User said "اي حالة تانية ممكن تسيبها shipped عادي, الاهم ان..."
-    // Let's use includes for safety.
-
-    if (!accurateStatusName) return null;
-
-    if (accurateStatusName.includes("تم التسليم")) return "Delivered";
-    if (accurateStatusName.includes("إرجاع") && accurateStatusName.includes("تم")) return "Returned";
-    if (accurateStatusName.includes("إرجاع") && accurateStatusName.includes("قيد")) return "Returning";
-    if (accurateStatusName.includes("انتظار") || accurateStatusName.includes("مشكلة") || accurateStatusName.includes("غير متوفر") || accurateStatusName.includes("طلب شحن")) return "Waiting for Shipping";
+export function mapAccurateStatusToZuha(accurateStatusCode: string, accurateStatusName: string): string | null {
+    // Ignore PKR (طلب الشحن)
+    if (accurateStatusCode === "PKR") return null;
     
-    // Default to Shipped for any other intermediate states (like مناولة, تم الاستلام بالمخزن, etc)
+    // DEX, RTS, OTR are Returning
+    if (["DEX", "RTS", "OTR"].includes(accurateStatusCode)) return "Returning";
+    
+    // HTR is Hold To redeliver
+    if (accurateStatusCode === "HTR") return "Hold To redeliver";
+
+    // If there's no code or we don't know it, fallback to name matching for final states
+    if (accurateStatusName) {
+        if (accurateStatusName.includes("تم التسليم")) return "Delivered";
+        if (accurateStatusName.includes("إرجاع") && accurateStatusName.includes("تم")) return "Returned";
+    }
+    
+    // Default to Shipped for any other states
     return "Shipped";
 }

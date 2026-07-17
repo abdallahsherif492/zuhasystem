@@ -31,12 +31,12 @@ export async function previewShippingSyncAction(businessId: string): Promise<{ u
         // Fetch active orders (Shipped, Waiting for Shipping, Prepared, etc) that might need syncing
         // Basically we want anything that is NOT Delivered, Cancelled, Returned, or Pending (if pending means hasn't reached shipping yet).
         // Let's just fetch all orders that are currently active and let's check against Accurate.
-        // Or to be safe, fetch orders that are in statuses: ["Waiting for Shipping", "Shipped", "Returning", "Prepared"]
+        // Or to be safe, fetch orders that are in statuses: ["Hold To redeliver", "Shipped", "Returning", "Prepared"]
         const { data: orders, error: ordersError } = await supabase
             .from("orders")
             .select("id, customer_info, status, tags")
             .eq("business_id", businessId)
-            .in("status", ["Prepared", "Waiting for Shipping", "Shipped", "Returning"]);
+            .in("status", ["Prepared", "Hold To redeliver", "Shipped", "Returning"]);
 
         if (ordersError) throw new Error(ordersError.message);
         if (!orders || orders.length === 0) return { updates: [] };
@@ -54,7 +54,7 @@ export async function previewShippingSyncAction(businessId: string): Promise<{ u
             const accurateMatch = accurateShipments.find(s => s.refNumber === shortId);
 
             if (accurateMatch) {
-                const newStatus = mapAccurateStatusToZuha(accurateMatch.status.name);
+                const newStatus = mapAccurateStatusToZuha(accurateMatch.status.code, accurateMatch.status.name);
                 if (newStatus && newStatus !== order.status) {
                     updates.push({
                         orderId: order.id,
@@ -74,7 +74,7 @@ export async function previewShippingSyncAction(businessId: string): Promise<{ u
     }
 }
 
-export async function applyShippingUpdatesAction(updates: SyncPreviewItem[]): Promise<{ success: boolean; error?: string }> {
+export async function applyShippingUpdatesAction(updates: SyncPreviewItem[], shippingProvider?: string): Promise<{ success: boolean; error?: string }> {
     try {
         const cookieStore = await cookies();
         const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://telkkknuygjejmqcvyev.supabase.co";
@@ -91,9 +91,13 @@ export async function applyShippingUpdatesAction(updates: SyncPreviewItem[]): Pr
         );
 
         for (const update of updates) {
+            const updatePayload: any = { status: update.newStatus };
+            if (update.newStatus === "Shipped" && shippingProvider) {
+                updatePayload.shipping_company_id = shippingProvider;
+            }
             const { error } = await supabase
                 .from("orders")
-                .update({ status: update.newStatus })
+                .update(updatePayload)
                 .eq("id", update.orderId);
             if (error) {
                 console.error(`Failed to update order ${update.orderId}:`, error);

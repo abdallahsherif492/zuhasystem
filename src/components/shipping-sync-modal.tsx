@@ -24,6 +24,9 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { previewShippingSyncAction, applyShippingUpdatesAction, SyncPreviewItem } from "@/app/(dashboard)/orders/sync-actions";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { supabase } from "@/lib/supabase";
+import { Label } from "@/components/ui/label";
 
 interface ShippingSyncModalProps {
     businessId: string;
@@ -38,12 +41,20 @@ export function ShippingSyncModal({ businessId, onSyncComplete }: ShippingSyncMo
     const [updates, setUpdates] = useState<SyncPreviewItem[]>([]);
     const [fetched, setFetched] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [shippingCompanies, setShippingCompanies] = useState<any[]>([]);
+    const [selectedCompanyId, setSelectedCompanyId] = useState("");
 
     const handleOpen = async (isOpen: boolean) => {
         setOpen(isOpen);
         if (isOpen && !fetched) {
+            fetchCompanies();
             await fetchPreview();
         }
+    };
+
+    const fetchCompanies = async () => {
+        const { data } = await supabase.from('shipping_companies').select('*').eq('business_id', businessId).eq('active', true).order('name');
+        if (data) setShippingCompanies(data);
     };
 
     const fetchPreview = async () => {
@@ -64,15 +75,22 @@ export function ShippingSyncModal({ businessId, onSyncComplete }: ShippingSyncMo
         }
     };
 
+    const hasShippedUpdate = updates.some(u => u.newStatus === "Shipped");
+
     const handleApply = async () => {
         if (updates.length === 0) {
             setOpen(false);
             return;
         }
+
+        if (hasShippedUpdate && !selectedCompanyId) {
+            toast.error(t("Please select a shipping company for the shipped orders"));
+            return;
+        }
         
         setApplying(true);
         try {
-            const result = await applyShippingUpdatesAction(updates);
+            const result = await applyShippingUpdatesAction(updates, selectedCompanyId);
             if (result.success) {
                 toast.success(t("Shipping statuses updated successfully"));
                 onSyncComplete();
@@ -92,6 +110,7 @@ export function ShippingSyncModal({ businessId, onSyncComplete }: ShippingSyncMo
         setFetched(false);
         setUpdates([]);
         setError(null);
+        setSelectedCompanyId("");
     };
 
     const summaryCounts = updates.reduce((acc, curr) => {
@@ -182,6 +201,31 @@ export function ShippingSyncModal({ businessId, onSyncComplete }: ShippingSyncMo
                                     </TableBody>
                                 </Table>
                             </div>
+                            
+                            {hasShippedUpdate && (
+                                <div className="bg-blue-50 border border-blue-100 p-4 rounded-md space-y-2 mt-2">
+                                    <div className="flex items-center gap-2 text-blue-800">
+                                        <AlertCircle className="h-4 w-4" />
+                                        <h4 className="text-sm font-semibold">{t("Shipping Company Required")}</h4>
+                                    </div>
+                                    <p className="text-xs text-blue-700">
+                                        {t("Some orders are transitioning to Shipped. Please select the shipping company to assign them to.")}
+                                    </p>
+                                    <div className="pt-2 max-w-sm">
+                                        <Label className="text-xs mb-1 block text-blue-900">{t("Shipping Company")}</Label>
+                                        <Select value={selectedCompanyId} onValueChange={setSelectedCompanyId}>
+                                            <SelectTrigger className="bg-white">
+                                                <SelectValue placeholder={t("Select a company")} />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {shippingCompanies.map(c => (
+                                                    <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     ) : null}
                 </div>
