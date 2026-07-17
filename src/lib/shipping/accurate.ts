@@ -99,7 +99,7 @@ export function mapAccurateStatusToZuha(accurateStatusName: string): string | nu
     if (accurateStatusName.includes("تم التسليم")) return "Delivered";
     if (accurateStatusName.includes("إرجاع") && accurateStatusName.includes("تم")) return "Returned";
     if (accurateStatusName.includes("إرجاع") && accurateStatusName.includes("قيد")) return "Returning";
-    if (accurateStatusName.includes("قيد الانتظار") || accurateStatusName.includes("مشكلة") || accurateStatusName.includes("غير متوفر") || accurateStatusName.includes("طلب شحن")) return "Waiting for Shipping";
+    if (accurateStatusName.includes("انتظار") || accurateStatusName.includes("مشكلة") || accurateStatusName.includes("غير متوفر") || accurateStatusName.includes("طلب شحن")) return "Waiting for Shipping";
     
     // Default to Shipped for any other intermediate states (like مناولة, تم الاستلام بالمخزن, etc)
     return "Shipped";
