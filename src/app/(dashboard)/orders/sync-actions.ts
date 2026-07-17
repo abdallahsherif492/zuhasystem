@@ -34,7 +34,7 @@ export async function previewShippingSyncAction(businessId: string): Promise<{ u
         // Or to be safe, fetch orders that are in statuses: ["Waiting for Shipping", "Shipped", "Returning", "Prepared"]
         const { data: orders, error: ordersError } = await supabase
             .from("orders")
-            .select("id, customer_name, status, tags")
+            .select("id, customer_info, status, tags")
             .eq("business_id", businessId)
             .in("status", ["Prepared", "Waiting for Shipping", "Shipped", "Returning"]);
 
@@ -58,7 +58,7 @@ export async function previewShippingSyncAction(businessId: string): Promise<{ u
                 if (newStatus && newStatus !== order.status) {
                     updates.push({
                         orderId: order.id,
-                        customerName: order.customer_name,
+                        customerName: (order.customer_info as any)?.name || "N/A",
                         oldStatus: order.status,
                         newStatus: newStatus,
                         accurateStatusName: accurateMatch.status.name
