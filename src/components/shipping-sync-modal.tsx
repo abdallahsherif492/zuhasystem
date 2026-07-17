@@ -94,6 +94,12 @@ export function ShippingSyncModal({ businessId, onSyncComplete }: ShippingSyncMo
         setError(null);
     };
 
+    const summaryCounts = updates.reduce((acc, curr) => {
+        const key = `${curr.oldStatus} ➡️ ${curr.newStatus}`;
+        acc[key] = (acc[key] || 0) + 1;
+        return acc;
+    }, {} as Record<string, number>);
+
     return (
         <Dialog open={open} onOpenChange={(val) => {
             if (!val) resetState();
@@ -131,38 +137,51 @@ export function ShippingSyncModal({ businessId, onSyncComplete }: ShippingSyncMo
                             <p className="text-sm font-medium">{t("All orders are up to date.")}</p>
                         </div>
                     ) : fetched && updates.length > 0 ? (
-                        <div className="rounded-md border">
-                            <Table>
-                                <TableHeader>
-                                    <TableRow>
-                                        <TableHead>{t("Customer")}</TableHead>
-                                        <TableHead>{t("Accurate Status")}</TableHead>
-                                        <TableHead>{t("Old Status")}</TableHead>
-                                        <TableHead>{t("New Status")}</TableHead>
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {updates.map((item) => (
-                                        <TableRow key={item.orderId}>
-                                            <TableCell className="font-medium">
-                                                {item.customerName || t("Unknown")}
-                                                <div className="text-xs text-muted-foreground font-mono">{item.orderId.substring(0,8)}</div>
-                                            </TableCell>
-                                            <TableCell>
-                                                <span className="text-xs">{item.accurateStatusName}</span>
-                                            </TableCell>
-                                            <TableCell>
-                                                <Badge variant="outline" className="text-xs">{t(item.oldStatus)}</Badge>
-                                            </TableCell>
-                                            <TableCell>
-                                                <Badge className="bg-blue-100 text-blue-800 hover:bg-blue-100 border-none text-xs">
-                                                    {t(item.newStatus)}
-                                                </Badge>
-                                            </TableCell>
+                        <div className="flex flex-col gap-4">
+                            <div className="bg-muted/50 p-3 rounded-md border flex flex-wrap gap-3">
+                                {Object.entries(summaryCounts).map(([key, count]) => {
+                                    const [oldS, newS] = key.split(' ➡️ ');
+                                    return (
+                                        <Badge key={key} variant="secondary" className="px-3 py-1 flex gap-2 items-center">
+                                            <span className="font-normal opacity-70">{count}x</span>
+                                            <span className="text-xs">{t(oldS)} ➡️ {t(newS)}</span>
+                                        </Badge>
+                                    );
+                                })}
+                            </div>
+                            <div className="rounded-md border">
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow>
+                                            <TableHead>{t("Customer")}</TableHead>
+                                            <TableHead>{t("Accurate Status")}</TableHead>
+                                            <TableHead>{t("Old Status")}</TableHead>
+                                            <TableHead>{t("New Status")}</TableHead>
                                         </TableRow>
-                                    ))}
-                                </TableBody>
-                            </Table>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {updates.map((item) => (
+                                            <TableRow key={item.orderId}>
+                                                <TableCell className="font-medium">
+                                                    {item.customerName || t("Unknown")}
+                                                    <div className="text-xs text-muted-foreground font-mono">{item.orderId.substring(0,8)}</div>
+                                                </TableCell>
+                                                <TableCell>
+                                                    <span className="text-xs">{item.accurateStatusName}</span>
+                                                </TableCell>
+                                                <TableCell>
+                                                    <Badge variant="outline" className="text-xs">{t(item.oldStatus)}</Badge>
+                                                </TableCell>
+                                                <TableCell>
+                                                    <Badge className="bg-blue-100 text-blue-800 hover:bg-blue-100 border-none text-xs">
+                                                        {t(item.newStatus)}
+                                                    </Badge>
+                                                </TableCell>
+                                            </TableRow>
+                                        ))}
+                                    </TableBody>
+                                </Table>
+                            </div>
                         </div>
                     ) : null}
                 </div>
