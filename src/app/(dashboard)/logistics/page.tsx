@@ -309,9 +309,11 @@ function LogisticsContent() {
                 }
 
                 // Sync with EasyOrders if applicable
-                syncStatusToEasyOrders(oid, newStatus, activeBusiness.id).catch(err => {
-                    console.error("Failed to sync status to EasyOrders:", err);
-                });
+                if (activeBusiness) {
+                    syncStatusToEasyOrders(oid, newStatus, activeBusiness.id).catch(err => {
+                        console.error("Failed to sync status to EasyOrders:", err);
+                    });
+                }
             }
 
             toast.success("Orders updated successfully");
