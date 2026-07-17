@@ -3,6 +3,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { loginAccurate, fetchAccurateShipments, mapAccurateStatusToZuha } from "@/lib/shipping/accurate";
+import { syncStatusToEasyOrders } from "@/lib/easyorders";
 
 export interface SyncPreviewItem {
     orderId: string;
@@ -74,7 +75,7 @@ export async function previewShippingSyncAction(businessId: string): Promise<{ u
     }
 }
 
-export async function applyShippingUpdatesAction(updates: SyncPreviewItem[], shippingProvider?: string): Promise<{ success: boolean; error?: string }> {
+export async function applyShippingUpdatesAction(updates: SyncPreviewItem[], businessId: string, shippingProvider?: string): Promise<{ success: boolean; error?: string }> {
     try {
         const cookieStore = await cookies();
         const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://telkkknuygjejmqcvyev.supabase.co";
@@ -101,6 +102,10 @@ export async function applyShippingUpdatesAction(updates: SyncPreviewItem[], shi
                 .eq("id", update.orderId);
             if (error) {
                 console.error(`Failed to update order ${update.orderId}:`, error);
+            } else {
+                syncStatusToEasyOrders(update.orderId, update.newStatus, businessId).catch(err => {
+                    console.error("Failed to sync status to EasyOrders:", err);
+                });
             }
         }
 

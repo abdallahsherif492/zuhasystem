@@ -5,6 +5,7 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { formatCurrency } from "@/lib/utils";
 import { restockItems, deductStock } from "@/lib/inventory";
+import { syncStatusToEasyOrders } from "@/lib/easyorders";
 import { Button } from "@/components/ui/button";
 import {
     Card,
@@ -306,6 +307,11 @@ function LogisticsContent() {
                         );
                     }
                 }
+
+                // Sync with EasyOrders if applicable
+                syncStatusToEasyOrders(oid, newStatus, activeBusiness.id).catch(err => {
+                    console.error("Failed to sync status to EasyOrders:", err);
+                });
             }
 
             toast.success("Orders updated successfully");

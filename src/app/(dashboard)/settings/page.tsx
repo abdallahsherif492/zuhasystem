@@ -31,6 +31,7 @@ export default function SettingsPage() {
     const [darkMode, setDarkMode] = useState<string>("system");
     const [logoFile, setLogoFile] = useState<File | null>(null);
     const [logoPreview, setLogoPreview] = useState<string | null>(null);
+    const [easyordersApiKey, setEasyordersApiKey] = useState<string>("");
 
     useEffect(() => {
         if (activeBusiness) {
@@ -40,6 +41,7 @@ export default function SettingsPage() {
             setSecondaryColor(activeBusiness.theme_config?.secondaryColor || "#000000");
             setDarkMode(activeBusiness.theme_config?.darkMode || "system");
             setLogoPreview(activeBusiness.logo_url);
+            setEasyordersApiKey(activeBusiness.theme_config?.easyorders_api_key || "");
         }
     }, [activeBusiness]);
 
@@ -97,14 +99,14 @@ export default function SettingsPage() {
                 finalLogoUrl = publicUrlData.publicUrl;
             }
 
-            // 2. Update Business record
-            const newThemeConfig = {
-                ...(activeBusiness.theme_config || {}),
-                language,
-                primaryColor,
-                secondaryColor,
-                darkMode
-            };
+                const newThemeConfig = {
+                    ...(activeBusiness.theme_config || {}),
+                    language,
+                    primaryColor,
+                    secondaryColor,
+                    darkMode,
+                    easyorders_api_key: easyordersApiKey
+                };
 
             const { error: updateError } = await supabase
                 .from('businesses')
@@ -329,6 +331,25 @@ export default function SettingsPage() {
                                     </div>
                                 </div>
                                 
+                                <div className="space-y-2 pt-2">
+                                    <Label>{t("EasyOrders API Key")}</Label>
+                                    <p className="text-xs text-muted-foreground">
+                                        {t("Used to automatically sync order status updates back to EasyOrders.")}
+                                    </p>
+                                    <div className="flex gap-2">
+                                        <Input 
+                                            placeholder={t("Enter API Key")} 
+                                            value={easyordersApiKey}
+                                            onChange={(e) => setEasyordersApiKey(e.target.value)}
+                                            type="password"
+                                        />
+                                        <Button onClick={handleSaveTheme} disabled={saving}>
+                                            {saving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                                            {t("Save Key")}
+                                        </Button>
+                                    </div>
+                                </div>
+                                
                                 <div className="pt-4 border-t flex gap-2">
                                     <Button 
                                         onClick={async () => {
@@ -340,7 +361,8 @@ export default function SettingsPage() {
                                                     
                                                 const newThemeConfig = {
                                                     ...(activeBusiness?.theme_config || {}),
-                                                    easyorders_token: newToken
+                                                    easyorders_token: newToken,
+                                                    easyorders_api_key: easyordersApiKey
                                                 };
                                                 
                                                 const { error } = await supabase

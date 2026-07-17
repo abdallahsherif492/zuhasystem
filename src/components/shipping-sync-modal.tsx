@@ -90,7 +90,7 @@ export function ShippingSyncModal({ businessId, onSyncComplete }: ShippingSyncMo
         
         setApplying(true);
         try {
-            const result = await applyShippingUpdatesAction(updates, selectedCompanyId);
+            const result = await applyShippingUpdatesAction(updates, businessId, selectedCompanyId);
             if (result.success) {
                 toast.success(t("Shipping statuses updated successfully"));
                 onSyncComplete();

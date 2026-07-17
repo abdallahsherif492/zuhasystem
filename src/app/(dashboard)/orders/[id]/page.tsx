@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { formatCurrency } from "@/lib/utils";
 import { restockItems, deductStock, validateStock } from "@/lib/inventory";
+import { syncStatusToEasyOrders } from "@/lib/easyorders";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -460,6 +461,12 @@ export default function OrderDetailsPage() {
                     cPhone: editForm.customerPhone
                 });
                 setShowTransactionDialog(true);
+            }
+
+            if (activeBusiness && order.status !== editForm.status) {
+                syncStatusToEasyOrders(orderId, editForm.status, activeBusiness.id).catch(err => {
+                    console.error("Failed to sync status to EasyOrders:", err);
+                });
             }
 
             toast.success("Order updated successfully");
