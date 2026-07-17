@@ -41,7 +41,6 @@ export async function deductStock(
         // 2. Log Transaction
         if (!updateError) {
             await supabase.from('inventory_transactions').insert({
-                business_id,
                 variant_id: item.variant_id,
                 quantity_change: -item.qty,
                 transaction_type: type,
@@ -71,7 +70,6 @@ export async function restockItems(
         // 2. Log Transaction
         if (!updateError) {
             await supabase.from('inventory_transactions').insert({
-                business_id,
                 variant_id: item.variant_id,
                 quantity_change: item.qty,
                 transaction_type: 'return',

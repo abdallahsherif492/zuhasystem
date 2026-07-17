@@ -4,12 +4,7 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://telkkknuygj
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 const supabase = createClient(supabaseUrl, supabaseKey);
 (async () => {
-  const { error } = await supabase.from('inventory_transactions').insert({
-    business_id: "00000000-0000-0000-0000-000000000000",
-    variant_id: "00000000-0000-0000-0000-000000000000",
-    quantity_change: 1,
-    transaction_type: 'sale',
-    reference_id: 'test'
-  });
+  const { data, error } = await supabase.from('inventory_transactions').select('*').limit(1);
+  console.log("Data:", JSON.stringify(data, null, 2));
   console.log("Error:", JSON.stringify(error, null, 2));
 })();
