@@ -1,22 +1,15 @@
-require('dotenv').config({ path: '.env.local' });
 const { createClient } = require('@supabase/supabase-js');
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-);
-
-async function test() {
-    const { data: orders } = await supabase.from('orders').select('business_id').limit(1);
-    if (!orders || orders.length === 0) return console.log("No orders found");
-    const p_business_id = orders[0].business_id;
-
-    console.log("Testing with business:", p_business_id);
-
+require('dotenv').config({ path: '.env.local' });
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://telkkknuygjejmqcvyev.supabase.co';
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+const supabase = createClient(supabaseUrl, supabaseKey);
+(async () => {
+  const { data: b } = await supabase.from('businesses').select('id').limit(1);
+  if(b && b.length > 0) {
     const { data, error } = await supabase.rpc('get_orders_paginated', {
-        p_business_id: p_business_id,
+        p_business_id: b[0].id,
         p_page_number: 1,
-        p_page_size: 50,
+        p_page_size: 1,
         p_search: null,
         p_status: null,
         p_channel: null,
@@ -26,13 +19,6 @@ async function test() {
         p_to_date: null,
         p_export_all: false
     });
-
-    console.log("Error:", error);
-    console.log("Data count:", data ? data.length : 0);
-    if (error) {
-        console.error(error);
-    } else if (data && data.length > 0) {
-        console.log("Sample order ID:", data[0].id);
-    }
-}
-test();
+    console.log(Object.keys(data[0] || {}));
+  }
+})();

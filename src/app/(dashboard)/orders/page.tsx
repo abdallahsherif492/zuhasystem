@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useMemo, Suspense } from "react";
+import { useEffect, useState, useMemo, Suspense, useRef } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
@@ -85,6 +85,10 @@ function OrdersContent() {
     const [productFilter, setProductFilter] = useState<string[]>([]);
     const [govFilter, setGovFilter] = useState<string[]>([]);
     const [channelFilter, setChannelFilter] = useState<string[]>([]);
+    const [shippingCompanyFilter, setShippingCompanyFilter] = useState<string>("all");
+    const [uploadedOrderFilters, setUploadedOrderFilters] = useState<string[]>([]);
+    const [shippingCompanies, setShippingCompanies] = useState<any[]>([]);
+    const fileInputRef = useRef<HTMLInputElement>(null);
 
     // Selection State
     const [selectedOrders, setSelectedOrders] = useState<Set<string>>(new Set());
@@ -99,17 +103,22 @@ function OrdersContent() {
     useEffect(() => {
         // Reset to page 1 when filters change
         setPage(1);
-    }, [debouncedSearch, statusFilter, productFilter, govFilter, channelFilter, fromDate, toDate, pageSize]);
+    }, [debouncedSearch, statusFilter, productFilter, govFilter, channelFilter, shippingCompanyFilter, uploadedOrderFilters, fromDate, toDate, pageSize]);
 
     useEffect(() => {
         fetchOrders();
-    }, [page, pageSize, debouncedSearch, statusFilter, productFilter, govFilter, channelFilter, fromDate, toDate, activeBusiness]);
+    }, [page, pageSize, debouncedSearch, statusFilter, productFilter, govFilter, channelFilter, shippingCompanyFilter, uploadedOrderFilters, fromDate, toDate, activeBusiness]);
 
     async function fetchProducts() {
         if (!activeBusiness) return;
         const { data } = await supabase.from('products').select('id, name').eq('business_id', activeBusiness.id).order('name');
         if (data) {
             setProductsOptions(data.map(p => ({ label: p.name, value: p.id })));
+        }
+
+        const { data: companies } = await supabase.from('shipping_companies').select('id, name');
+        if (companies) {
+            setShippingCompanies(companies);
         }
     }
 
@@ -118,6 +127,8 @@ function OrdersContent() {
         try {
             setLoading(true);
             setErrorMsg(null);
+
+            const hasNewFilters = shippingCompanyFilter !== "all" || uploadedOrderFilters.length > 0;
 
             // Fetch via RPC for paginated and filtered data
             const { data, error } = await supabase.rpc('get_orders_paginated', {
@@ -131,17 +142,54 @@ function OrdersContent() {
                 p_products: productFilter.length > 0 ? productFilter : null,
                 p_from_date: fromDate || null,
                 p_to_date: toDate ? new Date(new Date(toDate).setHours(23, 59, 59, 999)).toISOString() : null,
-                p_export_all: false
+                p_export_all: hasNewFilters // Fetch all if we need to apply local filters
             });
 
             if (error) { setErrorMsg(error.message + " | Details: " + JSON.stringify(error)); throw error; }
 
-            if (data && data.length > 0) {
-                setOrders(data);
-                setTotalCount(Number(data[0].total_count));
+            let resultData = data || [];
+
+            if (hasNewFilters && resultData.length > 0) {
+                // Fetch mapping data since RPC might not return shipping_company_id or easyorders_id
+                const { data: mappingData } = await supabase.from('orders')
+                    .select('id, shipping_company_id, easyorders_id, customer_info')
+                    .in('id', resultData.map((r: any) => r.id));
+
+                if (mappingData) {
+                    const map = new Map(mappingData.map(m => [m.id, m]));
+                    
+                    if (shippingCompanyFilter !== "all") {
+                        resultData = resultData.filter((r: any) => map.get(r.id)?.shipping_company_id === shippingCompanyFilter);
+                    }
+                    
+                    if (uploadedOrderFilters.length > 0) {
+                        resultData = resultData.filter((r: any) => {
+                            const m = map.get(r.id);
+                            if (!m) return false;
+                            const phone1 = String(m.customer_info?.phone || '').trim();
+                            const phone2 = String(m.customer_info?.phone2 || '').trim();
+                            const shortId = m.id.slice(0,8);
+                            const easyId = String(m.easyorders_id || '');
+                            return uploadedOrderFilters.some(f => {
+                                const clean = String(f).trim();
+                                return clean === phone1 || clean === phone2 || clean === shortId || clean === easyId || shortId.includes(clean);
+                            });
+                        });
+                    }
+                }
+                
+                // Now manually paginate resultData
+                setTotalCount(resultData.length);
+                const start = (page - 1) * pageSize;
+                setOrders(resultData.slice(start, start + pageSize));
             } else {
-                setOrders([]);
-                setTotalCount(0);
+                if (resultData.length > 0) {
+                    setOrders(resultData);
+                    setTotalCount(Number(resultData[0].total_count));
+                } else {
+                    setOrders([]);
+                    setTotalCount(0);
+                }
             }
             
             // Do NOT clear selection when page changes or filters change
@@ -178,6 +226,8 @@ function OrdersContent() {
             } else {
                 // Export ALL matching current filters using RPC
                 toast.loading("Fetching all filtered orders for export...");
+                const hasNewFilters = shippingCompanyFilter !== "all" || uploadedOrderFilters.length > 0;
+                
                 const { data, error } = await supabase.rpc('get_orders_paginated', {
                     p_business_id: activeBusiness.id,
                     p_page_number: 1,
@@ -193,12 +243,42 @@ function OrdersContent() {
                 });
                 
                 if (error) throw error;
-                if (!data || data.length === 0) {
+                
+                let resultData = data || [];
+                
+                if (hasNewFilters && resultData.length > 0) {
+                    const { data: mappingData } = await supabase.from('orders')
+                        .select('id, shipping_company_id, easyorders_id, customer_info')
+                        .in('id', resultData.map((r: any) => r.id));
+
+                    if (mappingData) {
+                        const map = new Map(mappingData.map(m => [m.id, m]));
+                        if (shippingCompanyFilter !== "all") {
+                            resultData = resultData.filter((r: any) => map.get(r.id)?.shipping_company_id === shippingCompanyFilter);
+                        }
+                        if (uploadedOrderFilters.length > 0) {
+                            resultData = resultData.filter((r: any) => {
+                                const m = map.get(r.id);
+                                if (!m) return false;
+                                const phone1 = String(m.customer_info?.phone || '').trim();
+                                const phone2 = String(m.customer_info?.phone2 || '').trim();
+                                const shortId = m.id.slice(0,8);
+                                const easyId = String(m.easyorders_id || '');
+                                return uploadedOrderFilters.some(f => {
+                                    const clean = String(f).trim();
+                                    return clean === phone1 || clean === phone2 || clean === shortId || clean === easyId || shortId.includes(clean);
+                                });
+                            });
+                        }
+                    }
+                }
+
+                if (!resultData || resultData.length === 0) {
                     toast.dismiss();
                     toast.error("No data found to export");
                     return;
                 }
-                processExportData(data, 'all');
+                processExportData(resultData, 'all');
             }
         } catch (error) {
             console.error("Export failed:", error);
@@ -264,10 +344,46 @@ function OrdersContent() {
         const worksheet = XLSX.utils.json_to_sheet(exportData);
         const workbook = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(workbook, worksheet, "Orders");
-        XLSX.writeFile(workbook, `orders_export_${suffix}_${new Date().toISOString().split('T')[0]}.xlsx`);
+        XLSX.writeFile(workbook, `orders_export_${suffix}.xlsx`);
         toast.dismiss();
         toast.success("Export successful");
     }
+
+    const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = (evt) => {
+            try {
+                const bstr = evt.target?.result;
+                const wb = XLSX.read(bstr, { type: "binary" });
+                const wsname = wb.SheetNames[0];
+                const ws = wb.Sheets[wsname];
+                const data = XLSX.utils.sheet_to_json(ws, { header: 1 }) as any[][];
+                
+                // Extract the first column items, skipping empty rows
+                let filters: string[] = [];
+                for (let i = 0; i < data.length; i++) {
+                    const row = data[i];
+                    if (row && row[0] !== undefined && row[0] !== null && String(row[0]).trim() !== '') {
+                        filters.push(String(row[0]).trim());
+                    }
+                }
+
+                if (filters.length > 0) {
+                    setUploadedOrderFilters(filters);
+                    toast.success(`Filter applied: ${filters.length} items extracted from sheet`);
+                } else {
+                    toast.error("No valid data found in the first column");
+                }
+            } catch (err) {
+                console.error("Error reading file:", err);
+                toast.error("Failed to parse file");
+            }
+        };
+        reader.readAsBinaryString(file);
+    };
 
     function handlePrintSelected() {
         if (selectedOrders.size === 0) {
@@ -402,6 +518,44 @@ function OrdersContent() {
                             {totalCount} {t("orders found")}. {selectedOrders.size > 0 && <span className="text-primary font-bold ml-2">({selectedOrders.size} {t("selected")})</span>}
                         </div>
                         <div className="flex gap-2">
+                            <Input
+                                placeholder={t("Search by name, phone, order id...")}
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                                className="w-full sm:w-[250px]"
+                            />
+                            
+                            <Select value={shippingCompanyFilter} onValueChange={setShippingCompanyFilter}>
+                                <SelectTrigger className="w-[180px]">
+                                    <SelectValue placeholder="Shipping Company" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="all">All Companies</SelectItem>
+                                    {shippingCompanies.map(c => (
+                                        <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+
+                            <input 
+                                type="file" 
+                                accept=".xlsx, .csv" 
+                                className="hidden" 
+                                ref={fileInputRef} 
+                                onChange={handleFileUpload} 
+                            />
+                            <Button variant="outline" onClick={() => fileInputRef.current?.click()}>
+                                <FilterX className="mr-2 h-4 w-4" />
+                                Upload Sheet
+                            </Button>
+                            {uploadedOrderFilters.length > 0 && (
+                                <Button variant="ghost" className="text-destructive" onClick={() => {
+                                    setUploadedOrderFilters([]);
+                                    if (fileInputRef.current) fileInputRef.current.value = "";
+                                }}>
+                                    Clear Sheet Filter
+                                </Button>
+                            )}
                             <Button
                                 variant="secondary"
                                 onClick={handlePrintSelected}
