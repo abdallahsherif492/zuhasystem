@@ -4,8 +4,9 @@ import { useEffect, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { formatCurrency } from "@/lib/utils";
-import { restockItems, deductStock } from "@/lib/inventory";
+import { restockItems, deductStock, validateStock } from "@/lib/inventory";
 import { syncStatusToEasyOrders } from "@/lib/easyorders";
+import { processOrderForVrobo } from "@/lib/vrobo/api";
 import { Button } from "@/components/ui/button";
 import {
     Card,
@@ -312,6 +313,13 @@ function LogisticsContent() {
                 if (activeBusiness) {
                     syncStatusToEasyOrders(oid, newStatus, activeBusiness.id).catch(err => {
                         console.error("Failed to sync status to EasyOrders:", err);
+                    });
+                }
+
+                // VROBO Integration for problematic orders
+                if (newStatus === "Returning" || newStatus === "Hold To redeliver") {
+                    processOrderForVrobo(oid).catch(err => {
+                        console.error("Failed to process VROBO sync for logistics update:", err);
                     });
                 }
             }
