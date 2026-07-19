@@ -1,6 +1,6 @@
 "use client";
 
-import { updateTeamMemberAction } from "./actions";
+import { updateTeamMemberAction, addTeamMemberAction } from "./actions";
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useBusiness } from "@/contexts/BusinessContext";
@@ -95,23 +95,20 @@ export default function TeamManagementPage() {
         setSaving(true);
 
         
-        const { error } = await supabase
-            .from("business_users")
-            .insert({
-                business_id: activeBusiness.id,
-                user_email: newEmail.toLowerCase().trim(),
-                role: newRole,
-                allowed_pages: newRole === 'owner' || newRole === 'admin' ? [] : newAllowedPages,
-                shift_start: newShiftStart || null,
-                shift_end: newShiftEnd || null,
-                weekend_days: newWeekendDays
-            });
-
+        const result = await addTeamMemberAction({
+            business_id: activeBusiness.id,
+            user_email: newEmail.toLowerCase().trim(),
+            role: newRole,
+            allowed_pages: newRole === 'owner' || newRole === 'admin' ? [] : newAllowedPages,
+            shift_start: newShiftStart || null,
+            shift_end: newShiftEnd || null,
+            weekend_days: newWeekendDays
+        });
 
         setSaving(false);
-        if (error) {
-            console.error("Supabase Insert Error:", error);
-            toast.error("Failed to add team member: " + error.message);
+        if (result.error) {
+            console.error("Server Action Insert Error:", result.error);
+            toast.error("Failed to add team member: " + result.error);
         } else {
             toast.success("Team member added successfully! They can access the system immediately after creating an account with this email.");
             setIsAddOpen(false);

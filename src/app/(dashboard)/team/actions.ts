@@ -89,3 +89,67 @@ export async function updateTeamMemberAction(memberId: string, userEmail: string
         return { error: "Action error: " + err?.message + "\n" + err?.stack }
     }
 }
+
+export async function addTeamMemberAction(newMemberData: any) {
+    try {
+        const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://telkkknuygjejmqcvyev.supabase.co"
+        const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+        
+        if (!serviceRoleKey) {
+            return { error: "Missing service role key" }
+        }
+
+        const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey)
+
+        const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRlbGtra251eWdqZWptcWN2eWV2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjY1MTU5NDAsImV4cCI6MjA4MjA5MTk0MH0.7q4Vyfz0CxAHCy49bKU6iy9xay0IxsqtMe4UATcg_cU"
+
+        // Verify the caller is authorized
+        const cookieStore = await cookies()
+        const supabase = createServerClient(
+            supabaseUrl,
+            anonKey,
+            {
+                cookies: {
+                    getAll() {
+                        return cookieStore.getAll()
+                    },
+                    setAll(cookiesToSet) {
+                        try {
+                            cookiesToSet.forEach(({ name, value, options }) => {
+                                cookieStore.set({ name, value, ...options })
+                            })
+                        } catch (error) {
+                            // Ignored
+                        }
+                    },
+                },
+            }
+        )
+
+        const { data: { user }, error: userError } = await supabase.auth.getUser()
+        if (userError || !user) return { error: "Not authenticated: " + (userError?.message || "") }
+
+        // Perform the insert
+        const { data, error } = await supabaseAdmin
+            .from("business_users")
+            .insert({
+                business_id: newMemberData.business_id,
+                user_email: newMemberData.user_email,
+                role: newMemberData.role || 'staff',
+                allowed_pages: newMemberData.allowed_pages || [],
+                shift_start: newMemberData.shift_start || null,
+                shift_end: newMemberData.shift_end || null,
+                weekend_days: newMemberData.weekend_days || []
+            })
+            .select();
+
+        if (error) return { error: `DEBUG ERROR: Insert failed. ${error.message}` }
+        
+        return { 
+            success: true, 
+            data
+        }
+    } catch (err: any) {
+        return { error: "Action error: " + err?.message + "\n" + err?.stack }
+    }
+}
