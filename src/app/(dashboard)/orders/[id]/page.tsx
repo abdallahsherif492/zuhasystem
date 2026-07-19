@@ -6,6 +6,7 @@ import { supabase } from "@/lib/supabase";
 import { formatCurrency } from "@/lib/utils";
 import { restockItems, deductStock, validateStock } from "@/lib/inventory";
 import { syncStatusToEasyOrders } from "@/lib/easyorders";
+import { processOrderForVrobo } from "@/lib/vrobo/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -467,6 +468,13 @@ export default function OrderDetailsPage() {
                 syncStatusToEasyOrders(orderId, editForm.status, activeBusiness.id).catch(err => {
                     console.error("Failed to sync status to EasyOrders:", err);
                 });
+                
+                // VROBO Integration for manual status change
+                if (editForm.status === "Returning" || editForm.status === "Hold To redeliver") {
+                    processOrderForVrobo(orderId).catch(err => {
+                        console.error("Failed to process VROBO sync for manual update:", err);
+                    });
+                }
             }
 
             toast.success("Order updated successfully");

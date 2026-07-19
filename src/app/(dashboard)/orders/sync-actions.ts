@@ -4,6 +4,7 @@ import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { loginAccurate, fetchAccurateShipments, mapAccurateStatusToZuha } from "@/lib/shipping/accurate";
 import { syncStatusToEasyOrders } from "@/lib/easyorders";
+import { processOrderForVrobo } from "@/lib/vrobo/api";
 
 export interface SyncPreviewItem {
     orderId: string;
@@ -106,6 +107,13 @@ export async function applyShippingUpdatesAction(updates: SyncPreviewItem[], bus
                 syncStatusToEasyOrders(update.orderId, update.newStatus, businessId).catch(err => {
                     console.error("Failed to sync status to EasyOrders:", err);
                 });
+
+                // VROBO Integration for problematic orders
+                if (update.newStatus === "Returning" || update.newStatus === "Hold To redeliver") {
+                    processOrderForVrobo(update.orderId).catch(err => {
+                        console.error("Failed to process VROBO sync:", err);
+                    });
+                }
             }
         }
 
