@@ -1,7 +1,6 @@
 "use server";
 
-import { createServerClient } from "@supabase/ssr";
-import { cookies } from "next/headers";
+import { createClient } from "@supabase/supabase-js";
 
 export async function sendOrderToVrobo(order: any) {
     const vroboApiKey = process.env.VROBO_API_KEY || "173dcc86-720f-4065-8cd4-5383b6f8281d";
@@ -56,7 +55,7 @@ export async function sendOrderToVrobo(order: any) {
 export async function processOrderForVrobo(orderId: string) {
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://telkkknuygjejmqcvyev.supabase.co";
     const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...";
-    const supabase = createServerClient(supabaseUrl, supabaseKey, { cookies: {} as any });
+    const supabase = createClient(supabaseUrl, supabaseKey);
 
     // 1. Fetch the order
     const { data: order, error } = await supabase
