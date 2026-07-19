@@ -471,8 +471,11 @@ export default function OrderDetailsPage() {
                 
                 // VROBO Integration for manual status change
                 if (editForm.status === "Returning" || editForm.status === "Hold To redeliver") {
-                    processOrderForVrobo(orderId).catch(err => {
-                        console.error("Failed to process VROBO sync for manual update:", err);
+                    console.log(`[VROBO] Initiating sync for order ${orderId}...`);
+                    processOrderForVrobo(orderId).then(res => {
+                        console.log(`[VROBO] Result for ${orderId}:`, res);
+                    }).catch(err => {
+                        console.error("[VROBO] Failed to process VROBO sync for manual update:", err);
                     });
                 }
             }

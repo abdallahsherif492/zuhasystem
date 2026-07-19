@@ -318,8 +318,11 @@ function LogisticsContent() {
 
                 // VROBO Integration for problematic orders
                 if (newStatus === "Returning" || newStatus === "Hold To redeliver") {
-                    processOrderForVrobo(oid).catch(err => {
-                        console.error("Failed to process VROBO sync for logistics update:", err);
+                    console.log(`[VROBO] Initiating sync for order ${oid}...`);
+                    processOrderForVrobo(oid).then(res => {
+                        console.log(`[VROBO] Result for ${oid}:`, res);
+                    }).catch(err => {
+                        console.error("[VROBO] Failed to process VROBO sync for logistics update:", err);
                     });
                 }
             }

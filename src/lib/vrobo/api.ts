@@ -76,19 +76,19 @@ export async function processOrderForVrobo(orderId: string) {
 
     if (error || !order) {
         console.error("VROBO Sync Error: Could not fetch order", orderId, error);
-        return;
+        return { success: false, message: "Could not fetch order" };
     }
 
     // 2. Check if already synced
     if (order.vrobo_synced) {
         console.log(`Order ${orderId} already synced to VROBO. Skipping.`);
-        return;
+        return { success: false, message: "Already synced to VROBO. Skipping." };
     }
 
     // 3. Check status
     if (order.status !== "Returning" && order.status !== "Hold To redeliver") {
         console.log(`Order ${orderId} has status ${order.status}, not eligible for VROBO.`);
-        return;
+        return { success: false, message: "Status not eligible for VROBO." };
     }
 
     // 4. Send to VROBO
@@ -101,5 +101,8 @@ export async function processOrderForVrobo(orderId: string) {
             .update({ vrobo_synced: true })
             .eq("id", orderId);
         console.log(`Order ${orderId} successfully synced to VROBO.`);
+        return { success: true, message: "Successfully synced to VROBO." };
+    } else {
+        return { success: false, message: "Failed to sync to VROBO API.", error: result.error };
     }
 }
