@@ -283,10 +283,10 @@ export default function PurchasesPage() {
                                                             className={`text-sm leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 flex-1 cursor-pointer ${checked.has(idx) ? 'line-through text-gray-400' : 'font-medium'}`}
                                                         >
                                                             <div className="flex justify-between w-full">
-                                                                <span>{item.variant.product.name}</span>
+                                                                <span>{item.variant?.product?.name || "Unknown Product"}</span>
                                                                 <Badge variant="secondary" className="h-5 px-1.5 text-xs">x{item.quantity}</Badge>
                                                             </div>
-                                                            <span className="text-xs text-muted-foreground mt-1 block">{item.variant.title}</span>
+                                                            <span className="text-xs text-muted-foreground mt-1 block">{item.variant?.title || "Unknown Variant"}</span>
                                                         </label>
                                                     </div>
                                                 ))}

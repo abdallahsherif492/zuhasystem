@@ -10,14 +10,16 @@ export function ItemsSummary({ orders }: SummaryProps) {
     // Aggregate items
     const summary = orders.reduce((acc: any, order: any) => {
         order.items.forEach((item: any) => {
-            const key = `${item.variant.product.name}-${item.variant.title}`;
+            const productName = item.variant?.product?.name || "Unknown Product";
+            const variantTitle = item.variant?.title || "Unknown Variant";
+            const key = `${productName}-${variantTitle}`;
             if (!acc[key]) {
                 acc[key] = {
-                    productName: item.variant.product.name,
-                    variantTitle: item.variant.title,
+                    productName,
+                    variantTitle,
                     totalQuantity: 0,
-                    costPrice: item.variant.cost_price || 0,
-                    stockQty: item.variant.stock_qty || 0,
+                    costPrice: item.variant?.cost_price || 0,
+                    stockQty: item.variant?.stock_qty || 0,
                 };
             }
             acc[key].totalQuantity += item.quantity;
