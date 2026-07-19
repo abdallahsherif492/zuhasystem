@@ -40,11 +40,15 @@ export async function syncStatusToEasyOrders(orderId: string, newStatus: string,
             .eq('id', businessId)
             .single();
 
-        if (!business || !business.theme_config || !business.theme_config.easyorders_api_key) {
-            return { success: false, error: "EasyOrders API key not configured." };
+        if (!business || !business.theme_config) {
+            return { success: false, error: "Business config missing." };
         }
 
-        const apiKey = business.theme_config.easyorders_api_key;
+        const apiKey = business.theme_config.integrations?.platforms?.easyorders?.apiKey || business.theme_config.easyorders_api_key;
+
+        if (!apiKey) {
+            return { success: false, error: "EasyOrders API key not configured." };
+        }
 
         // 2. Get the easyorders_id for this order
         const { data: order } = await supabase

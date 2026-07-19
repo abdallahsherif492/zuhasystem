@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import { Loader2, Upload, Trash2, CheckCircle2 } from "lucide-react";
 import Image from "next/image";
@@ -26,12 +27,24 @@ export default function SettingsPage() {
     // Form state
     const [businessName, setBusinessName] = useState<string>("");
     const [language, setLanguage] = useState<string>("en");
-    const [primaryColor, setPrimaryColor] = useState<string>("#0f172a"); // Default slate-900
-    const [secondaryColor, setSecondaryColor] = useState<string>("#000000"); // Default black text
+    const [primaryColor, setPrimaryColor] = useState<string>("#0f172a");
+    const [secondaryColor, setSecondaryColor] = useState<string>("#000000");
     const [darkMode, setDarkMode] = useState<string>("system");
     const [logoFile, setLogoFile] = useState<File | null>(null);
     const [logoPreview, setLogoPreview] = useState<string | null>(null);
-    const [easyordersApiKey, setEasyordersApiKey] = useState<string>("");
+
+    // Integrations State
+    const [integrations, setIntegrations] = useState<any>({
+        shipping: {
+            telegraph: { enabled: false, username: "", password: "", autoSync: false, autoSyncIntervalMinutes: 15 }
+        },
+        platforms: {
+            easyorders: { enabled: false, apiKey: "", webhookToken: "" }
+        },
+        tools: {
+            vrobo: { enabled: false, apiKey: "", merchantId: "", autoSync: false, autoSyncIntervalMinutes: 60 }
+        }
+    });
 
     useEffect(() => {
         if (activeBusiness) {
@@ -41,7 +54,41 @@ export default function SettingsPage() {
             setSecondaryColor(activeBusiness.theme_config?.secondaryColor || "#000000");
             setDarkMode(activeBusiness.theme_config?.darkMode || "system");
             setLogoPreview(activeBusiness.logo_url);
-            setEasyordersApiKey(activeBusiness.theme_config?.easyorders_api_key || "");
+            
+            // Handle legacy EasyOrders settings
+            const legacyWebhook = activeBusiness.theme_config?.easyorders_token || "";
+            const legacyApiKey = activeBusiness.theme_config?.easyorders_api_key || "";
+            
+            // Merge existing integrations or setup defaults
+            const savedIntegrations = activeBusiness.theme_config?.integrations || {};
+            
+            setIntegrations({
+                shipping: {
+                    telegraph: {
+                        enabled: savedIntegrations.shipping?.telegraph?.enabled || false,
+                        username: savedIntegrations.shipping?.telegraph?.username || "",
+                        password: savedIntegrations.shipping?.telegraph?.password || "",
+                        autoSync: savedIntegrations.shipping?.telegraph?.autoSync || false,
+                        autoSyncIntervalMinutes: savedIntegrations.shipping?.telegraph?.autoSyncIntervalMinutes || 15
+                    }
+                },
+                platforms: {
+                    easyorders: {
+                        enabled: savedIntegrations.platforms?.easyorders?.enabled || !!legacyWebhook,
+                        apiKey: savedIntegrations.platforms?.easyorders?.apiKey || legacyApiKey,
+                        webhookToken: savedIntegrations.platforms?.easyorders?.webhookToken || legacyWebhook
+                    }
+                },
+                tools: {
+                    vrobo: {
+                        enabled: savedIntegrations.tools?.vrobo?.enabled || false,
+                        apiKey: savedIntegrations.tools?.vrobo?.apiKey || "",
+                        merchantId: savedIntegrations.tools?.vrobo?.merchantId || "",
+                        autoSync: savedIntegrations.tools?.vrobo?.autoSync || false,
+                        autoSyncIntervalMinutes: savedIntegrations.tools?.vrobo?.autoSyncIntervalMinutes || 60
+                    }
+                }
+            });
         }
     }, [activeBusiness]);
 
@@ -73,15 +120,27 @@ export default function SettingsPage() {
         setLogoPreview(null);
     };
 
+    const handleIntegrationChange = (category: string, service: string, field: string, value: any) => {
+        setIntegrations((prev: any) => ({
+            ...prev,
+            [category]: {
+                ...prev[category],
+                [service]: {
+                    ...prev[category][service],
+                    [field]: value
+                }
+            }
+        }));
+    };
+
     const handleSaveTheme = async () => {
         if (!activeBusiness) return;
         setSaving(true);
         setSuccessMessage("");
         
         try {
-            let finalLogoUrl = logoPreview; // Keep existing or null
+            let finalLogoUrl = logoPreview; 
 
-            // 1. Upload new logo if exists
             if (logoFile) {
                 const fileExt = logoFile.name.split('.').pop();
                 const fileName = `${activeBusiness.id}-logo-${Date.now()}.${fileExt}`;
@@ -99,14 +158,17 @@ export default function SettingsPage() {
                 finalLogoUrl = publicUrlData.publicUrl;
             }
 
-                const newThemeConfig = {
-                    ...(activeBusiness.theme_config || {}),
-                    language,
-                    primaryColor,
-                    secondaryColor,
-                    darkMode,
-                    easyorders_api_key: easyordersApiKey
-                };
+            const newThemeConfig = {
+                ...(activeBusiness.theme_config || {}),
+                language,
+                primaryColor,
+                secondaryColor,
+                darkMode,
+                // Maintain backwards compatibility if other functions depend on it
+                easyorders_token: integrations.platforms.easyorders.webhookToken,
+                easyorders_api_key: integrations.platforms.easyorders.apiKey,
+                integrations: integrations
+            };
 
             const { error: updateError } = await supabase
                 .from('businesses')
@@ -121,7 +183,6 @@ export default function SettingsPage() {
 
             setSuccessMessage("Settings saved successfully! Refreshing to apply...");
             
-            // Reload to apply changes across contexts
             setTimeout(() => {
                 window.location.reload();
             }, 1500);
@@ -129,6 +190,49 @@ export default function SettingsPage() {
         } catch (error) {
             console.error("Error saving theme settings:", error);
             alert("Failed to save settings. Make sure the storage bucket exists.");
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const generateEasyOrdersToken = async () => {
+        setSaving(true);
+        try {
+            const newToken = Array.from(crypto.getRandomValues(new Uint8Array(16)))
+                .map(b => b.toString(16).padStart(2, '0'))
+                .join('');
+            
+            handleIntegrationChange('platforms', 'easyorders', 'webhookToken', newToken);
+            handleIntegrationChange('platforms', 'easyorders', 'enabled', true);
+            
+            // Save immediately
+            const newThemeConfig = {
+                ...(activeBusiness?.theme_config || {}),
+                easyorders_token: newToken,
+                integrations: {
+                    ...integrations,
+                    platforms: {
+                        ...integrations.platforms,
+                        easyorders: {
+                            ...integrations.platforms.easyorders,
+                            webhookToken: newToken,
+                            enabled: true
+                        }
+                    }
+                }
+            };
+            
+            const { error } = await supabase
+                .from('businesses')
+                .update({ theme_config: newThemeConfig })
+                .eq('id', activeBusiness?.id);
+                
+            if (error) throw error;
+            
+            toast.success(t("Token generated successfully"));
+        } catch (error) {
+            console.error("Error generating token:", error);
+            toast.error(t("Failed to generate token"));
         } finally {
             setSaving(false);
         }
@@ -142,7 +246,9 @@ export default function SettingsPage() {
             <Tabs defaultValue="theme" className="space-y-4">
                 <TabsList>
                     <TabsTrigger value="theme">{t("Theme & Appearance")}</TabsTrigger>
-                    <TabsTrigger value="api">{t("API Integrations")}</TabsTrigger>
+                    <TabsTrigger value="shipping">{t("Shipping Companies")}</TabsTrigger>
+                    <TabsTrigger value="platforms">{t("Order Platforms")}</TabsTrigger>
+                    <TabsTrigger value="tools">{t("Tools")}</TabsTrigger>
                 </TabsList>
                 
                 <TabsContent value="theme" className="space-y-4">
@@ -155,7 +261,6 @@ export default function SettingsPage() {
                         </CardHeader>
                         <CardContent className="space-y-6">
                             
-                            {/* Logo Upload */}
                             <div className="space-y-2">
                                 <Label>{t("Business Logo")}</Label>
                                 <div className="flex items-center gap-6">
@@ -194,7 +299,6 @@ export default function SettingsPage() {
                             </div>
 
                             <div className="grid gap-6 md:grid-cols-2">
-                                {/* Business Name */}
                                 <div className="space-y-2">
                                     <Label>{t("Business Name")}</Label>
                                     <Input 
@@ -205,7 +309,6 @@ export default function SettingsPage() {
                                     />
                                 </div>
 
-                                {/* Language */}
                                 <div className="space-y-2">
                                     <Label>{t("Language")}</Label>
                                     <Select value={language} onValueChange={setLanguage}>
@@ -219,7 +322,6 @@ export default function SettingsPage() {
                                     </Select>
                                 </div>
 
-                                {/* Primary Color */}
                                 <div className="space-y-2">
                                     <Label>{t("Primary Color")}</Label>
                                     <div className="flex gap-3 items-center">
@@ -238,7 +340,6 @@ export default function SettingsPage() {
                                     </div>
                                 </div>
 
-                                {/* Secondary Color */}
                                 <div className="space-y-2">
                                     <Label>{t("Secondary Color")}</Label>
                                     <div className="flex gap-3 items-center">
@@ -257,7 +358,6 @@ export default function SettingsPage() {
                                     </div>
                                 </div>
 
-                                {/* Dark Mode */}
                                 <div className="space-y-2">
                                     <Label>{t("Theme Appearance")}</Label>
                                     <Select value={darkMode} onValueChange={setDarkMode}>
@@ -285,145 +385,257 @@ export default function SettingsPage() {
                     </Card>
                 </TabsContent>
 
-                <TabsContent value="api" className="space-y-4">
+                {/* Shipping Companies Tab */}
+                <TabsContent value="shipping" className="space-y-4">
                     <Card>
                         <CardHeader>
-                            <CardTitle>{t("API Integrations")}</CardTitle>
+                            <CardTitle>{t("Shipping Companies")}</CardTitle>
                             <CardDescription>
-                                {t("Connect Zuha System with external platforms like EasyOrders.")}
+                                {t("Manage integrations with shipping providers.")}
                             </CardDescription>
                         </CardHeader>
                         <CardContent className="space-y-6">
                             <div className="space-y-4 border rounded-md p-4 bg-muted/20">
-                                <h3 className="text-lg font-medium flex items-center">
-                                    EasyOrders Integration
-                                    {activeBusiness?.theme_config?.easyorders_token && (
-                                        <Badge variant="outline" className="ml-3 bg-green-50 text-green-700 border-green-200">Active</Badge>
-                                    )}
-                                </h3>
+                                <div className="flex items-center justify-between">
+                                    <h3 className="text-lg font-medium flex items-center">
+                                        Telegraph Integration
+                                        {integrations.shipping.telegraph.enabled && (
+                                            <Badge variant="outline" className="ml-3 bg-green-50 text-green-700 border-green-200">Active</Badge>
+                                        )}
+                                    </h3>
+                                    <Switch 
+                                        checked={integrations.shipping.telegraph.enabled} 
+                                        onCheckedChange={(c) => handleIntegrationChange('shipping', 'telegraph', 'enabled', c)}
+                                    />
+                                </div>
                                 <p className="text-sm text-muted-foreground">
-                                    {t("Copy the Webhook URL below and paste it into your EasyOrders dashboard settings to automatically receive new orders.")}
+                                    {t("Connect to Telegraph shipping to sync statuses and tracking.")}
                                 </p>
                                 
-                                <div className="space-y-2">
-                                    <Label>{t("Webhook URL")}</Label>
-                                    <div className="flex gap-2">
-                                        <Input 
-                                            readOnly 
-                                            value={
-                                                activeBusiness?.theme_config?.easyorders_token 
-                                                    ? `${typeof window !== 'undefined' ? window.location.origin : ''}/api/webhooks/easyorders?business=${activeBusiness.id}&token=${activeBusiness.theme_config.easyorders_token}`
-                                                    : t("Generate a token to create the Webhook URL")
-                                            } 
-                                            className="font-mono text-xs bg-muted"
-                                        />
-                                        <Button 
-                                            variant="outline"
-                                            disabled={!activeBusiness?.theme_config?.easyorders_token}
-                                            onClick={() => {
-                                                const url = `${window.location.origin}/api/webhooks/easyorders?business=${activeBusiness?.id}&token=${activeBusiness?.theme_config?.easyorders_token}`;
-                                                navigator.clipboard.writeText(url);
-                                                toast.success(t("URL copied to clipboard"));
-                                            }}
-                                        >
-                                            Copy
-                                        </Button>
+                                {integrations.shipping.telegraph.enabled && (
+                                    <div className="space-y-4 pt-4 border-t">
+                                        <div className="space-y-2">
+                                            <Label>{t("Telegraph Username")}</Label>
+                                            <Input 
+                                                placeholder={t("Enter Username")} 
+                                                value={integrations.shipping.telegraph.username}
+                                                onChange={(e) => handleIntegrationChange('shipping', 'telegraph', 'username', e.target.value)}
+                                            />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Label>{t("Telegraph Password")}</Label>
+                                            <Input 
+                                                placeholder={t("Enter Password")} 
+                                                value={integrations.shipping.telegraph.password}
+                                                onChange={(e) => handleIntegrationChange('shipping', 'telegraph', 'password', e.target.value)}
+                                                type="password"
+                                            />
+                                        </div>
+
+                                        <div className="flex items-center space-x-2 pt-2">
+                                            <Switch 
+                                                checked={integrations.shipping.telegraph.autoSync} 
+                                                onCheckedChange={(c) => handleIntegrationChange('shipping', 'telegraph', 'autoSync', c)}
+                                            />
+                                            <Label>{t("Enable Auto Sync")}</Label>
+                                        </div>
+                                        
+                                        {integrations.shipping.telegraph.autoSync && (
+                                            <div className="space-y-2">
+                                                <Label>{t("Auto Sync Interval (Minutes)")}</Label>
+                                                <Input 
+                                                    type="number"
+                                                    min="1"
+                                                    max="1440"
+                                                    value={integrations.shipping.telegraph.autoSyncIntervalMinutes}
+                                                    onChange={(e) => handleIntegrationChange('shipping', 'telegraph', 'autoSyncIntervalMinutes', parseInt(e.target.value) || 15)}
+                                                />
+                                                <p className="text-xs text-muted-foreground">
+                                                    {t("How often should the system check for status updates automatically.")}
+                                                </p>
+                                            </div>
+                                        )}
                                     </div>
-                                </div>
-                                
-                                <div className="space-y-2 pt-2">
-                                    <Label>{t("EasyOrders API Key")}</Label>
-                                    <p className="text-xs text-muted-foreground">
-                                        {t("Used to automatically sync order status updates back to EasyOrders.")}
-                                    </p>
-                                    <div className="flex gap-2">
-                                        <Input 
-                                            placeholder={t("Enter API Key")} 
-                                            value={easyordersApiKey}
-                                            onChange={(e) => setEasyordersApiKey(e.target.value)}
-                                            type="password"
-                                        />
-                                        <Button onClick={handleSaveTheme} disabled={saving}>
-                                            {saving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-                                            {t("Save Key")}
-                                        </Button>
-                                    </div>
-                                </div>
-                                
-                                <div className="pt-4 border-t flex gap-2">
-                                    <Button 
-                                        onClick={async () => {
-                                            setSaving(true);
-                                            try {
-                                                const newToken = Array.from(crypto.getRandomValues(new Uint8Array(16)))
-                                                    .map(b => b.toString(16).padStart(2, '0'))
-                                                    .join('');
-                                                    
-                                                const newThemeConfig = {
-                                                    ...(activeBusiness?.theme_config || {}),
-                                                    easyorders_token: newToken,
-                                                    easyorders_api_key: easyordersApiKey
-                                                };
-                                                
-                                                const { error } = await supabase
-                                                    .from('businesses')
-                                                    .update({ theme_config: newThemeConfig })
-                                                    .eq('id', activeBusiness?.id);
-                                                    
-                                                if (error) throw error;
-                                                
-                                                toast.success(t("Token generated successfully"));
-                                                setTimeout(() => window.location.reload(), 1000);
-                                            } catch (error) {
-                                                console.error("Error generating token:", error);
-                                                toast.error(t("Failed to generate token"));
-                                            } finally {
-                                                setSaving(false);
-                                            }
-                                        }}
-                                        disabled={saving}
-                                    >
-                                        {activeBusiness?.theme_config?.easyorders_token ? t("Regenerate Token") : t("Generate Webhook URL")}
-                                    </Button>
-                                    
-                                    {activeBusiness?.theme_config?.easyorders_token && (
-                                        <Button 
-                                            variant="destructive"
-                                            onClick={async () => {
-                                                if(!confirm("Are you sure? This will disconnect EasyOrders.")) return;
-                                                setSaving(true);
-                                                try {
-                                                    const newThemeConfig = {
-                                                        ...(activeBusiness?.theme_config || {})
-                                                    };
-                                                    delete newThemeConfig.easyorders_token;
-                                                    
-                                                    const { error } = await supabase
-                                                        .from('businesses')
-                                                        .update({ theme_config: newThemeConfig })
-                                                        .eq('id', activeBusiness?.id);
-                                                        
-                                                    if (error) throw error;
-                                                    
-                                                    toast.success(t("Integration disconnected"));
-                                                    setTimeout(() => window.location.reload(), 1000);
-                                                } catch (error) {
-                                                    console.error("Error removing token:", error);
-                                                    toast.error(t("Failed to disconnect"));
-                                                } finally {
-                                                    setSaving(false);
-                                                }
-                                            }}
-                                            disabled={saving}
-                                        >
-                                            {t("Disconnect")}
-                                        </Button>
-                                    )}
-                                </div>
+                                )}
                             </div>
                         </CardContent>
+                        <CardFooter className="border-t p-6">
+                            <Button onClick={handleSaveTheme} disabled={saving}>
+                                {saving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                                {t("Save Shipping Settings")}
+                            </Button>
+                        </CardFooter>
                     </Card>
                 </TabsContent>
+
+                {/* Order Platforms Tab */}
+                <TabsContent value="platforms" className="space-y-4">
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>{t("Order Platforms")}</CardTitle>
+                            <CardDescription>
+                                {t("Connect Zuha System with order aggregation platforms.")}
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-6">
+                            <div className="space-y-4 border rounded-md p-4 bg-muted/20">
+                                <div className="flex items-center justify-between">
+                                    <h3 className="text-lg font-medium flex items-center">
+                                        EasyOrders Integration
+                                        {integrations.platforms.easyorders.enabled && (
+                                            <Badge variant="outline" className="ml-3 bg-green-50 text-green-700 border-green-200">Active</Badge>
+                                        )}
+                                    </h3>
+                                    <Switch 
+                                        checked={integrations.platforms.easyorders.enabled} 
+                                        onCheckedChange={(c) => handleIntegrationChange('platforms', 'easyorders', 'enabled', c)}
+                                    />
+                                </div>
+                                <p className="text-sm text-muted-foreground">
+                                    {t("Receive new orders and sync status back to EasyOrders.")}
+                                </p>
+                                
+                                {integrations.platforms.easyorders.enabled && (
+                                    <div className="space-y-4 pt-4 border-t">
+                                        <div className="space-y-2">
+                                            <Label>{t("Webhook URL (For receiving orders)")}</Label>
+                                            <div className="flex gap-2">
+                                                <Input 
+                                                    readOnly 
+                                                    value={
+                                                        integrations.platforms.easyorders.webhookToken 
+                                                            ? `${typeof window !== 'undefined' ? window.location.origin : ''}/api/webhooks/easyorders?business=${activeBusiness.id}&token=${integrations.platforms.easyorders.webhookToken}`
+                                                            : t("Generate a token to create the Webhook URL")
+                                                    } 
+                                                    className="font-mono text-xs bg-muted"
+                                                />
+                                                <Button 
+                                                    variant="outline"
+                                                    disabled={!integrations.platforms.easyorders.webhookToken}
+                                                    onClick={() => {
+                                                        const url = `${window.location.origin}/api/webhooks/easyorders?business=${activeBusiness?.id}&token=${integrations.platforms.easyorders.webhookToken}`;
+                                                        navigator.clipboard.writeText(url);
+                                                        toast.success(t("URL copied to clipboard"));
+                                                    }}
+                                                >
+                                                    Copy
+                                                </Button>
+                                                <Button 
+                                                    variant="secondary"
+                                                    onClick={generateEasyOrdersToken}
+                                                    disabled={saving}
+                                                >
+                                                    {integrations.platforms.easyorders.webhookToken ? t("Regenerate") : t("Generate")}
+                                                </Button>
+                                            </div>
+                                        </div>
+                                        
+                                        <div className="space-y-2">
+                                            <Label>{t("EasyOrders API Key (For sending updates)")}</Label>
+                                            <Input 
+                                                placeholder={t("Enter API Key")} 
+                                                value={integrations.platforms.easyorders.apiKey}
+                                                onChange={(e) => handleIntegrationChange('platforms', 'easyorders', 'apiKey', e.target.value)}
+                                                type="password"
+                                            />
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        </CardContent>
+                        <CardFooter className="border-t p-6">
+                            <Button onClick={handleSaveTheme} disabled={saving}>
+                                {saving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                                {t("Save Platforms Settings")}
+                            </Button>
+                        </CardFooter>
+                    </Card>
+                </TabsContent>
+
+                {/* Tools Tab */}
+                <TabsContent value="tools" className="space-y-4">
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>{t("Tools")}</CardTitle>
+                            <CardDescription>
+                                {t("Manage external tools and third-party integrations.")}
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-6">
+                            <div className="space-y-4 border rounded-md p-4 bg-muted/20">
+                                <div className="flex items-center justify-between">
+                                    <h3 className="text-lg font-medium flex items-center">
+                                        VROBO Verification
+                                        {integrations.tools.vrobo.enabled && (
+                                            <Badge variant="outline" className="ml-3 bg-green-50 text-green-700 border-green-200">Active</Badge>
+                                        )}
+                                    </h3>
+                                    <Switch 
+                                        checked={integrations.tools.vrobo.enabled} 
+                                        onCheckedChange={(c) => handleIntegrationChange('tools', 'vrobo', 'enabled', c)}
+                                    />
+                                </div>
+                                <p className="text-sm text-muted-foreground">
+                                    {t("Automated WhatsApp notifications for order verifications and status updates.")}
+                                </p>
+                                
+                                {integrations.tools.vrobo.enabled && (
+                                    <div className="space-y-4 pt-4 border-t">
+                                        <div className="space-y-2">
+                                            <Label>{t("VROBO API Token")}</Label>
+                                            <Input 
+                                                placeholder={t("Enter API Token")} 
+                                                value={integrations.tools.vrobo.apiKey}
+                                                onChange={(e) => handleIntegrationChange('tools', 'vrobo', 'apiKey', e.target.value)}
+                                                type="password"
+                                            />
+                                        </div>
+                                        
+                                        <div className="space-y-2">
+                                            <Label>{t("Merchant ID (Optional)")}</Label>
+                                            <Input 
+                                                placeholder={t("Enter Merchant ID")} 
+                                                value={integrations.tools.vrobo.merchantId}
+                                                onChange={(e) => handleIntegrationChange('tools', 'vrobo', 'merchantId', e.target.value)}
+                                            />
+                                        </div>
+
+                                        <div className="flex items-center space-x-2 pt-2">
+                                            <Switch 
+                                                checked={integrations.tools.vrobo.autoSync} 
+                                                onCheckedChange={(c) => handleIntegrationChange('tools', 'vrobo', 'autoSync', c)}
+                                            />
+                                            <Label>{t("Enable Auto Sync")}</Label>
+                                        </div>
+                                        
+                                        {integrations.tools.vrobo.autoSync && (
+                                            <div className="space-y-2">
+                                                <Label>{t("Auto Sync Interval (Minutes)")}</Label>
+                                                <Input 
+                                                    type="number"
+                                                    min="1"
+                                                    max="1440"
+                                                    value={integrations.tools.vrobo.autoSyncIntervalMinutes}
+                                                    onChange={(e) => handleIntegrationChange('tools', 'vrobo', 'autoSyncIntervalMinutes', parseInt(e.target.value) || 60)}
+                                                />
+                                                <p className="text-xs text-muted-foreground">
+                                                    {t("How often should VROBO sync problematic orders automatically.")}
+                                                </p>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+                        </CardContent>
+                        <CardFooter className="border-t p-6">
+                            <Button onClick={handleSaveTheme} disabled={saving}>
+                                {saving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                                {t("Save Tools Settings")}
+                            </Button>
+                        </CardFooter>
+                    </Card>
+                </TabsContent>
+
             </Tabs>
         </div>
     );

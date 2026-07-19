@@ -2,9 +2,7 @@
 
 import { createClient } from "@supabase/supabase-js";
 
-export async function sendOrderToVrobo(order: any) {
-    const vroboApiKey = process.env.VROBO_API_KEY || "173dcc86-720f-4065-8cd4-5383b6f8281d";
-    
+export async function sendOrderToVrobo(order: any, vroboApiKey: string, vroboMerchantId: string) {
     // Map the order details to VROBO payload
     const payload = {
         waybill_id: order.tracking_number || order.id.substring(0, 10), // Fallback if no tracking number
@@ -12,8 +10,8 @@ export async function sendOrderToVrobo(order: any) {
         customer_phone1: order.customer_info?.phone || "Unknown",
         customer_phone2: order.customer_info?.phone2 || "",
         customer_address: `${order.customer_info?.city || ''}, ${order.customer_info?.address || ''}`.trim(),
-        merchant_name: "Zuha System", // Default merchant name
-        merchant_id: order.business_id || "1",
+        merchant_name: order.business?.name || "Zuha System",
+        merchant_id: vroboMerchantId || order.business_id || "1",
         order_content: `Order #${order.id.substring(0, 6)}`,
         order_COD: String(order.total_amount || 0),
         type: "verification",
@@ -78,6 +76,21 @@ export async function processOrderForVrobo(orderId: string) {
         return { success: false, message: "Could not fetch order" };
     }
 
+    // 1.5 Fetch Business VROBO Config
+    const { data: business } = await supabase
+        .from("businesses")
+        .select("name, theme_config")
+        .eq("id", order.business_id)
+        .single();
+        
+    order.business = business;
+    const vroboConfig = business?.theme_config?.integrations?.tools?.vrobo;
+
+    if (!vroboConfig || !vroboConfig.enabled || !vroboConfig.apiKey) {
+        console.log(`Order ${orderId}: VROBO is disabled or missing API key in settings.`);
+        return { success: false, message: "VROBO integration disabled or not configured." };
+    }
+
     // 2. Check if already synced
     if (order.vrobo_synced) {
         console.log(`Order ${orderId} already synced to VROBO. Skipping.`);
@@ -91,7 +104,7 @@ export async function processOrderForVrobo(orderId: string) {
     }
 
     // 4. Send to VROBO
-    const result = await sendOrderToVrobo(order);
+    const result = await sendOrderToVrobo(order, vroboConfig.apiKey, vroboConfig.merchantId);
 
     if (result.success) {
         // 5. Mark as synced

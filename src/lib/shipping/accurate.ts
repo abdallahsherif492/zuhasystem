@@ -1,6 +1,6 @@
-export async function loginAccurate(): Promise<string> {
-    const ACCURATE_USER = process.env.ACCURATE_USER || "01035900379";
-    const ACCURATE_PASS = process.env.ACCURATE_PASS || "123456";
+export async function loginAccurate(username?: string, password?: string): Promise<string> {
+    const ACCURATE_USER = username || process.env.ACCURATE_USER || "01035900379";
+    const ACCURATE_PASS = password || process.env.ACCURATE_PASS || "123456";
 
     const query = `
         mutation {

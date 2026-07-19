@@ -4,6 +4,7 @@ import { MobileNav } from "@/components/layout/mobile-nav";
 import { BusinessSwitcher } from "@/components/layout/business-switcher";
 import { AnnouncementBanner } from "@/components/layout/announcement-banner";
 import { PermissionGuard } from "@/components/layout/permission-guard";
+import { AutoSyncProvider } from "@/components/providers/AutoSyncProvider";
 
 export default function DashboardLayout({
   children,
@@ -23,9 +24,11 @@ export default function DashboardLayout({
           </div>
         </header>
         <main className="flex flex-1 flex-col gap-4 p-4 lg:gap-6 lg:p-6">
-          <PermissionGuard>
-            {children}
-          </PermissionGuard>
+          <AutoSyncProvider>
+            <PermissionGuard>
+              {children}
+            </PermissionGuard>
+          </AutoSyncProvider>
         </main>
       </div>
     </div>

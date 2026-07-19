@@ -31,9 +31,6 @@ export async function previewShippingSyncAction(businessId: string): Promise<{ u
         );
 
         // Fetch active orders (Shipped, Waiting for Shipping, Prepared, etc) that might need syncing
-        // Basically we want anything that is NOT Delivered, Cancelled, Returned, or Pending (if pending means hasn't reached shipping yet).
-        // Let's just fetch all orders that are currently active and let's check against Accurate.
-        // Or to be safe, fetch orders that are in statuses: ["Hold To redeliver", "Shipped", "Returning", "Prepared"]
         const { data: orders, error: ordersError } = await supabase
             .from("orders")
             .select("id, customer_info, status, tags")
@@ -43,9 +40,22 @@ export async function previewShippingSyncAction(businessId: string): Promise<{ u
         if (ordersError) throw new Error(ordersError.message);
         if (!orders || orders.length === 0) return { updates: [] };
 
+        // Fetch Business Telegraph config
+        const { data: business } = await supabase
+            .from("businesses")
+            .select("theme_config")
+            .eq("id", businessId)
+            .single();
+
+        const telegraphConfig = business?.theme_config?.integrations?.shipping?.telegraph;
+        
+        if (!telegraphConfig || !telegraphConfig.enabled || !telegraphConfig.username || !telegraphConfig.password) {
+            return { updates: [], error: "Telegraph integration is not configured or disabled in settings." };
+        }
+
         // We use the first 8 characters of order id as refNumber
         const refNumbers = orders.map(o => o.id.substring(0, 8));
-        const token = await loginAccurate();
+        const token = await loginAccurate(telegraphConfig.username, telegraphConfig.password);
         const accurateShipments = await fetchAccurateShipments(token, refNumbers);
 
         const updates: SyncPreviewItem[] = [];
