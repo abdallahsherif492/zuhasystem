@@ -5,6 +5,7 @@ import { cookies } from "next/headers";
 import { loginAccurate, fetchAccurateShipments, mapAccurateStatusToZuha } from "@/lib/shipping/accurate";
 import { syncStatusToEasyOrders } from "@/lib/easyorders";
 import { processOrderForVrobo } from "@/lib/vrobo/api";
+import { logIntegrationActivity } from "@/lib/logs/integration-logger";
 
 export interface SyncPreviewItem {
     orderId: string;
@@ -127,9 +128,14 @@ export async function applyShippingUpdatesAction(updates: SyncPreviewItem[], bus
             }
         }
 
+        if (updates.length > 0) {
+            logIntegrationActivity(businessId, "Telegraph", "success", `Successfully synced ${updates.length} orders.`, { updates: updates.map(u => u.orderId) });
+        }
+
         return { success: true };
     } catch (error: any) {
         console.error("Apply sync error:", error);
+        logIntegrationActivity(businessId, "Telegraph", "error", `Failed to apply shipping updates: ${error.message}`);
         return { success: false, error: error.message };
     }
 }

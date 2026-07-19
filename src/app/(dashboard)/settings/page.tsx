@@ -15,6 +15,7 @@ import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import { Loader2, Upload, Trash2, CheckCircle2 } from "lucide-react";
 import Image from "next/image";
+import { IntegrationLogs } from "@/components/settings/integration-logs";
 
 export default function SettingsPage() {
     const { activeBusiness, userRole } = useBusiness();
@@ -249,6 +250,7 @@ export default function SettingsPage() {
                     <TabsTrigger value="shipping">{t("Shipping Companies")}</TabsTrigger>
                     <TabsTrigger value="platforms">{t("Order Platforms")}</TabsTrigger>
                     <TabsTrigger value="tools">{t("Tools")}</TabsTrigger>
+                    <TabsTrigger value="logs">{t("System Logs")}</TabsTrigger>
                 </TabsList>
                 
                 <TabsContent value="theme" className="space-y-4">
@@ -634,6 +636,11 @@ export default function SettingsPage() {
                             </Button>
                         </CardFooter>
                     </Card>
+                </TabsContent>
+
+                {/* System Logs Tab */}
+                <TabsContent value="logs" className="space-y-4">
+                    <IntegrationLogs />
                 </TabsContent>
 
             </Tabs>

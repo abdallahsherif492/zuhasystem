@@ -2,6 +2,7 @@
 
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
+import { logIntegrationActivity } from "@/lib/logs/integration-logger";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://telkkknuygjejmqcvyev.supabase.co";
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRlbGtra251eWdqZWptcWN2eWV2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjY1MTU5NDAsImV4cCI6MjA4MjA5MTk0MH0.7q4Vyfz0CxAHCy49bKU6iy9xay0IxsqtMe4UATcg_cU";
@@ -82,12 +83,15 @@ export async function syncStatusToEasyOrders(orderId: string, newStatus: string,
         if (!res.ok) {
             const errorText = await res.text();
             console.error(`EasyOrders Sync Error for ${orderId}:`, errorText);
+            logIntegrationActivity(businessId, "EasyOrders", "error", `Order ${orderId} failed to sync to EasyOrders.`, { orderId, error: errorText });
             return { success: false, error: `API responded with ${res.status}: ${errorText}` };
         }
 
+        logIntegrationActivity(businessId, "EasyOrders", "success", `Order ${orderId} synced to EasyOrders successfully.`, { orderId, status: mappedStatus });
         return { success: true };
     } catch (error: any) {
         console.error("Failed to sync with EasyOrders:", error);
+        logIntegrationActivity(businessId, "EasyOrders", "error", `Order ${orderId} failed to sync to EasyOrders exception.`, { orderId, error: error.message });
         return { success: false, error: error.message };
     }
 }

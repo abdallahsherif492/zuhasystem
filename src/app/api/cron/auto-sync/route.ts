@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { previewShippingSyncAction, applyShippingUpdatesAction } from '@/app/(dashboard)/orders/sync-actions';
 import { processOrderForVrobo } from '@/lib/vrobo/api';
+import { logIntegrationActivity } from '@/lib/logs/integration-logger';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://telkkknuygjejmqcvyev.supabase.co";
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
@@ -41,9 +42,11 @@ export async function GET(request: Request) {
                         const { updates, error: syncError } = await previewShippingSyncAction(business.id);
                         if (!syncError && updates && updates.length > 0) {
                             await applyShippingUpdatesAction(updates, business.id, "telegraph");
+                            logIntegrationActivity(business.id, "Auto-Sync", "info", `Auto-Synced Telegraph: Found ${updates.length} updates.`);
                         }
-                    } catch (e) {
+                    } catch (e: any) {
                         console.error(`[Auto-Sync] Error in Telegraph sync for ${business.id}:`, e);
+                        logIntegrationActivity(business.id, "Auto-Sync", "error", `Telegraph Auto-Sync Error: ${e.message}`);
                     }
 
                     // Update lastSyncAt
@@ -79,9 +82,11 @@ export async function GET(request: Request) {
                             for (const o of problematicOrders) {
                                 await processOrderForVrobo(o.id);
                             }
+                            logIntegrationActivity(business.id, "Auto-Sync", "info", `Auto-Synced VROBO: Processed ${problematicOrders.length} problematic orders.`);
                         }
-                    } catch (e) {
+                    } catch (e: any) {
                         console.error(`[Auto-Sync] Error in VROBO sync for ${business.id}:`, e);
+                        logIntegrationActivity(business.id, "Auto-Sync", "error", `VROBO Auto-Sync Error: ${e.message}`);
                     }
 
                     // Update lastSyncAt

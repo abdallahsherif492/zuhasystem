@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@supabase/supabase-js";
+import { logIntegrationActivity } from "@/lib/logs/integration-logger";
 
 export async function sendOrderToVrobo(order: any, vroboApiKey: string, vroboMerchantId: string) {
     // Map the order details to VROBO payload
@@ -113,8 +114,10 @@ export async function processOrderForVrobo(orderId: string) {
             .update({ vrobo_synced: true })
             .eq("id", orderId);
         console.log(`Order ${orderId} successfully synced to VROBO.`);
+        logIntegrationActivity(order.business_id, "VROBO", "success", `Order ${orderId} synced to VROBO successfully.`, { orderId, response: result.data });
         return { success: true, message: "Successfully synced to VROBO.", vrobo_response: result.data };
     } else {
+        logIntegrationActivity(order.business_id, "VROBO", "error", `Order ${orderId} failed to sync to VROBO.`, { orderId, error: result.error });
         return { success: false, message: "Failed to sync to VROBO API.", error: result.error };
     }
 }
