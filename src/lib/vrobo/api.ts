@@ -22,7 +22,7 @@ export async function sendOrderToVrobo(order: any) {
             items_qty: item.quantity || 1,
             item_image_url: "https://via.placeholder.com/150" // Fallback since we might not have product images easily accessible here
         })),
-        reason_id: "1" // Default: Customer Not Reachable
+        reason_id: "2" // Default: Customer Refused
     };
 
     console.log("Sending to VROBO payload:", JSON.stringify(payload, null, 2));
