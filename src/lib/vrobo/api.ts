@@ -100,7 +100,7 @@ export async function processOrderForVrobo(orderId: string) {
             .update({ vrobo_synced: true })
             .eq("id", orderId);
         console.log(`Order ${orderId} successfully synced to VROBO.`);
-        return { success: true, message: "Successfully synced to VROBO." };
+        return { success: true, message: "Successfully synced to VROBO.", vrobo_response: result.data };
     } else {
         return { success: false, message: "Failed to sync to VROBO API.", error: result.error };
     }

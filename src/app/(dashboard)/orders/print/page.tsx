@@ -115,7 +115,7 @@ function InvoiceCard({ order, isFirstOnPage, business }: { order: InvoiceData, i
                         {order.items.slice(0, 3).map((item, idx) => (
                             <tr key={idx} className="border-b border-gray-50">
                                 <td className="py-0.5 truncate max-w-[150px] font-medium">
-                                    {item.variant.product.name} <span className="text-[8px] text-gray-500">({item.variant.title})</span>
+                                    {item.variant?.product?.name || 'Unknown Product'} <span className="text-[8px] text-gray-500">({item.variant?.title || 'Unknown'})</span>
                                 </td>
                                 <td className="py-0.5 text-center font-bold">{item.quantity}</td>
                                 <td className="py-0.5 text-right">{(item.quantity * item.price_at_sale).toFixed(0)}</td>

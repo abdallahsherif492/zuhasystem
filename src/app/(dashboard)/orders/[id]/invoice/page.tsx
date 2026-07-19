@@ -177,9 +177,9 @@ export default function InvoicePage({ params }: { params: Promise<{ id: string }
                     <tbody>
                         {order.items.map((item, index) => (
                             <tr key={index} className="border-b border-gray-200">
-                                <td className="py-3">
-                                    <p className="font-semibold">{item.variant.product.name}</p>
-                                    <p className="text-sm text-gray-500">{item.variant.title}</p>
+                                <td className="py-2">
+                                    <p className="font-semibold">{item.variant?.product?.name || 'Unknown Product'}</p>
+                                    <p className="text-sm text-muted-foreground">{item.variant?.title || 'Unknown'}</p>
                                 </td>
                                 <td className="text-center py-3">{item.quantity}</td>
                                 <td className="text-right py-3">{item.price_at_sale.toFixed(2)} EGP</td>
