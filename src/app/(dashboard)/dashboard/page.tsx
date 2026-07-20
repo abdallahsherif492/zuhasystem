@@ -148,39 +148,59 @@ function DashboardContent() {
       if (lowStockError) throw lowStockError;
 
       // 6. All Orders in Period for exact status metrics (Confirmed)
-      const { data: periodOrders, error: periodOrdersError } = await supabase
-        .from("orders")
-        .select("status, total_amount")
-        .eq("business_id", activeBusiness.id)
-        .gte("created_at", start)
-        .lte("created_at", end);
-      if (periodOrdersError) throw periodOrdersError;
+      let allPeriodOrders: any[] = [];
+      let pageP = 0;
+      let hasMoreP = true;
+      while (hasMoreP) {
+        const { data, error } = await supabase
+          .from("orders")
+          .select("status, total_amount")
+          .eq("business_id", activeBusiness.id)
+          .gte("created_at", start)
+          .lte("created_at", end)
+          .range(pageP * 1000, (pageP + 1) * 1000 - 1);
+        if (error) throw error;
+        if (data && data.length > 0) {
+          allPeriodOrders.push(...data);
+          if (data.length < 1000) hasMoreP = false;
+          else pageP++;
+        } else {
+          hasMoreP = false;
+        }
+      }
 
       // 7. ALL Waiting Orders (regardless of date)
-      const { data: allWaitingOrders, error: allWaitingError } = await supabase
-        .from("orders")
-        .select("total_amount")
-        .eq("business_id", activeBusiness.id)
-        .eq("status", "Waiting");
-      if (allWaitingError) throw allWaitingError;
+      let allWaitingOrders: any[] = [];
+      let pageW = 0;
+      let hasMoreW = true;
+      while (hasMoreW) {
+        const { data, error } = await supabase
+          .from("orders")
+          .select("total_amount")
+          .eq("business_id", activeBusiness.id)
+          .eq("status", "Waiting")
+          .range(pageW * 1000, (pageW + 1) * 1000 - 1);
+        if (error) throw error;
+        if (data && data.length > 0) {
+          allWaitingOrders.push(...data);
+          if (data.length < 1000) hasMoreW = false;
+          else pageW++;
+        } else {
+          hasMoreW = false;
+        }
+      }
 
       let cCount = 0;
       let cValue = 0;
-      if (periodOrders) {
-         periodOrders.forEach(o => {
-            if (o.status !== 'Waiting' && o.status !== 'Cancelled') {
-               cCount++;
-               cValue += Number(o.total_amount) || 0;
-            }
-         });
-      }
+      allPeriodOrders.forEach(o => {
+          if (o.status !== 'Waiting' && o.status !== 'Cancelled') {
+              cCount++;
+              cValue += Number(o.total_amount) || 0;
+          }
+      });
 
-      let globalWCount = 0;
-      let globalWValue = 0;
-      if (allWaitingOrders) {
-          globalWCount = allWaitingOrders.length;
-          globalWValue = allWaitingOrders.reduce((sum, o) => sum + (Number(o.total_amount) || 0), 0);
-      }
+      let globalWCount = allWaitingOrders.length;
+      let globalWValue = allWaitingOrders.reduce((sum, o) => sum + (Number(o.total_amount) || 0), 0);
 
       // Update State
       if (statsData && statsData.length > 0) {
