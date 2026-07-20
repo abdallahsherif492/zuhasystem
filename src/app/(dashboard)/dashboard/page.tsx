@@ -49,6 +49,7 @@ function DashboardContent() {
     totalSales: 0,
     totalOrders: 0,
     stockValue: 0,
+    totalItems: 0,
     lowStockCount: 0,
     salesChange: 0,
     ordersChange: 0,
@@ -202,6 +203,33 @@ function DashboardContent() {
       let globalWCount = allWaitingOrders.length;
       let globalWValue = allWaitingOrders.reduce((sum, o) => sum + (Number(o.total_amount) || 0), 0);
 
+      // 8. Calculate total stock value and units (like Inventory page)
+      let allStockVariants: any[] = [];
+      let pageV = 0;
+      let hasMoreV = true;
+      while (hasMoreV) {
+        const { data, error } = await supabase
+          .from("variants")
+          .select("stock_qty, cost_price, products!inner(business_id)")
+          .eq("products.business_id", activeBusiness.id)
+          .range(pageV * 1000, (pageV + 1) * 1000 - 1);
+        if (error) throw error;
+        if (data && data.length > 0) {
+          allStockVariants.push(...data);
+          if (data.length < 1000) hasMoreV = false;
+          else pageV++;
+        } else {
+          hasMoreV = false;
+        }
+      }
+
+      let calcStockValue = 0;
+      let calcTotalItems = 0;
+      allStockVariants.forEach(v => {
+          calcStockValue += (v.stock_qty * v.cost_price) || 0;
+          calcTotalItems += v.stock_qty || 0;
+      });
+
       // Update State
       if (statsData && statsData.length > 0) {
         const s = statsData[0];
@@ -231,7 +259,8 @@ function DashboardContent() {
         setStats({
           totalSales: s.total_sales || 0,
           totalOrders: s.total_orders || 0,
-          stockValue: s.stock_value || 0,
+          stockValue: calcStockValue,
+          totalItems: calcTotalItems,
           lowStockCount: s.low_stock_count || 0,
           salesChange: sChange,
           ordersChange: oChange,
@@ -348,10 +377,13 @@ function DashboardContent() {
             <Package className="h-4 w-4 text-purple-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{formatCurrency(stats.stockValue)}</div>
-            <p className="text-xs text-muted-foreground mt-2">
-              total asset value
-            </p>
+            <div className="flex items-baseline gap-2">
+               <div className="text-2xl font-bold">{formatCurrency(stats.stockValue)}</div>
+            </div>
+            <div className="flex items-baseline gap-2 mt-1">
+               <span className="text-3xl font-black text-purple-700 dark:text-purple-400">{stats.totalItems}</span>
+               <span className="text-sm font-medium text-purple-600/80 dark:text-purple-400/80">{t("Total Units")}</span>
+            </div>
           </CardContent>
         </Card>
       </div>
