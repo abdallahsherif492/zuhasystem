@@ -15,6 +15,7 @@ import { ItemsSummary } from "@/components/purchases/items-summary";
 import { MultiSelect, Option } from "@/components/ui/multi-select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { RestockPredictor } from "@/components/purchases/restock-predictor";
+import { OverstockPredictor } from "@/components/purchases/overstock-predictor";
 
 const GOVERNORATES = [
     "Cairo", "New Cairo", "Giza", "Alexandria", "Dakahlia", "Red Sea", "Beheira", "Fayoum",
@@ -213,6 +214,7 @@ export default function PurchasesPage() {
                 <TabsList>
                     <TabsTrigger value="fulfillment">Fulfillment</TabsTrigger>
                     <TabsTrigger value="restock">Restock Predictor</TabsTrigger>
+                    <TabsTrigger value="overstock">Overstock Predictor</TabsTrigger>
                 </TabsList>
 
                 <TabsContent value="fulfillment" className="space-y-4">
@@ -318,6 +320,9 @@ export default function PurchasesPage() {
                 </TabsContent>
                 <TabsContent value="restock">
                     <RestockPredictor />
+                </TabsContent>
+                <TabsContent value="overstock">
+                    <OverstockPredictor />
                 </TabsContent>
             </Tabs>
         </div >
