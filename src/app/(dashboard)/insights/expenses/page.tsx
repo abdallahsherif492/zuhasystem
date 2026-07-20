@@ -52,16 +52,37 @@ function ExpensesAnalyticsContent() {
             });
             if (expError) throw expError;
 
-            // 2. Get Total Orders for "Cost Per Order"
-            const { data: ordData, error: ordError } = await supabase.rpc('get_insight_orders_stats', {
-                from_date: start,
-                to_date: end,
-                b_id: activeBusiness.id
+            // 2. Get Total Orders for "Cost Per Order" (Confirmed Orders only)
+            let allPeriodOrders: any[] = [];
+            let pageP = 0;
+            let hasMoreP = true;
+            while (hasMoreP) {
+                const { data, error } = await supabase
+                    .from("orders")
+                    .select("status")
+                    .eq("business_id", activeBusiness.id)
+                    .gte("created_at", start)
+                    .lte("created_at", end)
+                    .range(pageP * 1000, (pageP + 1) * 1000 - 1);
+                if (error) throw error;
+                if (data && data.length > 0) {
+                    allPeriodOrders.push(...data);
+                    if (data.length < 1000) hasMoreP = false;
+                    else pageP++;
+                } else {
+                    hasMoreP = false;
+                }
+            }
+
+            let cCount = 0;
+            allPeriodOrders.forEach(o => {
+                if (o.status !== 'Waiting' && o.status !== 'Cancelled') {
+                    cCount++;
+                }
             });
-            if (ordError) throw ordError;
 
             setExpensesData(expData || []);
-            setTotalOrders(Number(ordData?.[0]?.total_count || 0));
+            setTotalOrders(cCount);
 
         } catch (error) {
             console.error("Error fetching expenses data:", error);
@@ -73,6 +94,15 @@ function ExpensesAnalyticsContent() {
     // Process data for charts
     const totalExpenses = expensesData.reduce((sum, item) => sum + Number(item.total_amount), 0);
     const costPerOrder = totalOrders > 0 ? totalExpenses / totalOrders : 0;
+
+    let operationExpenses = 0;
+    expensesData.forEach(item => {
+        const cat = item.category?.toLowerCase() || "";
+        if (!cat.includes("purchase") && !cat.includes("ads") && !cat.includes("advertising")) {
+            operationExpenses += Number(item.total_amount);
+        }
+    });
+    const operationCostPerOrder = totalOrders > 0 ? operationExpenses / totalOrders : 0;
 
     // Aggregate by Category
     const aggregatedMap = new Map<string, number>();
@@ -115,12 +145,22 @@ function ExpensesAnalyticsContent() {
                 </Card>
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Cost Per Order</CardTitle>
+                        <CardTitle className="text-sm font-medium">Cost Per Order (All)</CardTitle>
                         <DollarSign className="h-4 w-4 text-muted-foreground" />
                     </CardHeader>
                     <CardContent>
                         <div className="text-2xl font-bold">{formatCurrency(costPerOrder)}</div>
-                        <p className="text-xs text-muted-foreground">Based on {totalOrders} orders</p>
+                        <p className="text-xs text-muted-foreground">Based on {totalOrders} confirmed orders</p>
+                    </CardContent>
+                </Card>
+                <Card>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">Operation Cost / Order</CardTitle>
+                        <DollarSign className="h-4 w-4 text-emerald-500" />
+                    </CardHeader>
+                    <CardContent>
+                        <div className="text-2xl font-bold text-emerald-600">{formatCurrency(operationCostPerOrder)}</div>
+                        <p className="text-xs text-muted-foreground">Excludes Purchases & Ads</p>
                     </CardContent>
                 </Card>
             </div>
