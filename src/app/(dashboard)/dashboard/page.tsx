@@ -26,7 +26,7 @@ import {
   ResponsiveContainer,
   Legend,
 } from "recharts";
-import { Loader2, DollarSign, Package, ShoppingBag, AlertTriangle } from "lucide-react";
+import { Loader2, DollarSign, Package, ShoppingBag, AlertTriangle, CheckCircle2, Clock } from "lucide-react";
 import { Variant } from "@/types";
 import { DateRangePicker } from "@/components/date-range-picker";
 import { AdvancedSearch } from "@/components/dashboard/advanced-search";
@@ -52,6 +52,10 @@ function DashboardContent() {
     lowStockCount: 0,
     salesChange: 0,
     ordersChange: 0,
+    waitingCount: 0,
+    waitingValue: 0,
+    confirmedCount: 0,
+    confirmedValue: 0,
   });
 
   // Lists
@@ -143,6 +147,32 @@ function DashboardContent() {
         .limit(5);
       if (lowStockError) throw lowStockError;
 
+      // 6. All Orders in Period for exact status metrics
+      const { data: periodOrders, error: periodOrdersError } = await supabase
+        .from("orders")
+        .select("status, total_amount")
+        .eq("business_id", activeBusiness.id)
+        .gte("created_at", start)
+        .lte("created_at", end);
+      if (periodOrdersError) throw periodOrdersError;
+
+      let wCount = 0;
+      let wValue = 0;
+      let cCount = 0;
+      let cValue = 0;
+
+      if (periodOrders) {
+         periodOrders.forEach(o => {
+            if (o.status === 'Waiting') {
+               wCount++;
+               wValue += Number(o.total_amount) || 0;
+            } else if (o.status !== 'Cancelled') {
+               cCount++;
+               cValue += Number(o.total_amount) || 0;
+            }
+         });
+      }
+
       // Update State
       if (statsData && statsData.length > 0) {
         const s = statsData[0];
@@ -176,6 +206,10 @@ function DashboardContent() {
           lowStockCount: s.low_stock_count || 0,
           salesChange: sChange,
           ordersChange: oChange,
+          waitingCount: wCount,
+          waitingValue: wValue,
+          confirmedCount: cCount,
+          confirmedValue: cValue
         });
       }
 
@@ -224,34 +258,48 @@ function DashboardContent() {
       </div>
 
       {/* KPI Cards */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">{t("Total Sales")}</CardTitle>
+            <CardTitle className="text-sm font-medium">{t("Total Sales & Orders")}</CardTitle>
             <DollarSign className="h-4 w-4 text-emerald-600" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{formatCurrency(stats.totalSales)}</div>
-            <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
+            <p className="text-sm font-medium text-muted-foreground mt-1">
+              {stats.totalOrders} {t("Orders")}
+            </p>
+            <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1">
               <span className={stats.salesChange >= 0 ? "text-emerald-500" : "text-red-500"}>
                 {stats.salesChange > 0 ? "+" : ""}{stats.salesChange.toFixed(1)}%
               </span>
-              from previous period
+              sales from prev period
             </p>
           </CardContent>
         </Card>
+        
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Orders</CardTitle>
-            <ShoppingBag className="h-4 w-4 text-blue-600" />
+            <CardTitle className="text-sm font-medium">{t("Confirmed Orders")}</CardTitle>
+            <CheckCircle2 className="h-4 w-4 text-blue-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats.totalOrders}</div>
-            <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
-              <span className={stats.ordersChange >= 0 ? "text-emerald-500" : "text-red-500"}>
-                {stats.ordersChange > 0 ? "+" : ""}{stats.ordersChange.toFixed(1)}%
-              </span>
-              from previous period
+            <div className="text-2xl font-bold">{formatCurrency(stats.confirmedValue)}</div>
+            <p className="text-sm font-medium text-muted-foreground mt-1">
+              {stats.confirmedCount} {t("Orders")}
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">{t("Waiting Orders")}</CardTitle>
+            <Clock className="h-4 w-4 text-orange-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{formatCurrency(stats.waitingValue)}</div>
+            <p className="text-sm font-medium text-muted-foreground mt-1">
+              {stats.waitingCount} {t("Orders")}
             </p>
           </CardContent>
         </Card>

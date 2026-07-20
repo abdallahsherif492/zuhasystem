@@ -22,6 +22,18 @@ import { Switch } from "@/components/ui/switch";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Trash2, Plus, Loader2, ArrowLeft } from "lucide-react";
 import Link from "next/link";
+import { toast } from "sonner";
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+    AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 
 const variantSchema = z.object({
     id: z.string().optional(), // Added ID for editing
@@ -46,6 +58,7 @@ export default function EditProductPage() {
 
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
+    const [deleting, setDeleting] = useState(false);
     const [initialVariantIds, setInitialVariantIds] = useState<string[]>([]);
 
     const form = useForm<any>({
@@ -106,6 +119,27 @@ export default function EditProductPage() {
         }
     }
 
+    async function handleDeleteProduct() {
+        try {
+            setDeleting(true);
+            const { error } = await supabase.from('products').delete().eq('id', id);
+            if (error) {
+                if (error.code === '23503') {
+                    throw new Error("Cannot delete this product because it is linked to existing orders. Please delete those orders first or keep the product.");
+                }
+                throw error;
+            }
+            toast.success("Product deleted successfully");
+            router.push("/products");
+            router.refresh();
+        } catch (error: any) {
+            console.error("Error deleting product:", error);
+            toast.error(error.message || "Failed to delete product");
+        } finally {
+            setDeleting(false);
+        }
+    }
+
     async function onSubmit(values: z.infer<typeof formSchema>) {
         try {
             setSaving(true);
@@ -131,7 +165,12 @@ export default function EditProductPage() {
                     .from("variants")
                     .delete()
                     .in("id", toDelete);
-                if (deleteError) throw deleteError;
+                if (deleteError) {
+                    if (deleteError.code === '23503') {
+                        throw new Error("Cannot delete some variants because they are linked to existing orders.");
+                    }
+                    throw deleteError;
+                }
             }
 
             // Upsert variants (update existing, insert new)
@@ -169,9 +208,10 @@ export default function EditProductPage() {
 
             router.push("/products");
             router.refresh();
+            toast.success("Product updated successfully");
         } catch (error: any) {
             console.error("Error updating product:", JSON.stringify(error, null, 2));
-            alert(`Failed to update product: ${error.message || "Unknown error"}`);
+            toast.error(error.message || "Unknown error occurred while saving.");
         } finally {
             setSaving(false);
         }
@@ -359,8 +399,31 @@ export default function EditProductPage() {
                         ))}
                     </div>
 
-                    <div className="flex justify-end">
-                        <Button type="submit" disabled={saving} size="lg">
+                    <div className="flex justify-between items-center mt-6">
+                        <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                                <Button type="button" variant="destructive" disabled={deleting || saving}>
+                                    {deleting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
+                                    Delete Product
+                                </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                                <AlertDialogHeader>
+                                    <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                                    <AlertDialogDescription>
+                                        This action cannot be undone. This will permanently delete the product and all its variants. If this product is linked to any orders, the deletion will fail.
+                                    </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                    <AlertDialogAction onClick={handleDeleteProduct} className="bg-destructive hover:bg-destructive/90">
+                                        Delete
+                                    </AlertDialogAction>
+                                </AlertDialogFooter>
+                            </AlertDialogContent>
+                        </AlertDialog>
+
+                        <Button type="submit" disabled={saving || deleting} size="lg">
                             {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                             Save Changes
                         </Button>

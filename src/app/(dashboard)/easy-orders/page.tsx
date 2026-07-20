@@ -845,7 +845,10 @@ function EasyOrdersContent() {
 
                                 <AlertDialog>
                                     <AlertDialogTrigger asChild>
-                                        <Button className="bg-primary text-primary-foreground hover:bg-primary/90">
+                                        <Button 
+                                            className="bg-primary text-primary-foreground hover:bg-primary/90"
+                                            disabled={!order.order_items?.length || order.order_items.some(item => !item.variant_id)}
+                                        >
                                             {saving === order.id ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Check className="mr-2 h-4 w-4" />}
                                             {t("Move to Pending")}
                                         </Button>
