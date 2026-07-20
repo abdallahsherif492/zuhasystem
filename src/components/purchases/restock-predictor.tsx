@@ -22,6 +22,7 @@ type RestockItem = {
     sku: string;
     currentStock: number;
     salesVelocity: number;
+    daysPerSale: number;
     predictedDemand: number;
     needToBuy: number;
 };
@@ -132,6 +133,7 @@ export function RestockPredictor() {
             allVariants.forEach(v => {
                 const totalSold = salesMap[v.id] || 0;
                 const dailyVelocity = totalSold / hDays;
+                const daysPerSale = dailyVelocity > 0 ? (1 / dailyVelocity) : 0;
                 const predictedDemand = dailyVelocity * cDays;
                 const currentStock = v.stock_qty || 0;
                 
@@ -146,6 +148,7 @@ export function RestockPredictor() {
                         sku: v.sku || "N/A",
                         currentStock,
                         salesVelocity: Number(dailyVelocity.toFixed(2)),
+                        daysPerSale: Number(daysPerSale.toFixed(1)),
                         predictedDemand: Math.ceil(predictedDemand),
                         needToBuy
                     });
@@ -203,6 +206,7 @@ export function RestockPredictor() {
                                 <TableHead>Variant / SKU</TableHead>
                                 <TableHead className="text-center">Current Stock</TableHead>
                                 <TableHead className="text-center">Sales/Day</TableHead>
+                                <TableHead className="text-center">1 Unit Every</TableHead>
                                 <TableHead className="text-center">Predicted Demand</TableHead>
                                 <TableHead className="text-right font-bold text-red-600">Need to Buy</TableHead>
                             </TableRow>
@@ -224,6 +228,9 @@ export function RestockPredictor() {
                                     </TableCell>
                                     <TableCell className="text-center text-muted-foreground">
                                         {item.salesVelocity}
+                                    </TableCell>
+                                    <TableCell className="text-center text-muted-foreground">
+                                        {item.daysPerSale > 0 ? `${item.daysPerSale} Days` : "-"}
                                     </TableCell>
                                     <TableCell className="text-center">
                                         {item.predictedDemand} units
