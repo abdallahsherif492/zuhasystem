@@ -259,18 +259,21 @@ function DashboardContent() {
 
       {/* KPI Cards */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
-        <Card>
+        <Card className="bg-emerald-50/50 dark:bg-emerald-950/20 border-emerald-100 dark:border-emerald-900/50">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">{t("Total Sales & Orders")}</CardTitle>
             <DollarSign className="h-4 w-4 text-emerald-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{formatCurrency(stats.totalSales)}</div>
-            <p className="text-sm font-medium text-muted-foreground mt-1">
-              {stats.totalOrders} {t("Orders")}
-            </p>
+            <div className="flex items-baseline gap-2">
+               <div className="text-2xl font-bold">{formatCurrency(stats.totalSales)}</div>
+            </div>
+            <div className="flex items-baseline gap-2 mt-1">
+               <span className="text-3xl font-black text-emerald-700 dark:text-emerald-400">{stats.totalOrders}</span>
+               <span className="text-sm font-medium text-emerald-600/80 dark:text-emerald-400/80">{t("Orders")}</span>
+            </div>
             <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1">
-              <span className={stats.salesChange >= 0 ? "text-emerald-500" : "text-red-500"}>
+              <span className={stats.salesChange >= 0 ? "text-emerald-600 font-medium" : "text-red-500 font-medium"}>
                 {stats.salesChange > 0 ? "+" : ""}{stats.salesChange.toFixed(1)}%
               </span>
               sales from prev period
@@ -278,51 +281,59 @@ function DashboardContent() {
           </CardContent>
         </Card>
         
-        <Card>
+        <Card className="bg-blue-50/50 dark:bg-blue-950/20 border-blue-100 dark:border-blue-900/50">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">{t("Confirmed Orders")}</CardTitle>
             <CheckCircle2 className="h-4 w-4 text-blue-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{formatCurrency(stats.confirmedValue)}</div>
-            <p className="text-sm font-medium text-muted-foreground mt-1">
-              {stats.confirmedCount} {t("Orders")}
-            </p>
+            <div className="flex items-baseline gap-2">
+               <div className="text-2xl font-bold">{formatCurrency(stats.confirmedValue)}</div>
+            </div>
+            <div className="flex items-baseline gap-2 mt-1">
+               <span className="text-3xl font-black text-blue-700 dark:text-blue-400">{stats.confirmedCount}</span>
+               <span className="text-sm font-medium text-blue-600/80 dark:text-blue-400/80">{t("Orders")}</span>
+            </div>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="bg-amber-50/50 dark:bg-amber-950/20 border-amber-100 dark:border-amber-900/50">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">{t("Waiting Orders")}</CardTitle>
-            <Clock className="h-4 w-4 text-orange-500" />
+            <Clock className="h-4 w-4 text-amber-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{formatCurrency(stats.waitingValue)}</div>
-            <p className="text-sm font-medium text-muted-foreground mt-1">
-              {stats.waitingCount} {t("Orders")}
-            </p>
+            <div className="flex items-baseline gap-2">
+               <div className="text-2xl font-bold">{formatCurrency(stats.waitingValue)}</div>
+            </div>
+            <div className="flex items-baseline gap-2 mt-1">
+               <span className="text-3xl font-black text-amber-700 dark:text-amber-400">{stats.waitingCount}</span>
+               <span className="text-sm font-medium text-amber-600/80 dark:text-amber-400/80">{t("Orders")}</span>
+            </div>
           </CardContent>
         </Card>
-        <Card>
+
+        <Card className="bg-purple-50/50 dark:bg-purple-950/20 border-purple-100 dark:border-purple-900/50">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">{t("Stock Value")}</CardTitle>
-            <Package className="h-4 w-4 text-muted-foreground" />
+            <Package className="h-4 w-4 text-purple-600" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{formatCurrency(stats.stockValue)}</div>
-            <p className="text-xs text-muted-foreground">
+            <p className="text-xs text-muted-foreground mt-2">
               total asset value
             </p>
           </CardContent>
         </Card>
-        <Card>
+
+        <Card className="bg-red-50/50 dark:bg-red-950/20 border-red-100 dark:border-red-900/50">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">{t("Low Stock Alerts")}</CardTitle>
-            <AlertTriangle className="h-4 w-4 text-orange-500" />
+            <AlertTriangle className="h-4 w-4 text-red-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats.lowStockCount}</div>
-            <p className="text-xs text-muted-foreground">
+            <div className="text-3xl font-black text-red-700 dark:text-red-400">{stats.lowStockCount}</div>
+            <p className="text-xs text-muted-foreground mt-2">
               variants to restock
             </p>
           </CardContent>
