@@ -13,6 +13,8 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { toast } from "sonner";
 import { ItemsSummary } from "@/components/purchases/items-summary";
 import { MultiSelect, Option } from "@/components/ui/multi-select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { RestockPredictor } from "@/components/purchases/restock-predictor";
 
 const GOVERNORATES = [
     "Cairo", "New Cairo", "Giza", "Alexandria", "Dakahlia", "Red Sea", "Beheira", "Fayoum",
@@ -199,13 +201,21 @@ export default function PurchasesPage() {
         <div className="space-y-6">
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                 <div>
-                    <h1 className="text-3xl font-bold tracking-tight">Purchases / Fulfillment</h1>
-                    <p className="text-muted-foreground">Pick items to move Pending orders to Prepared.</p>
+                    <h1 className="text-3xl font-bold tracking-tight">Purchases & Inventory</h1>
+                    <p className="text-muted-foreground">Manage order fulfillment and smart restocking.</p>
                 </div>
                 <Badge variant="secondary" className="text-lg px-4 py-1">
                     {filteredOrders.length} Pending
                 </Badge>
             </div>
+
+            <Tabs defaultValue="fulfillment" className="space-y-4">
+                <TabsList>
+                    <TabsTrigger value="fulfillment">Fulfillment</TabsTrigger>
+                    <TabsTrigger value="restock">Restock Predictor</TabsTrigger>
+                </TabsList>
+
+                <TabsContent value="fulfillment" className="space-y-4">
 
             <div className="flex items-center gap-2 bg-white p-4 rounded-md border shadow-sm w-full md:max-w-md">
                 <MultiSelect
@@ -305,6 +315,11 @@ export default function PurchasesPage() {
                     </div>
                 )
             }
+                </TabsContent>
+                <TabsContent value="restock">
+                    <RestockPredictor />
+                </TabsContent>
+            </Tabs>
         </div >
     );
 }

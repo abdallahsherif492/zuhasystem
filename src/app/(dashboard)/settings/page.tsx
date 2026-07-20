@@ -33,6 +33,8 @@ export default function SettingsPage() {
     const [darkMode, setDarkMode] = useState<string>("system");
     const [logoFile, setLogoFile] = useState<File | null>(null);
     const [logoPreview, setLogoPreview] = useState<string | null>(null);
+    const [restockHistoryDays, setRestockHistoryDays] = useState<number>(14);
+    const [restockCoverageDays, setRestockCoverageDays] = useState<number>(14);
 
     // Integrations State
     const [integrations, setIntegrations] = useState<any>({
@@ -55,6 +57,8 @@ export default function SettingsPage() {
             setSecondaryColor(activeBusiness.theme_config?.secondaryColor || "#000000");
             setDarkMode(activeBusiness.theme_config?.darkMode || "system");
             setLogoPreview(activeBusiness.logo_url);
+            setRestockHistoryDays(activeBusiness.theme_config?.restock_history_days || 14);
+            setRestockCoverageDays(activeBusiness.theme_config?.restock_coverage_days || 14);
             
             // Handle legacy EasyOrders settings
             const legacyWebhook = activeBusiness.theme_config?.easyorders_token || "";
@@ -168,7 +172,9 @@ export default function SettingsPage() {
                 // Maintain backwards compatibility if other functions depend on it
                 easyorders_token: integrations.platforms.easyorders.webhookToken,
                 easyorders_api_key: integrations.platforms.easyorders.apiKey,
-                integrations: integrations
+                integrations: integrations,
+                restock_history_days: restockHistoryDays,
+                restock_coverage_days: restockCoverageDays
             };
 
             const { error: updateError } = await supabase
@@ -250,6 +256,7 @@ export default function SettingsPage() {
                     <TabsTrigger value="shipping">{t("Shipping Companies")}</TabsTrigger>
                     <TabsTrigger value="platforms">{t("Order Platforms")}</TabsTrigger>
                     <TabsTrigger value="tools">{t("Tools")}</TabsTrigger>
+                    <TabsTrigger value="inventory">{t("Inventory")}</TabsTrigger>
                     <TabsTrigger value="logs">{t("System Logs")}</TabsTrigger>
                 </TabsList>
                 
@@ -633,6 +640,52 @@ export default function SettingsPage() {
                             <Button onClick={handleSaveTheme} disabled={saving}>
                                 {saving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
                                 {t("Save Tools Settings")}
+                            </Button>
+                        </CardFooter>
+                    </Card>
+                </TabsContent>
+
+                {/* Inventory Tab */}
+                <TabsContent value="inventory" className="space-y-4">
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>{t("Inventory Settings")}</CardTitle>
+                            <CardDescription>
+                                {t("Configure parameters for the smart restocking system.")}
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-6">
+                            <div className="grid gap-6 md:grid-cols-2">
+                                <div className="space-y-2">
+                                    <Label>{t("Sales History Period (Days)")}</Label>
+                                    <Input 
+                                        type="number"
+                                        min="1"
+                                        value={restockHistoryDays}
+                                        onChange={(e) => setRestockHistoryDays(parseInt(e.target.value) || 14)}
+                                    />
+                                    <p className="text-xs text-muted-foreground">
+                                        {t("How many days in the past should the system analyze to calculate sales velocity?")}
+                                    </p>
+                                </div>
+                                <div className="space-y-2">
+                                    <Label>{t("Stock Coverage Period (Days)")}</Label>
+                                    <Input 
+                                        type="number"
+                                        min="1"
+                                        value={restockCoverageDays}
+                                        onChange={(e) => setRestockCoverageDays(parseInt(e.target.value) || 14)}
+                                    />
+                                    <p className="text-xs text-muted-foreground">
+                                        {t("How many days into the future do you want your restock to cover?")}
+                                    </p>
+                                </div>
+                            </div>
+                        </CardContent>
+                        <CardFooter className="border-t p-6">
+                            <Button onClick={handleSaveTheme} disabled={saving}>
+                                {saving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                                {t("Save Inventory Settings")}
                             </Button>
                         </CardFooter>
                     </Card>
