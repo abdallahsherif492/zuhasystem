@@ -48,14 +48,28 @@ export function RestockPredictor() {
             setHistoryDays(hDays);
             setCoverageDays(cDays);
 
-            // 2. Fetch variants for this business
-            const { data: variants, error: variantsError } = await supabase
-                .from("variants")
-                .select("id, title, sku, stock_qty, products(name)")
-                .eq("business_id", activeBusiness!.id)
-                .eq("track_inventory", true);
-
-            if (variantsError) throw variantsError;
+            // 2. Fetch all variants for this business (paginated to avoid 1000 limit)
+            let allVariants: any[] = [];
+            let vPage = 0;
+            let vHasMore = true;
+            
+            while (vHasMore) {
+                const { data: variantsData, error: variantsError } = await supabase
+                    .from("variants")
+                    .select("id, title, sku, stock_qty, products(name)")
+                    .eq("business_id", activeBusiness!.id)
+                    .range(vPage * 1000, (vPage + 1) * 1000 - 1);
+                    
+                if (variantsError) throw variantsError;
+                
+                if (variantsData && variantsData.length > 0) {
+                    allVariants.push(...variantsData);
+                    if (variantsData.length < 1000) vHasMore = false;
+                    else vPage++;
+                } else {
+                    vHasMore = false;
+                }
+            }
 
             // 3. Fetch order items from the last `hDays`
             const startDate = new Date();
@@ -115,7 +129,7 @@ export function RestockPredictor() {
 
             // 5. Calculate metrics
             const items: RestockItem[] = [];
-            (variants || []).forEach(v => {
+            allVariants.forEach(v => {
                 const totalSold = salesMap[v.id] || 0;
                 const dailyVelocity = totalSold / hDays;
                 const predictedDemand = dailyVelocity * cDays;
