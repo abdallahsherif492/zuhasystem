@@ -147,7 +147,7 @@ function DashboardContent() {
         .limit(5);
       if (lowStockError) throw lowStockError;
 
-      // 6. All Orders in Period for exact status metrics
+      // 6. All Orders in Period for exact status metrics (Confirmed)
       const { data: periodOrders, error: periodOrdersError } = await supabase
         .from("orders")
         .select("status, total_amount")
@@ -156,21 +156,30 @@ function DashboardContent() {
         .lte("created_at", end);
       if (periodOrdersError) throw periodOrdersError;
 
-      let wCount = 0;
-      let wValue = 0;
+      // 7. ALL Waiting Orders (regardless of date)
+      const { data: allWaitingOrders, error: allWaitingError } = await supabase
+        .from("orders")
+        .select("total_amount")
+        .eq("business_id", activeBusiness.id)
+        .eq("status", "Waiting");
+      if (allWaitingError) throw allWaitingError;
+
       let cCount = 0;
       let cValue = 0;
-
       if (periodOrders) {
          periodOrders.forEach(o => {
-            if (o.status === 'Waiting') {
-               wCount++;
-               wValue += Number(o.total_amount) || 0;
-            } else if (o.status !== 'Cancelled') {
+            if (o.status !== 'Waiting' && o.status !== 'Cancelled') {
                cCount++;
                cValue += Number(o.total_amount) || 0;
             }
          });
+      }
+
+      let globalWCount = 0;
+      let globalWValue = 0;
+      if (allWaitingOrders) {
+          globalWCount = allWaitingOrders.length;
+          globalWValue = allWaitingOrders.reduce((sum, o) => sum + (Number(o.total_amount) || 0), 0);
       }
 
       // Update State
@@ -206,8 +215,8 @@ function DashboardContent() {
           lowStockCount: s.low_stock_count || 0,
           salesChange: sChange,
           ordersChange: oChange,
-          waitingCount: wCount,
-          waitingValue: wValue,
+          waitingCount: globalWCount,
+          waitingValue: globalWValue,
           confirmedCount: cCount,
           confirmedValue: cValue
         });
@@ -258,7 +267,7 @@ function DashboardContent() {
       </div>
 
       {/* KPI Cards */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <Card className="bg-emerald-50/50 dark:bg-emerald-950/20 border-emerald-100 dark:border-emerald-900/50">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">{t("Total Sales & Orders")}</CardTitle>
@@ -322,19 +331,6 @@ function DashboardContent() {
             <div className="text-2xl font-bold">{formatCurrency(stats.stockValue)}</div>
             <p className="text-xs text-muted-foreground mt-2">
               total asset value
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-red-50/50 dark:bg-red-950/20 border-red-100 dark:border-red-900/50">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">{t("Low Stock Alerts")}</CardTitle>
-            <AlertTriangle className="h-4 w-4 text-red-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-black text-red-700 dark:text-red-400">{stats.lowStockCount}</div>
-            <p className="text-xs text-muted-foreground mt-2">
-              variants to restock
             </p>
           </CardContent>
         </Card>
