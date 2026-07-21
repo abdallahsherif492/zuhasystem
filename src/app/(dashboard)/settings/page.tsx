@@ -177,16 +177,20 @@ export default function SettingsPage() {
                 restock_coverage_days: restockCoverageDays
             };
 
-            const { error: updateError } = await supabase
+            const { error: updateError, data: updatedData } = await supabase
                 .from('businesses')
                 .update({
                     name: businessName,
                     logo_url: finalLogoUrl,
                     theme_config: newThemeConfig
                 })
-                .eq('id', activeBusiness.id);
+                .eq('id', activeBusiness.id)
+                .select();
 
             if (updateError) throw updateError;
+            if (!updatedData || updatedData.length === 0) {
+                throw new Error("RLS_BLOCKED");
+            }
 
             setSuccessMessage("Settings saved successfully! Refreshing to apply...");
             
@@ -194,9 +198,13 @@ export default function SettingsPage() {
                 window.location.reload();
             }, 1500);
 
-        } catch (error) {
+        } catch (error: any) {
             console.error("Error saving theme settings:", error);
-            alert("Failed to save settings. Make sure the storage bucket exists.");
+            if (error?.message === "RLS_BLOCKED") {
+                alert("Failed to save settings: You do not have permission to modify this business's settings (Must be the Owner).");
+            } else {
+                alert("Failed to save settings. Make sure the storage bucket exists.");
+            }
         } finally {
             setSaving(false);
         }
@@ -229,17 +237,25 @@ export default function SettingsPage() {
                 }
             };
             
-            const { error } = await supabase
+            const { error: updateError, data: updatedData } = await supabase
                 .from('businesses')
                 .update({ theme_config: newThemeConfig })
-                .eq('id', activeBusiness?.id);
+                .eq('id', activeBusiness!.id)
+                .select();
                 
-            if (error) throw error;
+            if (updateError) throw updateError;
+            if (!updatedData || updatedData.length === 0) {
+                throw new Error("RLS_BLOCKED");
+            }
             
             toast.success(t("Token generated successfully"));
-        } catch (error) {
+        } catch (error: any) {
             console.error("Error generating token:", error);
-            toast.error(t("Failed to generate token"));
+            if (error?.message === "RLS_BLOCKED") {
+                toast.error("Failed to generate token: You do not have permission to modify settings (Must be the Owner).");
+            } else {
+                toast.error("Failed to generate and save token");
+            }
         } finally {
             setSaving(false);
         }
