@@ -256,13 +256,13 @@ export function SidebarContent() {
                     <div key={groupIndex} className="space-y-1">
                         <button
                             onClick={() => toggleGroup(group.title)}
-                            className="w-full flex items-center justify-between px-2 py-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors group"
+                            className="w-full flex items-center justify-between px-3 py-2 text-xs font-bold text-foreground/80 hover:text-foreground hover:bg-muted/50 rounded-md transition-colors group"
                         >
-                            <span className="uppercase tracking-wider">{group.title}</span>
+                            <span className="uppercase tracking-widest">{group.title}</span>
                             {isExpanded ? (
-                                <ChevronDown className="h-3.5 w-3.5 opacity-50 group-hover:opacity-100 transition-all" />
+                                <ChevronDown className="h-4 w-4 opacity-70 group-hover:opacity-100 transition-all" />
                             ) : (
-                                <ChevronRight className="h-3.5 w-3.5 opacity-50 group-hover:opacity-100 transition-all" />
+                                <ChevronRight className="h-4 w-4 opacity-70 group-hover:opacity-100 transition-all" />
                             )}
                         </button>
                         
