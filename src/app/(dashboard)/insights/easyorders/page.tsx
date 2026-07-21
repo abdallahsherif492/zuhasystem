@@ -93,31 +93,49 @@ function EasyOrdersInsightsContent() {
             const start = fromDate ? `${fromDate}T00:00:00` : new Date().toISOString();
             const end = toDate ? `${toDate}T23:59:59` : new Date().toISOString();
 
-            // Fetch easyorders
-            const { data: ordersData, error: ordersError } = await supabase
-                .from('orders')
-                .select(`
-                    id, 
-                    status,
-                    easyorders_id,
-                    tags,
-                    order_items (
-                        variants (
-                            products (
-                                id,
-                                name
+            // Fetch easyorders with pagination to avoid 1000 limit
+            let allOrdersData: any[] = [];
+            let page = 0;
+            let hasMore = true;
+
+            while (hasMore) {
+                const { data: ordersData, error: ordersError } = await supabase
+                    .from('orders')
+                    .select(`
+                        id, 
+                        status,
+                        easyorders_id,
+                        tags,
+                        order_items (
+                            variants (
+                                products (
+                                    id,
+                                    name
+                                )
                             )
                         )
-                    )
-                `)
-                .eq('business_id', activeBusiness!.id)
-                .gte('created_at', start)
-                .lte('created_at', end);
+                    `)
+                    .eq('business_id', activeBusiness!.id)
+                    .gte('created_at', start)
+                    .lte('created_at', end)
+                    .range(page * 1000, (page + 1) * 1000 - 1);
 
-            if (ordersError) throw ordersError;
+                if (ordersError) throw ordersError;
+
+                if (ordersData && ordersData.length > 0) {
+                    allOrdersData.push(...ordersData);
+                    if (ordersData.length < 1000) {
+                        hasMore = false;
+                    } else {
+                        page++;
+                    }
+                } else {
+                    hasMore = false;
+                }
+            }
 
             // Filter out only easy orders
-            const easyOrders = ordersData?.filter(o => {
+            const easyOrders = allOrdersData?.filter(o => {
                 const hasTag = o.tags && Array.isArray(o.tags) && o.tags.includes("easyorders");
                 const hasId = !!o.easyorders_id;
                 return hasTag || hasId;
@@ -132,9 +150,9 @@ function EasyOrdersInsightsContent() {
             const metricsMap = new Map<string, ProductMetric>();
 
             easyOrders.forEach(order => {
-                const isConfirmed = CONFIRMED_STATUSES.includes(order.status);
                 const isCancelled = order.status === 'Cancelled';
                 const isWaiting = order.status === 'Waiting';
+                const isConfirmed = !isCancelled && !isWaiting;
 
                 if (isConfirmed) confirmedCount++;
                 if (isCancelled) cancelledCount++;
@@ -166,8 +184,8 @@ function EasyOrdersInsightsContent() {
 
                     const metric = metricsMap.get(id)!;
                     metric.total_orders += 1;
-                    if (isConfirmed) metric.confirmed_orders += 1;
                     if (isCancelled) metric.cancelled_orders += 1;
+                    else if (!isWaiting) metric.confirmed_orders += 1;
                 });
             });
 
