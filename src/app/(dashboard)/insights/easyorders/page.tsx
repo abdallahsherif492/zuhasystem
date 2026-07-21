@@ -7,7 +7,7 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { supabase } from "@/lib/supabase";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { DateRangePicker } from "@/components/date-range-picker";
-import { Loader2, ArrowUpDown, Search, PackageSearch, XCircle, CheckCircle2 } from "lucide-react";
+import { Loader2, ArrowUpDown, Search, PackageSearch, XCircle, CheckCircle2, Clock } from "lucide-react";
 import { format, startOfMonth } from "date-fns";
 import { Input } from "@/components/ui/input";
 import {
@@ -47,6 +47,7 @@ function EasyOrdersInsightsContent() {
     const [totalEasyOrders, setTotalEasyOrders] = useState(0);
     const [confirmedOrders, setConfirmedOrders] = useState(0);
     const [cancelledOrders, setCancelledOrders] = useState(0);
+    const [waitingOrders, setWaitingOrders] = useState(0);
 
     const [data, setData] = useState<ProductMetric[]>([]);
     const [filteredData, setFilteredData] = useState<ProductMetric[]>([]);
@@ -126,15 +127,18 @@ function EasyOrdersInsightsContent() {
 
             let confirmedCount = 0;
             let cancelledCount = 0;
+            let waitingCount = 0;
 
             const metricsMap = new Map<string, ProductMetric>();
 
             easyOrders.forEach(order => {
                 const isConfirmed = CONFIRMED_STATUSES.includes(order.status);
                 const isCancelled = order.status === 'Cancelled';
+                const isWaiting = order.status === 'Waiting';
 
                 if (isConfirmed) confirmedCount++;
                 if (isCancelled) cancelledCount++;
+                if (isWaiting) waitingCount++;
 
                 // Track unique products in this order
                 const productsInOrder = new Map<string, string>(); // id -> name
@@ -169,6 +173,7 @@ function EasyOrdersInsightsContent() {
 
             setConfirmedOrders(confirmedCount);
             setCancelledOrders(cancelledCount);
+            setWaitingOrders(waitingCount);
 
             // Calculate Rates
             const result: ProductMetric[] = Array.from(metricsMap.values()).map(m => ({
@@ -198,6 +203,7 @@ function EasyOrdersInsightsContent() {
 
     const confirmedPerc = totalEasyOrders > 0 ? ((confirmedOrders / totalEasyOrders) * 100).toFixed(1) : "0.0";
     const cancelledPerc = totalEasyOrders > 0 ? ((cancelledOrders / totalEasyOrders) * 100).toFixed(1) : "0.0";
+    const waitingPerc = totalEasyOrders > 0 ? ((waitingOrders / totalEasyOrders) * 100).toFixed(1) : "0.0";
 
     return (
         <div className="space-y-8 p-8 pt-6">
@@ -213,7 +219,7 @@ function EasyOrdersInsightsContent() {
                 <div className="flex justify-center p-20"><Loader2 className="h-8 w-8 animate-spin" /></div>
             ) : (
                 <>
-                    <div className="grid gap-4 md:grid-cols-3">
+                    <div className="grid gap-4 md:grid-cols-4">
                         <Card>
                             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                                 <CardTitle className="text-sm font-medium">{t("Total EasyOrders")}</CardTitle>
@@ -249,6 +255,19 @@ function EasyOrdersInsightsContent() {
                                 <div className="text-2xl font-bold text-destructive">{cancelledOrders}</div>
                                 <p className="text-xs font-medium text-destructive/80 mt-1">
                                     {cancelledPerc}% {t("of total")}
+                                </p>
+                            </CardContent>
+                        </Card>
+                        
+                        <Card>
+                            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                                <CardTitle className="text-sm font-medium text-amber-600">{t("Waiting Orders")}</CardTitle>
+                                <Clock className="h-4 w-4 text-amber-600" />
+                            </CardHeader>
+                            <CardContent>
+                                <div className="text-2xl font-bold text-amber-600">{waitingOrders}</div>
+                                <p className="text-xs font-medium text-amber-600/80 mt-1">
+                                    {waitingPerc}% {t("of total")}
                                 </p>
                             </CardContent>
                         </Card>
