@@ -61,7 +61,7 @@ export async function previewShippingSyncAction(businessId: string): Promise<{ u
         
         const debugInfo = {
             activeRefNumbers: refNumbers,
-            fetchedShipments: accurateShipments.map(s => ({ ref: s.refNumber, code: s.status?.code, name: s.status?.name }))
+            fetchedShipments: accurateShipments.map(s => ({ ref: s.zuhaRef || s.refNumber, code: s.status?.code, name: s.status?.name }))
         };
 
         // --- DEBUG LOGGING ---
@@ -72,8 +72,12 @@ export async function previewShippingSyncAction(businessId: string): Promise<{ u
 
         for (const order of orders) {
             const shortId = order.id.substring(0, 8);
-            // In case there are multiple for some reason, grab the latest one (assume array is ordered or grab last)
-            const accurateMatch = accurateShipments.find(s => s.refNumber === shortId);
+            // We added zuhaRef in accurate.ts to explicitly tell us which zuha ref the shipment matched
+            // fallback to refNumber if zuhaRef isn't present
+            const accurateMatch = accurateShipments.find(s => {
+                const matchRef = s.zuhaRef ? s.zuhaRef : s.refNumber;
+                return matchRef && matchRef.toLowerCase() === shortId.toLowerCase();
+            });
 
             if (accurateMatch) {
                 const newStatus = mapAccurateStatusToZuha(accurateMatch.status.code, accurateMatch.status.name);
