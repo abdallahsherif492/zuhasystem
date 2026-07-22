@@ -97,12 +97,28 @@ export async function fetchAccurateShipments(token: string, refNumbers: string[]
             break;
         }
     }
+    
+    // Create a lowercase set of our refNumbers for case-insensitive matching
+    const refNumbersLower = refNumbers.map(r => r.toLowerCase());
+
+    const isMatch = (s: any) => {
+        const sRef = s.refNumber ? s.refNumber.toLowerCase() : null;
+        const sCode = s.code ? s.code.toLowerCase() : null;
+        return (sRef && refNumbersLower.includes(sRef)) || (sCode && refNumbersLower.includes(sCode));
+    };
+
     // Filter to those that match our refNumbers
-    const matchedShipments = allShipments.filter(s => s.refNumber && refNumbers.includes(s.refNumber));
+    const matchedShipments = allShipments.filter(isMatch);
     
     // Find missing refNumbers that weren't in the 5000 recent shipments
-    const matchedRefs = matchedShipments.map(s => s.refNumber);
-    const missingRefs = refNumbers.filter(ref => !matchedRefs.includes(ref));
+    // Note: a shipment might have matched via 'code', so we remove matched Zuha refs
+    const matchedRefs = matchedShipments.map(s => {
+        const sRef = s.refNumber ? s.refNumber.toLowerCase() : null;
+        const sCode = s.code ? s.code.toLowerCase() : null;
+        return refNumbersLower.includes(sRef!) ? sRef : sCode;
+    }).filter(Boolean);
+
+    const missingRefs = refNumbers.filter(ref => !matchedRefs.includes(ref.toLowerCase()));
 
     if (missingRefs.length > 0) {
         console.log(`[Telegraph Sync] Missing ${missingRefs.length} shipments from recent batch. Fetching via fallback search...`);
@@ -112,7 +128,7 @@ export async function fetchAccurateShipments(token: string, refNumbers: string[]
             const promises = batchRefs.map(ref => {
                 const query = `
                     query {
-                        listShipments(first: 10, input: { refNumber: "${ref}" }) {
+                        listShipments(first: 10, input: { search: "${ref}" }) {
                             data {
                                 id
                                 code
@@ -144,12 +160,25 @@ export async function fetchAccurateShipments(token: string, refNumbers: string[]
 
             const results = await Promise.all(promises);
             for (const shipments of results) {
-                matchedShipments.push(...shipments.filter((s: any) => s.refNumber && batchRefs.includes(s.refNumber)));
+                matchedShipments.push(...shipments.filter(isMatch));
             }
         }
     }
 
-    return matchedShipments;
+    // Now we need to normalize the matched shipments so that we can easily map them back to the original Zuha refNumber.
+    // Because some matched via `code`, we should explicitly attach the original Zuha refNumber to it.
+    const normalizedShipments = matchedShipments.map(s => {
+        const sRef = s.refNumber ? s.refNumber.toLowerCase() : null;
+        const sCode = s.code ? s.code.toLowerCase() : null;
+        // Find which Zuha refNumber it matched
+        const matchedZuhaRef = refNumbers.find(r => r.toLowerCase() === sRef || r.toLowerCase() === sCode);
+        return {
+            ...s,
+            zuhaRef: matchedZuhaRef // Ensure we know which Zuha order this shipment belongs to
+        };
+    });
+
+    return normalizedShipments;
 }
 
 export function mapAccurateStatusToZuha(accurateStatusCode: string, accurateStatusName: string): string | null {
