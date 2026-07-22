@@ -1,9 +1,17 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { approvePaymentRequest, rejectPaymentRequest } from "../actions/billing"
+import { supabase } from "@/lib/supabase"
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -26,10 +34,30 @@ export function PaymentRequestActions({ reqId, businessId, amount }: PaymentRequ
     const [showReject, setShowReject] = useState(false)
     const [rejectReason, setRejectReason] = useState("")
     const [loading, setLoading] = useState(false)
+    const [accounts, setAccounts] = useState<any[]>([])
+    const [selectedAccount, setSelectedAccount] = useState<string>("")
+
+    useEffect(() => {
+        if (showApprove) {
+            fetchAccounts()
+        }
+    }, [showApprove])
+
+    async function fetchAccounts() {
+        const { data } = await supabase.from("system_financial_accounts").select("name").order("name")
+        if (data) {
+            setAccounts(data)
+            if (data.length > 0) setSelectedAccount(data[0].name)
+        }
+    }
 
     const handleApprove = async () => {
+        if (!selectedAccount) {
+            alert("Please select a treasury account.")
+            return
+        }
         setLoading(true)
-        await approvePaymentRequest(reqId, businessId, amount)
+        await approvePaymentRequest(reqId, businessId, amount, selectedAccount)
         setLoading(false)
         setShowApprove(false)
     }
@@ -79,6 +107,19 @@ export function PaymentRequestActions({ reqId, businessId, amount }: PaymentRequ
                         <AlertDialogDescription>
                             This will approve the top-up of {amount} EGP. The amount will be added to the business's wallet balance immediately.
                         </AlertDialogDescription>
+                        <div className="py-4">
+                            <label className="block text-sm font-medium mb-2">Select Treasury to receive funds:</label>
+                            <Select value={selectedAccount} onValueChange={setSelectedAccount}>
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Select Treasury Account" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {accounts.map((acc) => (
+                                        <SelectItem key={acc.name} value={acc.name}>{acc.name}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
                         <AlertDialogCancel disabled={loading}>Cancel</AlertDialogCancel>

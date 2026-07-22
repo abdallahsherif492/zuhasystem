@@ -3,7 +3,7 @@
 import { createSupabaseServerClient } from '@/lib/supabase-server'
 import { revalidatePath } from 'next/cache'
 
-export async function approvePaymentRequest(requestId: string, businessId: string, amount: number) {
+export async function approvePaymentRequest(requestId: string, businessId: string, amount: number, accountName: string) {
   const supabase = await createSupabaseServerClient()
   
   // 1. Update status
@@ -29,7 +29,9 @@ export async function approvePaymentRequest(requestId: string, businessId: strin
       payment_request_id: requestId,
       amount: amount,
       type: 'wallet_topup',
-      description: 'Wallet top-up approved'
+      description: 'Wallet top-up approved',
+      account_name: accountName,
+      category: 'Deposit'
   })
   
   revalidatePath('/system-admin/payment-requests')

@@ -1,0 +1,11 @@
+- [x] 1. Apply database changes for System Admin Accounting (`system_admin_accounting.sql`).
+  - [x] 1.1 Create `system_financial_accounts` table.
+  - [x] 1.2 Alter `revenue_transactions` table to add `account_name`, `category`, `status`.
+  - [x] 1.3 Create RPC `get_system_treasury_balances`.
+- [x] 2. Create UI components for System Admin Accounting.
+  - [x] 2.1 `system-add-transaction-dialog.tsx`.
+  - [x] 2.2 `system-manage-accounts-dialog.tsx`.
+  - [x] 2.3 `system-transfer-dialog.tsx`.
+  - [x] 2.4 `system-accounting-content.tsx`.
+- [x] 3. Update `/system-admin/accounting/page.tsx` to integrate the new `SystemAccountingContent`.
+- [/] 4. Test and Verify.
