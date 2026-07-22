@@ -176,12 +176,6 @@ export async function debugTelegraphSearch(businessId: string, refNumber: string
         
         const query = `
             query {
-                q1: listShipments(first: 10, filter: { search: "${refNumber}" }) {
-                    data { id, code, refNumber, status { name } }
-                }
-                q2: listShipments(first: 10, filter: { refNumber: "${refNumber}" }) {
-                    data { id, code, refNumber, status { name } }
-                }
                 __type(name: "Query") {
                     fields {
                         name
