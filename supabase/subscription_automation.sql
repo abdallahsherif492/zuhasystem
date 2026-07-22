@@ -74,7 +74,21 @@ $$;
 
 -- 4. Schedule the cron job to run every hour
 -- Unschedule if exists first to avoid duplicates
-SELECT cron.unschedule('process_auto_renewals_job');
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1 FROM pg_catalog.pg_class c
+        JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+        WHERE n.nspname = 'cron' AND c.relname = 'job'
+    ) THEN
+        IF EXISTS (SELECT 1 FROM cron.job WHERE jobname = 'process_auto_renewals_job') THEN
+            PERFORM cron.unschedule('process_auto_renewals_job');
+        END IF;
+    END IF;
+EXCEPTION
+    WHEN OTHERS THEN
+        -- Ignore errors related to checking or unscheduling
+END $$;
 
 SELECT cron.schedule(
     'process_auto_renewals_job',
