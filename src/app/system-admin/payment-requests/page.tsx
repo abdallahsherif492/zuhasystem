@@ -1,10 +1,8 @@
 import { createSupabaseServerClient } from '@/lib/supabase-server'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { approvePaymentRequest, rejectPaymentRequest } from '../actions/billing'
-import { revalidatePath } from 'next/cache'
+import { PaymentRequestActions } from './request-actions'
 import { Badge } from '@/components/ui/badge'
 
 export default async function PaymentRequestsPage() {
@@ -59,23 +57,11 @@ export default async function PaymentRequestsPage() {
                     </a>
                   </TableCell>
                   <TableCell>
-                    <div className="flex space-x-2">
-                        <form action={async () => {
-                            'use server'
-                            await approvePaymentRequest(req.id, req.business_id, req.amount)
-                        }}>
-                            <Button size="sm" type="submit" className="bg-green-600 hover:bg-green-700">Approve</Button>
-                        </form>
-                        
-                        <form action={async (formData) => {
-                            'use server'
-                            const reason = formData.get('reason') as string
-                            await rejectPaymentRequest(req.id, reason)
-                        }} className="flex items-center space-x-2">
-                            <Input name="reason" placeholder="Reject reason..." className="w-32 h-8 text-xs" required />
-                            <Button size="sm" variant="destructive" type="submit">Reject</Button>
-                        </form>
-                    </div>
+                    <PaymentRequestActions 
+                        reqId={req.id} 
+                        businessId={req.business_id} 
+                        amount={req.amount} 
+                    />
                   </TableCell>
                 </TableRow>
               ))}
