@@ -34,6 +34,7 @@ export interface AccurateShipment {
         code: string;
         name: string;
     };
+    zuhaRef?: string;
 }
 
 export async function fetchAccurateShipments(token: string, refNumbers: string[]): Promise<AccurateShipment[]> {
