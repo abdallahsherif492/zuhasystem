@@ -1,4 +1,4 @@
-import { supabaseAdmin as supabase } from '@/lib/supabase-server'
+import { createSupabaseServerClient } from '@/lib/supabase-server'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -8,6 +8,7 @@ import { revalidatePath } from 'next/cache'
 import { Badge } from '@/components/ui/badge'
 
 export default async function PricingPage() {
+  const supabase = await createSupabaseServerClient()
   const { data: packages, error } = await supabase.from('packages').select('*').order('created_at', { ascending: false })
 
   return (

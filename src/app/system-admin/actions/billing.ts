@@ -1,9 +1,10 @@
 'use server'
 
-import { supabaseAdmin as supabase } from '@/lib/supabase-server'
+import { createSupabaseServerClient } from '@/lib/supabase-server'
 import { revalidatePath } from 'next/cache'
 
 export async function approvePaymentRequest(requestId: string, businessId: string, amount: number) {
+  const supabase = await createSupabaseServerClient()
   
   // 1. Update status
   const { error: updateError } = await supabase
@@ -36,6 +37,7 @@ export async function approvePaymentRequest(requestId: string, businessId: strin
 }
 
 export async function rejectPaymentRequest(requestId: string, reason: string) {
+  const supabase = await createSupabaseServerClient()
   
   const { error } = await supabase
     .from('payment_requests')
@@ -49,6 +51,7 @@ export async function rejectPaymentRequest(requestId: string, reason: string) {
 }
 
 export async function createPackage(name: string, duration_months: number, price: number) {
+  const supabase = await createSupabaseServerClient()
   const { error } = await supabase.from('packages').insert({
       name,
       duration_months,
@@ -60,6 +63,7 @@ export async function createPackage(name: string, duration_months: number, price
 }
 
 export async function togglePackageStatus(packageId: string, isActive: boolean) {
+    const supabase = await createSupabaseServerClient()
     const { error } = await supabase.from('packages').update({ is_active: isActive }).eq('id', packageId)
     if (error) throw new Error('Failed to update package status')
     revalidatePath('/system-admin/pricing')
