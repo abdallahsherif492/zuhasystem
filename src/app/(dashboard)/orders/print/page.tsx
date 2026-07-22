@@ -104,7 +104,7 @@ function InvoiceCard({ order, isFirstOnPage, business }: { order: InvoiceData, i
             {/* Items Table - Flex Grow to Fill Space */}
             <div className="flex-1 overflow-hidden relative border-t border-b border-border my-1">
                 <table className="w-full text-left">
-                    <thead className="border-b border-gray-400">
+                    <thead className="border-b border-border">
                         <tr className="text-[9px]">
                             <th className="py-0.5">Item</th>
                             <th className="py-0.5 text-center w-8">Qty</th>

@@ -339,7 +339,7 @@ function DashboardContent() {
           </CardContent>
         </Card>
         
-        <Card className="bg-primary/10 dark:bg-blue-950/20 border-primary/20 dark:border-primary/50">
+        <Card className="bg-primary/10 dark:bg-primary/20 border-primary/20 dark:border-primary/50">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">{t("Confirmed Orders")}</CardTitle>
             <CheckCircle2 className="h-4 w-4 text-primary" />
@@ -371,7 +371,7 @@ function DashboardContent() {
           </CardContent>
         </Card>
 
-        <Card className="bg-primary/10 dark:bg-purple-950/20 border-primary/20 dark:border-primary/50">
+        <Card className="bg-primary/10 dark:bg-primary/20 border-primary/20 dark:border-primary/50">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">{t("Stock Value")}</CardTitle>
             <Package className="h-4 w-4 text-primary" />

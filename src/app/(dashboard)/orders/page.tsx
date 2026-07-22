@@ -397,7 +397,7 @@ function OrdersContent() {
     const STATUSES = ["Pending", "Processing", "Prepared", "Hold To redeliver", "Shipped", "Delivered", "Returning", "Cancelled", "Returned", "Unavailable"];
     
     const getStatusColor = (status: any) => {
-        if (!status || typeof status !== 'string') return 'bg-muted text-foreground hover:bg-muted dark:bg-gray-800 dark:text-muted-foreground';
+        if (!status || typeof status !== 'string') return 'bg-muted text-foreground hover:bg-muted dark:bg-muted dark:text-muted-foreground';
         switch (status.toLowerCase()) {
             case 'pending': return 'bg-yellow-100 text-yellow-800 hover:bg-yellow-100/80 dark:bg-yellow-900/50 dark:text-yellow-400';
             case 'processing': return 'bg-primary/20 text-primary hover:bg-primary/20 dark:bg-primary dark:text-primary';
@@ -406,8 +406,8 @@ function OrdersContent() {
             case 'delivered': return 'bg-emerald-100 text-emerald-800 hover:bg-emerald-100/80 dark:bg-emerald-900/50 dark:text-emerald-400';
             case 'cancelled': return 'bg-red-100 text-red-800 hover:bg-red-100/80 dark:bg-red-900/50 dark:text-red-400';
             case 'returned': return 'bg-orange-100 text-orange-800 hover:bg-orange-100/80 dark:bg-orange-900/50 dark:text-orange-400';
-            case 'unavailable': return 'bg-muted text-foreground hover:bg-muted dark:bg-slate-800 dark:text-muted-foreground';
-            default: return 'bg-muted text-foreground hover:bg-muted dark:bg-gray-800 dark:text-muted-foreground';
+            case 'unavailable': return 'bg-muted text-foreground hover:bg-muted dark:bg-muted dark:text-muted-foreground';
+            default: return 'bg-muted text-foreground hover:bg-muted dark:bg-muted dark:text-muted-foreground';
         }
     };
     

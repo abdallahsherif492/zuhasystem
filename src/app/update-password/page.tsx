@@ -99,7 +99,7 @@ export default function UpdatePasswordPage() {
             </div>
 
             <div className="relative hidden w-0 flex-1 lg:block">
-                <div className="absolute inset-0 h-full w-full bg-gradient-to-br from-indigo-600 via-purple-700 to-blue-900 object-cover">
+                <div className="absolute inset-0 h-full w-full bg-gradient-to-br from-primary via-primary/80 to-primary/50 object-cover">
                     <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20 mix-blend-overlay"></div>
                 </div>
             </div>

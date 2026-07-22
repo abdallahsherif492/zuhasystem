@@ -71,13 +71,13 @@ export default async function MarketingLandingPage() {
 
       <main className="flex-1">
         {/* Hero Section */}
-        <section className="w-full py-20 lg:py-32 xl:py-40 bg-gradient-to-br from-indigo-50 via-white to-purple-50 dark:from-indigo-950 dark:via-background dark:to-purple-950 relative overflow-hidden">
+        <section className="w-full py-20 lg:py-32 xl:py-40 bg-gradient-to-br from-primary/10 via-white to-primary/5 dark:from-primary/20 dark:via-background dark:to-primary/10 relative overflow-hidden">
           <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-10 mix-blend-overlay"></div>
           <div className="container px-4 md:px-6 relative z-10 mx-auto max-w-6xl">
             <div className="flex flex-col items-center space-y-8 text-center">
               <div className="space-y-4 max-w-3xl">
                 <h1 className="text-4xl font-extrabold tracking-tight sm:text-5xl md:text-6xl lg:text-7xl text-foreground">
-                  The All-in-One Operating System for <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-purple-600">E-Commerce</span>
+                  The All-in-One Operating System for <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary to-primary/50">E-Commerce</span>
                 </h1>
                 <p className="mx-auto max-w-[700px] text-muted-foreground md:text-xl leading-relaxed">
                   Manage orders, track inventory, handle logistics, and analyze profits—all from a single, beautiful dashboard.

@@ -167,7 +167,7 @@ export default function InvoicePage({ params }: { params: Promise<{ id: string }
                 {/* Order Items Table */}
                 <table className="w-full mb-8">
                     <thead>
-                        <tr className="border-b-2 border-gray-800">
+                        <tr className="border-b-2 border-border">
                             <th className="text-left py-2 font-bold text-foreground">Item</th>
                             <th className="text-center py-2 font-bold text-foreground">Qty</th>
                             <th className="text-right py-2 font-bold text-foreground">Price</th>
@@ -206,7 +206,7 @@ export default function InvoicePage({ params }: { params: Promise<{ id: string }
                                 <span>-{order.discount.toFixed(2)} EGP</span>
                             </div>
                         )}
-                        <div className="flex justify-between py-4 border-b-2 border-gray-800">
+                        <div className="flex justify-between py-4 border-b-2 border-border">
                             <span className="font-bold text-xl">Total:</span>
                             <span className="font-bold text-xl">{order.total_amount.toFixed(2)} EGP</span>
                         </div>
@@ -216,7 +216,7 @@ export default function InvoicePage({ params }: { params: Promise<{ id: string }
                                     <span className="font-semibold">Paid ({order.payment_status}):</span>
                                     <span>{order.payment_status === "Paid" ? order.total_amount.toFixed(2) : order.paid_amount?.toFixed(2)} EGP</span>
                                 </div>
-                                <div className="flex justify-between py-4 border-b-2 border-gray-800 bg-secondary px-2">
+                                <div className="flex justify-between py-4 border-b-2 border-border bg-secondary px-2">
                                     <span className="font-bold text-xl">Balance Due:</span>
                                     <span className="font-bold text-xl">
                                         {(order.payment_status === "Paid" ? 0 : Math.max(0, order.total_amount - (order.paid_amount || 0))).toFixed(2)} EGP
@@ -225,7 +225,7 @@ export default function InvoicePage({ params }: { params: Promise<{ id: string }
                             </>
                         )}
                         {order.payment_status === "Not Paid" && (
-                            <div className="flex justify-between py-4 border-b-2 border-gray-800 bg-secondary px-2">
+                            <div className="flex justify-between py-4 border-b-2 border-border bg-secondary px-2">
                                 <span className="font-bold text-xl">Balance Due:</span>
                                 <span className="font-bold text-xl">{order.total_amount.toFixed(2)} EGP</span>
                             </div>
