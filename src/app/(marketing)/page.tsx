@@ -1,219 +1,445 @@
+"use client";
+
 import Link from "next/link";
 import Image from "next/image";
 import { Button } from "@/components/ui/button";
-import { CheckCircle2, Package, TrendingUp, Users, ShieldCheck } from "lucide-react";
+import { motion } from "framer-motion";
+import {
+  CheckCircle2,
+  Package,
+  TrendingUp,
+  Users,
+  ShieldCheck,
+  RefreshCw,
+  Box,
+  Printer,
+  XCircle,
+  CreditCard,
+  Smartphone,
+  ChevronDown
+} from "lucide-react";
+import { useState } from "react";
+import { createBrowserClient } from "@supabase/ssr";
 
-import { createServerClient } from '@supabase/ssr';
-import { cookies } from 'next/headers';
-import { LogoutButton } from "@/components/ui/logout-button";
+// Utility for fade in animation
+const fadeInUp = {
+  hidden: { opacity: 0, y: 40 },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.6, ease: "easeOut" } }
+};
 
-export default async function MarketingLandingPage() {
-  const cookieStore = await cookies();
-  
-  const FALLBACK_URL = "https://telkkknuygjejmqcvyev.supabase.co";
-  const FALLBACK_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRlbGtra251eWdqZWptcWN2eWV2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjY1MTU5NDAsImV4cCI6MjA4MjA5MTk0MH0.7q4Vyfz0CxAHCy49bKU6iy9xay0IxsqtMe4UATcg_cU";
-  
-  const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL || FALLBACK_URL,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || FALLBACK_KEY,
-      {
-          cookies: {
-              getAll() { return cookieStore.getAll() }
-          }
-      }
-  );
+const staggerContainer = {
+  hidden: { opacity: 0 },
+  visible: { opacity: 1, transition: { staggerChildren: 0.2 } }
+};
 
-  const { data: { user } } = await supabase.auth.getUser();
+export default function MarketingLandingPage() {
+  const [openFaq, setOpenFaq] = useState<number | null>(null);
 
-  const { data: plans } = await supabase
-    .from('subscription_plans')
-    .select('*')
-    .eq('is_active', true)
-    .order('price_monthly', { ascending: true });
+  const toggleFaq = (index: number) => {
+    setOpenFaq(openFaq === index ? null : index);
+  };
 
   return (
-    <div className="flex flex-col min-h-screen">
+    <div className="flex flex-col min-h-screen bg-slate-50 dark:bg-slate-950 font-sans" dir="rtl">
       {/* Header */}
-      <header className="px-4 lg:px-6 h-16 flex items-center border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-0 z-50">
+      <header className="px-4 lg:px-8 h-20 flex items-center justify-between border-b bg-white/80 dark:bg-slate-900/80 backdrop-blur-md sticky top-0 z-50">
         <Link className="flex items-center justify-center" href="/">
-          <div className="relative h-10 w-24">
-            <Image src="/logo.png" alt="eCommerx Logo" fill className="object-contain object-left" />
+          <div className="relative h-12 w-32">
+            <Image src="/logo.png" alt="eCommerx Logo" fill className="object-contain object-right" />
           </div>
         </Link>
-        <nav className="ml-auto flex gap-4 sm:gap-6 items-center">
-          <Link className="text-sm font-medium hover:text-primary underline-offset-4 hover:underline" href="#features">
-            Features
+        <nav className="hidden md:flex gap-8 items-center text-slate-600 dark:text-slate-300">
+          <Link className="text-sm font-medium hover:text-primary transition-colors" href="#features">
+            المميزات
           </Link>
-          <Link className="text-sm font-medium hover:text-primary underline-offset-4 hover:underline" href="#pricing">
-            Pricing
+          <Link className="text-sm font-medium hover:text-primary transition-colors" href="#why-us">
+            لماذا نحن؟
           </Link>
-          <div className="flex items-center gap-2 ml-4">
-            {user ? (
-              <>
-                <LogoutButton />
-                <Button asChild>
-                  <Link href="/dashboard">Go to Dashboard</Link>
-                </Button>
-              </>
-            ) : (
-              <>
-                <Button variant="ghost" asChild>
-                  <Link href="/login">Log in</Link>
-                </Button>
-                <Button asChild>
-                  <Link href="/register">Start Free Trial</Link>
-                </Button>
-              </>
-            )}
-          </div>
+          <Link className="text-sm font-medium hover:text-primary transition-colors" href="#pricing">
+            الأسعار
+          </Link>
         </nav>
+        <div className="flex items-center gap-3">
+          <Button variant="ghost" className="hidden sm:flex text-slate-600 dark:text-slate-300" asChild>
+            <Link href="/login">تسجيل الدخول</Link>
+          </Button>
+          <Button className="bg-primary hover:bg-primary/90 text-white shadow-lg shadow-primary/20 rounded-full px-6" asChild>
+            <Link href="/register">ابدأ مجاناً</Link>
+          </Button>
+        </div>
       </header>
 
-      <main className="flex-1">
+      <main className="flex-1 overflow-hidden">
         {/* Hero Section */}
-        <section className="w-full py-20 lg:py-32 xl:py-40 bg-gradient-to-br from-primary/10 via-white to-primary/5 dark:from-primary/20 dark:via-background dark:to-primary/10 relative overflow-hidden">
-          <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-10 mix-blend-overlay"></div>
-          <div className="container px-4 md:px-6 relative z-10 mx-auto max-w-6xl">
-            <div className="flex flex-col items-center space-y-8 text-center">
-              <div className="space-y-4 max-w-3xl">
-                <h1 className="text-4xl font-extrabold tracking-tight sm:text-5xl md:text-6xl lg:text-7xl text-foreground">
-                  The All-in-One Operating System for <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary to-primary/50">E-Commerce</span>
-                </h1>
-                <p className="mx-auto max-w-[700px] text-muted-foreground md:text-xl leading-relaxed">
-                  Manage orders, track inventory, handle logistics, and analyze profits—all from a single, beautiful dashboard.
-                </p>
-              </div>
-              <div className="flex flex-col sm:flex-row gap-4 w-full sm:w-auto">
-                {user ? (
-                  <div className="flex flex-col sm:flex-row gap-4">
-                    <LogoutButton size="lg" variant="outline" className="h-14 px-8 text-lg rounded-full text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200 hover:border-red-300 bg-background/50 backdrop-blur-sm" />
-                    <Button size="lg" className="h-14 px-8 text-lg rounded-full" asChild>
-                      <Link href="/dashboard">Go to Dashboard</Link>
-                    </Button>
+        <section className="relative w-full py-20 lg:py-32 xl:py-40 overflow-hidden">
+          {/* Background Decorative Blobs */}
+          <div className="absolute top-0 right-0 -translate-y-12 translate-x-1/3 w-96 h-96 bg-primary/20 rounded-full blur-3xl opacity-50 dark:opacity-20 pointer-events-none" />
+          <div className="absolute bottom-0 left-0 translate-y-1/3 -translate-x-1/3 w-[500px] h-[500px] bg-blue-400/20 rounded-full blur-3xl opacity-50 dark:opacity-20 pointer-events-none" />
+
+          <div className="container px-4 md:px-6 relative z-10 mx-auto max-w-7xl">
+            <div className="grid lg:grid-cols-2 gap-12 items-center">
+              <motion.div 
+                initial="hidden"
+                animate="visible"
+                variants={staggerContainer}
+                className="flex flex-col space-y-6 text-right"
+              >
+                <motion.div variants={fadeInUp} className="inline-flex items-center rounded-full border border-primary/20 bg-primary/10 px-3 py-1 text-sm text-primary w-fit">
+                  <span className="flex h-2 w-2 rounded-full bg-primary mr-2 animate-pulse"></span>
+                  <span className="mr-2 font-medium">🔥 عرض لفترة محدودة جداً!</span>
+                </motion.div>
+                
+                <motion.h1 variants={fadeInUp} className="text-4xl font-extrabold tracking-tight sm:text-5xl md:text-6xl text-slate-900 dark:text-white leading-[1.1]">
+                  تعبت من فوضى الأوردرات وشيتات الإكسيل؟
+                </motion.h1>
+                
+                <motion.p variants={fadeInUp} className="text-lg md:text-xl text-slate-600 dark:text-slate-300 leading-relaxed max-w-xl">
+                  نظام <span className="font-bold text-primary">eCommerx</span> هو العقل المدبر لمتجرك الإلكتروني.. أدر مبيعاتك، مخزونك، وحساباتك من شاشة واحدة. نظام متكامل يربط متجرك بمنصات البيع، أدوات الأتمتة، وشركات الشحن لحظياً.
+                </motion.p>
+                
+                <motion.div variants={fadeInUp} className="flex flex-col sm:flex-row gap-4 pt-4">
+                  <Button size="lg" className="h-14 px-8 text-lg rounded-full shadow-xl shadow-primary/25 hover:scale-105 transition-transform" asChild>
+                    <Link href="/register">👉 ابدأ فترتك التجريبية الآن (شهر كامل مجاناً!)</Link>
+                  </Button>
+                </motion.div>
+                <motion.p variants={fadeInUp} className="text-sm text-slate-500 font-medium">
+                  بدون كريديت كارد 💳 - بدون أي التزامات الدفع
+                </motion.p>
+              </motion.div>
+
+              <motion.div 
+                initial={{ opacity: 0, x: -50 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ duration: 0.8, delay: 0.2 }}
+                className="relative mx-auto w-full max-w-[600px] lg:max-w-none"
+              >
+                <div className="relative rounded-2xl border border-slate-200/50 dark:border-slate-800/50 bg-white/50 dark:bg-slate-900/50 p-2 shadow-2xl backdrop-blur-sm">
+                  <div className="relative aspect-[16/10] overflow-hidden rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-950">
+                    <Image
+                      src="/hero-dashboard.png"
+                      alt="eCommerx Dashboard Interface"
+                      fill
+                      className="object-cover"
+                      priority
+                    />
                   </div>
-                ) : (
-                  <>
-                    <Button size="lg" className="h-14 px-8 text-lg rounded-full" asChild>
-                      <Link href="/register">Start your 14-day free trial</Link>
-                    </Button>
-                    <Button size="lg" variant="outline" className="h-14 px-8 text-lg rounded-full">
-                      Book a Demo
-                    </Button>
-                  </>
-                )}
-              </div>
-              <p className="text-sm text-muted-foreground">No credit card required. Cancel anytime.</p>
+                  
+                  {/* Floating Elements for "Motion" feel */}
+                  <motion.div 
+                    animate={{ y: [0, -10, 0] }} 
+                    transition={{ repeat: Infinity, duration: 3, ease: "easeInOut" }}
+                    className="absolute -right-6 top-1/4 rounded-xl bg-white dark:bg-slate-800 p-4 shadow-xl border border-slate-100 dark:border-slate-700 hidden md:flex items-center gap-4"
+                  >
+                    <div className="h-10 w-10 rounded-full bg-green-100 flex items-center justify-center">
+                      <CheckCircle2 className="h-5 w-5 text-green-600" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold text-slate-900 dark:text-white">تم توصيل الطلب</p>
+                      <p className="text-xs text-slate-500">تم التحديث آلياً</p>
+                    </div>
+                  </motion.div>
+                </div>
+              </motion.div>
             </div>
           </div>
         </section>
 
-        {/* Features Section */}
-        <section id="features" className="w-full py-20 bg-background">
-          <div className="container px-4 md:px-6 mx-auto max-w-6xl">
-            <div className="text-center mb-16">
-              <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">Everything you need to scale</h2>
-              <p className="mt-4 text-muted-foreground text-lg max-w-2xl mx-auto">
-                Stop juggling spreadsheets and disconnected tools. eCommerx brings your entire operations into one cohesive platform.
-              </p>
-            </div>
-            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-8">
-              {/* Feature 1 */}
-              <div className="flex flex-col items-center text-center p-6 border rounded-2xl bg-card shadow-sm hover:shadow-md transition-shadow">
-                <div className="p-3 bg-primary/20 dark:bg-primary rounded-xl mb-4">
-                  <Package className="h-6 w-6 text-primary dark:text-primary" />
-                </div>
-                <h3 className="text-xl font-bold mb-2">Inventory Management</h3>
-                <p className="text-muted-foreground">Track stock levels across multiple locations in real-time and prevent overselling.</p>
-              </div>
-              {/* Feature 2 */}
-              <div className="flex flex-col items-center text-center p-6 border rounded-2xl bg-card shadow-sm hover:shadow-md transition-shadow">
-                <div className="p-3 bg-primary/20 dark:bg-primary rounded-xl mb-4">
-                  <TrendingUp className="h-6 w-6 text-primary dark:text-primary" />
-                </div>
-                <h3 className="text-xl font-bold mb-2">Profit Analytics</h3>
-                <p className="text-muted-foreground">Understand your true profitability with built-in accounting and ad expense tracking.</p>
-              </div>
-              {/* Feature 3 */}
-              <div className="flex flex-col items-center text-center p-6 border rounded-2xl bg-card shadow-sm hover:shadow-md transition-shadow">
-                <div className="p-3 bg-primary/20 dark:bg-primary rounded-xl mb-4">
-                  <Users className="h-6 w-6 text-primary dark:text-primary" />
-                </div>
-                <h3 className="text-xl font-bold mb-2">Team Collaboration</h3>
-                <p className="text-muted-foreground">Invite your whole team with role-based access control and detailed audit logs.</p>
-              </div>
-            </div>
+        {/* Integrations Bar */}
+        <section className="border-y border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 py-10 overflow-hidden">
+          <div className="container mx-auto max-w-7xl px-4 text-center mb-8">
+            <p className="text-sm font-semibold text-slate-500 uppercase tracking-widest">
+              اربط متجرك بضغطة زر مع كل أدواتك المفضلة
+            </p>
+          </div>
+          
+          {/* Marquee Container */}
+          <div className="relative flex w-full overflow-hidden">
+             <div className="flex w-max animate-marquee space-x-12 space-x-reverse px-6">
+                {[...Array(2)].map((_, i) => (
+                  <div key={i} className="flex space-x-16 space-x-reverse items-center justify-center">
+                    <div className="relative h-12 w-32 grayscale hover:grayscale-0 transition-all opacity-60 hover:opacity-100"><Image src="/shopify.png" alt="Shopify" fill className="object-contain" /></div>
+                    <div className="relative h-12 w-32 grayscale hover:grayscale-0 transition-all opacity-60 hover:opacity-100"><Image src="/woocommerce.png" alt="WooCommerce" fill className="object-contain" /></div>
+                    <div className="relative h-12 w-32 grayscale hover:grayscale-0 transition-all opacity-60 hover:opacity-100"><Image src="/easyorders.png" alt="EasyOrders" fill className="object-contain" /></div>
+                    <div className="relative h-12 w-32 grayscale hover:grayscale-0 transition-all opacity-60 hover:opacity-100"><Image src="/vrobo.png" alt="vRobo" fill className="object-contain" /></div>
+                    <div className="relative h-12 w-32 grayscale hover:grayscale-0 transition-all opacity-60 hover:opacity-100"><Image src="/shipping-logos.png" alt="Shipping Companies" fill className="object-contain" /></div>
+                  </div>
+                ))}
+             </div>
           </div>
         </section>
 
-        {/* Pricing Section */}
-        <section id="pricing" className="w-full py-20 bg-muted/50">
+        {/* Agitation & Solution */}
+        <section className="py-24 bg-slate-50 dark:bg-slate-950">
+          <div className="container px-4 md:px-6 mx-auto max-w-5xl text-center">
+            <motion.div 
+              initial="hidden"
+              whileInView="visible"
+              viewport={{ once: true, margin: "-100px" }}
+              variants={staggerContainer}
+              className="space-y-16"
+            >
+              <div className="space-y-8">
+                <motion.h2 variants={fadeInUp} className="text-3xl md:text-4xl font-bold text-slate-900 dark:text-white">
+                  هل تعاني من هذه المشاكل يومياً؟
+                </motion.h2>
+                
+                <div className="grid sm:grid-cols-2 gap-4 text-right">
+                  {[
+                    "أوردرات تائهة بين شيتات الإكسيل وشركات الشحن.",
+                    "بضاعة تنفذ فجأة أو أموال مجمدة في بضاعة متكدسة.",
+                    "حسابات غير دقيقة وموظفين يتلاعبون بالبيانات.",
+                    "شكل غير احترافي لبوالص الشحن يضر بعلامتك التجارية."
+                  ].map((problem, idx) => (
+                    <motion.div key={idx} variants={fadeInUp} className="flex items-start gap-3 p-4 rounded-xl bg-red-50 dark:bg-red-950/20 border border-red-100 dark:border-red-900/30">
+                      <XCircle className="h-6 w-6 text-red-500 shrink-0 mt-0.5" />
+                      <p className="text-slate-700 dark:text-slate-300 font-medium">{problem}</p>
+                    </motion.div>
+                  ))}
+                </div>
+              </div>
+
+              <motion.div variants={fadeInUp} className="relative p-10 rounded-3xl bg-primary text-white shadow-2xl overflow-hidden">
+                <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20 mix-blend-overlay"></div>
+                <div className="relative z-10 flex flex-col items-center space-y-4">
+                  <div className="p-4 bg-white/20 rounded-2xl backdrop-blur-md mb-2">
+                    <ShieldCheck className="h-12 w-12 text-white" />
+                  </div>
+                  <h3 className="text-3xl md:text-4xl font-extrabold text-white">الحل الجذري</h3>
+                  <p className="text-lg md:text-xl text-white/90 max-w-2xl font-medium leading-relaxed">
+                    eCommerx ليس مجرد سيستم إدخال بيانات، <br/> إنه مدير عملياتك الآلي!
+                  </p>
+                </div>
+              </motion.div>
+
+            </motion.div>
+          </div>
+        </section>
+
+        {/* Core Features */}
+        <section id="features" className="py-24 bg-white dark:bg-slate-900">
           <div className="container px-4 md:px-6 mx-auto max-w-6xl">
             <div className="text-center mb-16">
-              <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">Simple, transparent pricing</h2>
-              <p className="mt-4 text-muted-foreground text-lg">Choose the perfect plan for your business needs.</p>
+              <h2 className="text-3xl font-bold tracking-tight sm:text-4xl text-slate-900 dark:text-white">المميزات الأساسية</h2>
             </div>
             
-            <PricingGrid plans={plans} />
+            <div className="grid md:grid-cols-2 gap-8">
+              {[
+                {
+                  icon: RefreshCw,
+                  title: "ربط آلي لا ينقطع (Auto-Sync)",
+                  desc: "انسَ الإدخال اليدوي. النظام يستقبل طلباتك فوراً من (Shopify, WooCommerce, EasyOrders) ويدمجها مع أدوات الأتمتة مثل (vRobo) ليقوم بتحديث حالات الشحن لحظياً مع كل شركات الشحن دون تدخل منك."
+                },
+                {
+                  icon: Box,
+                  title: "إدارة المخزون والحسابات بذكاء اصطناعي",
+                  desc: "النظام لا يحسب بضاعتك فقط! بل يمتلك خوارزمية تخبرك بالضبط متى يجب إعادة شراء منتج قبل نفاذه، وتكشف لك البضاعة المتكدسة التي تجمد أموالك لتقوم بتسييلها، مع تنظيم دقيق لحساباتك وصافي أرباحك."
+                },
+                {
+                  icon: TrendingUp,
+                  title: "تتبع تفصيلي يمنع التلاعب",
+                  desc: "تراك (Track) كل أوردر بكل تفاصيله (من لحظة دخوله كطلب جديد حتى تسليمه أو استرجاعه). النظام يسجل كل خطوة باسم الموظف الذي قام بها، مع إمكانية كتابة ملاحظات ومحادثة العميل بضغطة زر."
+                },
+                {
+                  icon: Printer,
+                  title: "بوالص شحن احترافية بهويتك",
+                  desc: "عزز علامتك التجارية! النظام يتيح لك طباعة بوالص الشحن (Waybills) وعليها اللوجو الخاص بمتجرك، لتبدو أمام عملائك كعلامة تجارية كبرى وليس مجرد صفحة على السوشيال ميديا."
+                }
+              ].map((feature, idx) => (
+                <motion.div 
+                  key={idx}
+                  initial={{ opacity: 0, y: 30 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true, margin: "-50px" }}
+                  transition={{ delay: idx * 0.1, duration: 0.5 }}
+                  className="group flex flex-col p-8 border border-slate-200 dark:border-slate-800 rounded-3xl bg-slate-50 dark:bg-slate-950 hover:bg-white dark:hover:bg-slate-900 hover:shadow-xl hover:shadow-primary/5 hover:-translate-y-1 transition-all duration-300"
+                >
+                  <div className="h-14 w-14 rounded-2xl bg-primary/10 flex items-center justify-center mb-6 group-hover:scale-110 group-hover:bg-primary transition-all duration-300">
+                    <feature.icon className="h-7 w-7 text-primary group-hover:text-white transition-colors" />
+                  </div>
+                  <h3 className="text-xl font-bold mb-3 text-slate-900 dark:text-white">{feature.title}</h3>
+                  <p className="text-slate-600 dark:text-slate-400 leading-relaxed">{feature.desc}</p>
+                </motion.div>
+              ))}
+            </div>
           </div>
         </section>
+
+        {/* Why Choose Us & Payment */}
+        <section id="why-us" className="py-24 bg-slate-50 dark:bg-slate-950 overflow-hidden relative">
+          <div className="container px-4 md:px-6 mx-auto max-w-6xl">
+            <div className="grid lg:grid-cols-2 gap-16 items-center">
+              <motion.div 
+                initial={{ opacity: 0, x: 50 }}
+                whileInView={{ opacity: 1, x: 0 }}
+                viewport={{ once: true }}
+                className="space-y-8"
+              >
+                <h2 className="text-3xl font-bold tracking-tight sm:text-4xl text-slate-900 dark:text-white">
+                  لماذا eCommerx بالذات؟
+                </h2>
+                
+                <div className="space-y-6">
+                  {[
+                    { title: "متجرك.. ألوانك.. هويتك", desc: "السيستم يتلون حرفياً بألوان متجرك ويحمل شعارك." },
+                    { title: "حماية وسرية تامة", desc: "كل موظف يرى فقط ما تسمح له برؤيته. لا تسريب لبيانات العملاء أو أسعار التكلفة." },
+                    { title: "نظام حضور وانصراف", desc: "راقب أوقات عمل فريقك من داخل لوحة التحكم." },
+                    { title: "سرعة فائقة لا تسقط", desc: "مبني بأحدث تقنيات البرمجة ليتحمل ضغط آلاف الطلبات في ثوانٍ." }
+                  ].map((item, idx) => (
+                    <div key={idx} className="flex gap-4">
+                      <div className="mt-1 h-6 w-6 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center shrink-0">
+                        <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400" />
+                      </div>
+                      <div>
+                        <h4 className="font-bold text-slate-900 dark:text-white">{item.title}</h4>
+                        <p className="text-slate-600 dark:text-slate-400">{item.desc}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Added Payment Gateways */}
+                <div className="pt-8 border-t border-slate-200 dark:border-slate-800">
+                  <h4 className="font-bold text-slate-900 dark:text-white flex items-center gap-2 mb-4">
+                    <CreditCard className="h-5 w-5 text-primary" />
+                    سهولة تامة في الدفع
+                  </h4>
+                  <p className="text-slate-600 dark:text-slate-400 mb-6">
+                    ادفع اشتراكك بسهولة عبر تطبيق انستاباي (InstaPay) أو عبر المحافظ الإلكترونية، لتجربة سلسة بدون تعقيدات بنكية.
+                  </p>
+                  <div className="flex gap-4 items-center">
+                    <div className="relative h-12 w-32 bg-white rounded-lg p-2 border border-slate-200 shadow-sm flex items-center justify-center hover:scale-105 transition-transform cursor-pointer">
+                      <Image src="/instapay.png" alt="Instapay" fill className="object-contain p-1" />
+                    </div>
+                    <div className="relative h-12 w-32 bg-white rounded-lg p-2 border border-slate-200 shadow-sm flex items-center justify-center hover:scale-105 transition-transform cursor-pointer">
+                      <Image src="/wallet.png" alt="Mobile Wallet" fill className="object-contain p-2" />
+                    </div>
+                  </div>
+                </div>
+
+              </motion.div>
+
+              <motion.div 
+                initial={{ opacity: 0, scale: 0.9 }}
+                whileInView={{ opacity: 1, scale: 1 }}
+                viewport={{ once: true }}
+                id="pricing"
+              >
+                {/* The Offer Box */}
+                <div className="relative rounded-3xl bg-gradient-to-br from-slate-900 to-slate-800 p-8 shadow-2xl text-white overflow-hidden border border-slate-700">
+                  <div className="absolute top-0 right-0 -translate-y-10 translate-x-10 w-40 h-40 bg-primary rounded-full blur-3xl opacity-50"></div>
+                  
+                  <div className="relative z-10 flex flex-col items-center text-center space-y-6">
+                    <div className="inline-flex px-4 py-1.5 rounded-full bg-primary/20 border border-primary/30 text-primary-foreground font-semibold text-sm">
+                      🎁 عرض الشركاء الأوائل
+                    </div>
+                    
+                    <h3 className="text-2xl sm:text-3xl font-bold leading-tight">
+                      استثمر في نمو متجرك اليوم..<br/>وجربنا على حسابنا!
+                    </h3>
+                    
+                    <p className="text-slate-300">
+                      لأننا واثقون أن eCommerx سيغير طريقة إدارتك لعملك بنسبة 180 درجة، نقدم لك:
+                    </p>
+                    
+                    <ul className="text-right space-y-3 w-full max-w-sm">
+                      {[
+                        "شهر كامل مجاناً لتجربة كل المميزات",
+                        "لا نطلب بطاقة ائتمانية (No Credit Card)",
+                        "إعداد وتجهيز مجاني (Onboarding)",
+                        "دعم فني خطوة بخطوة باللغة العربية"
+                      ].map((benefit, idx) => (
+                        <li key={idx} className="flex items-center gap-3 bg-white/5 rounded-lg p-3 border border-white/10">
+                          <CheckCircle2 className="h-5 w-5 text-green-400 shrink-0" />
+                          <span className="font-medium">{benefit}</span>
+                        </li>
+                      ))}
+                    </ul>
+                    
+                    <div className="w-full pt-4">
+                      <Button size="lg" className="w-full h-14 text-lg rounded-xl bg-primary hover:bg-primary/90 text-white shadow-lg shadow-primary/30" asChild>
+                        <Link href="/register">أنشئ حسابك الآن واستمتع بالشهر المجاني</Link>
+                      </Button>
+                      <p className="mt-4 text-sm text-slate-400 flex items-center justify-center gap-2">
+                        <span className="relative flex h-2.5 w-2.5">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                          <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-red-500"></span>
+                        </span>
+                        هذا العرض متاح لفترة محدودة جداً
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </motion.div>
+            </div>
+          </div>
+        </section>
+
+        {/* FAQ Section */}
+        <section className="py-24 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800">
+          <div className="container px-4 md:px-6 mx-auto max-w-3xl">
+            <div className="text-center mb-12">
+              <h2 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-white">الأسئلة الشائعة</h2>
+            </div>
+            
+            <div className="space-y-4">
+              {[
+                {
+                  q: "كيف سأدفع بعد انتهاء الشهر المجاني؟",
+                  a: "بعد انتهاء تجربتك واقتناعك بالنظام، يمكنك اختيار الباقة التي تناسب حجم مبيعاتك والدفع بوسائل الدفع المحلية المتاحة (انستاباي والمحافظ الإلكترونية)."
+                },
+                {
+                  q: "هل أحتاج مبرمج لربط متجري؟",
+                  a: "إطلاقاً! النظام مصمم لتقوم بربط متجرك (شوبيفاي أو غيره) وشركات الشحن بنسخ ولصق كود واحد فقط وفي أقل من دقيقتين، وفريق الدعم سيساعدك في ذلك."
+                }
+              ].map((faq, idx) => (
+                <div key={idx} className="border border-slate-200 dark:border-slate-800 rounded-2xl bg-slate-50 dark:bg-slate-950 overflow-hidden">
+                  <button 
+                    onClick={() => toggleFaq(idx)}
+                    className="flex justify-between items-center w-full p-6 text-right font-bold text-lg text-slate-900 dark:text-white hover:bg-slate-100 dark:hover:bg-slate-900 transition-colors"
+                  >
+                    {faq.q}
+                    <ChevronDown className={`h-5 w-5 text-slate-500 transition-transform duration-300 ${openFaq === idx ? 'rotate-180' : ''}`} />
+                  </button>
+                  <motion.div 
+                    initial={false}
+                    animate={{ height: openFaq === idx ? 'auto' : 0, opacity: openFaq === idx ? 1 : 0 }}
+                    className="overflow-hidden"
+                  >
+                    <div className="p-6 pt-0 text-slate-600 dark:text-slate-400 leading-relaxed border-t border-slate-100 dark:border-slate-800">
+                      {faq.a}
+                    </div>
+                  </motion.div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
       </main>
 
       {/* Footer */}
-      <footer className="w-full py-6 border-t bg-background">
-        <div className="container px-4 md:px-6 mx-auto flex flex-col sm:flex-row justify-between items-center gap-4">
-          <p className="text-sm text-muted-foreground">
-            © {new Date().getFullYear()} eCommerx. All rights reserved.
-          </p>
-          <div className="flex gap-4">
-            <Link className="text-sm text-muted-foreground hover:text-foreground" href="#">Terms of Service</Link>
-            <Link className="text-sm text-muted-foreground hover:text-foreground" href="#">Privacy</Link>
+      <footer className="w-full py-12 bg-slate-950 text-slate-400 border-t border-slate-800">
+        <div className="container px-4 md:px-6 mx-auto flex flex-col md:flex-row justify-between items-center gap-6">
+          <div className="flex flex-col items-center md:items-start gap-4">
+            <div className="relative h-10 w-28 grayscale brightness-200 opacity-80 hover:opacity-100 transition-opacity">
+              <Image src="/logo.png" alt="eCommerx Logo" fill className="object-contain object-right" />
+            </div>
+            <p className="text-sm font-medium">
+              "صُنع بكل فخر لتمكين تجار التجارة الإلكترونية في الوطن العربي"
+            </p>
           </div>
+          
+          <div className="flex gap-6">
+            <Link className="text-sm hover:text-white transition-colors" href="#">الشروط والأحكام</Link>
+            <Link className="text-sm hover:text-white transition-colors" href="#">سياسة الخصوصية</Link>
+            <Link className="text-sm hover:text-white transition-colors" href="#">تواصل معنا</Link>
+          </div>
+          
+          <p className="text-sm">
+            © {new Date().getFullYear()} eCommerx. جميع الحقوق محفوظة.
+          </p>
         </div>
       </footer>
-    </div>
-  );
-}
-
-function PricingGrid({ plans }: { plans: any[] | null }) {
-  if (!plans || plans.length === 0) {
-    return (
-      <div className="text-center text-muted-foreground p-8 border border-dashed rounded-xl">
-        Pricing plans are currently being updated. Please check back later.
-      </div>
-    );
-  }
-
-  return (
-    <div className={`grid gap-8 max-w-5xl mx-auto ${plans.length === 1 ? 'grid-cols-1 max-w-md' : plans.length === 2 ? 'sm:grid-cols-2 max-w-3xl' : 'lg:grid-cols-3'}`}>
-      {plans.map((plan) => (
-        <div key={plan.id} className={`flex flex-col p-8 border-2 rounded-3xl bg-background relative overflow-hidden transition-all ${plan.is_popular ? 'border-primary shadow-xl scale-105 z-10' : 'border-border shadow-sm hover:shadow-md'}`}>
-          {plan.is_popular && (
-            <div className="absolute top-0 right-0 bg-primary text-primary-foreground px-4 py-1 rounded-bl-xl text-sm font-medium">
-              Most Popular
-            </div>
-          )}
-          <h3 className="text-2xl font-bold mb-2">{plan.name}</h3>
-          <p className="text-muted-foreground mb-6 h-12 line-clamp-2">{plan.description}</p>
-          
-          <div className="flex items-baseline gap-2 mb-8 border-b pb-8">
-            <span className="text-5xl font-extrabold">{plan.price_monthly}</span>
-            <span className="text-xl font-medium text-muted-foreground">{plan.currency} / month</span>
-          </div>
-          
-          <ul className="space-y-4 mb-8 flex-1">
-            {plan.features?.map((feature: string, i: number) => (
-              <li key={i} className="flex items-start gap-3">
-                <CheckCircle2 className="h-5 w-5 text-green-500 shrink-0 mt-0.5" />
-                <span className="text-sm">{feature}</span>
-              </li>
-            ))}
-          </ul>
-          
-          <Button size="lg" className="w-full rounded-xl" variant={plan.is_popular ? "default" : "outline"} asChild>
-            <Link href={`/register?plan=${plan.id}`}>Start 14-Day Free Trial</Link>
-          </Button>
-        </div>
-      ))}
     </div>
   );
 }
