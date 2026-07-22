@@ -46,49 +46,56 @@ export async function fetchAccurateShipments(token: string, refNumbers: string[]
     // Assuming refNumber is a single string in the input, we can do parallel queries or just fetch the latest.
     
     const allShipments: AccurateShipment[] = [];
-    let page = 1;
-    const maxPages = 10; // Fetch up to 1000 recent shipments to ensure we catch active ones
+    const maxPages = 50; // Fetch up to 5000 recent shipments
+    const batchSize = 10;
 
-    while (page <= maxPages) {
-        const query = `
-            query {
-                listShipments(first: 100, page: ${page}) {
-                    data {
-                        id
-                        code
-                        refNumber
-                        status {
+    for (let batchStart = 1; batchStart <= maxPages; batchStart += batchSize) {
+        const promises = [];
+        for (let page = batchStart; page < batchStart + batchSize && page <= maxPages; page++) {
+            const query = `
+                query {
+                    listShipments(first: 100, page: ${page}) {
+                        data {
                             id
                             code
-                            name
+                            refNumber
+                            status {
+                                id
+                                code
+                                name
+                            }
                         }
                     }
                 }
-            }
-        `;
+            `;
 
-        const res = await fetch("https://system.telegraphex.com:8443/graphql", {
-            method: "POST",
-            headers: { 
-                "Content-Type": "application/json",
-                "Authorization": `Bearer ${token}`
-            },
-            body: JSON.stringify({ query }),
-            cache: "no-store"
-        });
-
-        const json = await res.json();
-        if (json.errors) {
-            throw new Error(json.errors[0].message || "Failed to fetch shipments from Accurate API");
+            promises.push(
+                fetch("https://system.telegraphex.com:8443/graphql", {
+                    method: "POST",
+                    headers: { 
+                        "Content-Type": "application/json",
+                        "Authorization": `Bearer ${token}`
+                    },
+                    body: JSON.stringify({ query }),
+                    cache: "no-store"
+                })
+                .then(res => res.json())
+                .then(json => {
+                    if (json.errors) throw new Error(json.errors[0].message);
+                    return json.data.listShipments.data || [];
+                })
+            );
         }
 
-        const shipments = json.data.listShipments.data || [];
-        allShipments.push(...shipments);
-        
-        if (shipments.length < 100) {
-            break; // No more pages
+        const results = await Promise.all(promises);
+        for (const shipments of results) {
+            allShipments.push(...shipments);
         }
-        page++;
+
+        // If any of the pages in this batch returned less than 100, we've reached the end
+        if (results.some(shipments => shipments.length < 100)) {
+            break;
+        }
     }
     
     // Filter to those that match our refNumbers
