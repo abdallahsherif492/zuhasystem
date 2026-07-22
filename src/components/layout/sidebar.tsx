@@ -90,7 +90,14 @@ export function SidebarContent({ onLinkClick }: { onLinkClick?: () => void }) {
     const pathname = usePathname();
     const { userRole, allowedPages, isSystemAdmin, loading } = useBusiness();
     const { t } = useLanguage();
-    const [expandedGroups, setExpandedGroups] = useState<string[]>([]);
+    const [expandedGroups, setExpandedGroups] = useState<string[]>([
+        t("Overview"), 
+        t("Sales & Orders"), 
+        t("Catalog & Inventory"), 
+        t("Supply Chain"), 
+        t("Finance & Analytics"), 
+        t("Settings & Administration")
+    ]);
     
     const role = userRole?.toLowerCase().trim() || "";
     const isAdminRole = role === "owner" || role === "admin" || role === "platform admin" || role.includes("super");
