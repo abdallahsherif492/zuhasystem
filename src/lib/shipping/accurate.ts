@@ -95,7 +95,7 @@ export async function fetchAccurateShipments(token: string, refNumbers: string[]
     return allShipments.filter(s => s.refNumber && refNumbers.includes(s.refNumber));
 }
 
-export function mapAccurateStatusToZuha(accurateStatusCode: string, accurateStatusName: string): string | null {
+export function mapAccurateStatusToZuha(accurateStatusCode: string, accurateStatusName: string, oldStatus?: string): string | null {
     // Ignore PKR (طلب الشحن)
     if (accurateStatusCode === "PKR") return null;
     
@@ -107,10 +107,13 @@ export function mapAccurateStatusToZuha(accurateStatusCode: string, accurateStat
 
     // If there's no code or we don't know it, fallback to name matching for final states
     if (accurateStatusName) {
-        if (accurateStatusName.includes("تم التسليم")) return "Delivered";
-        if (accurateStatusName.includes("إرجاع") && accurateStatusName.includes("تم")) return "Returned";
+        if (accurateStatusName.includes("تم التسليم") || accurateStatusName.includes("تسليم الطرد") || accurateStatusName.includes("تم التوصيل")) return "Delivered";
+        if (accurateStatusName.includes("مرتجع") || accurateStatusName.includes("رجيع") || accurateStatusName.includes("إرجاع") || accurateStatusName.includes("إلغاء") || accurateStatusName.includes("تم الغاء")) return "Returned";
     }
     
+    // Don't downgrade existing tracking states to Shipped if we encounter an unknown intermediate status
+    if (oldStatus === "Returning" || oldStatus === "Hold To redeliver") return oldStatus;
+
     // Default to Shipped for any other states
     return "Shipped";
 }

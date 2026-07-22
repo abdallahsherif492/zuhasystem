@@ -67,7 +67,7 @@ export async function previewShippingSyncAction(businessId: string): Promise<{ u
             const accurateMatch = accurateShipments.find(s => s.refNumber === shortId);
 
             if (accurateMatch) {
-                const newStatus = mapAccurateStatusToZuha(accurateMatch.status.code, accurateMatch.status.name);
+                const newStatus = mapAccurateStatusToZuha(accurateMatch.status.code, accurateMatch.status.name, order.status);
                 if (newStatus && newStatus !== order.status) {
                     updates.push({
                         orderId: order.id,
