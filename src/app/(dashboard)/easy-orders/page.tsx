@@ -10,6 +10,7 @@ import { useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Loader2, Check, X, AlertTriangle, Search, PackageSearch, ChevronsUpDown } from "lucide-react";
@@ -484,6 +485,15 @@ function EasyOrdersContent() {
                                                 <Input 
                                                     value={order.customer_info?.address || ""} 
                                                     onChange={e => updateCustomerInfo(order, 'address', e.target.value)} 
+                                                />
+                                            </div>
+                                            <div className="col-span-2 space-y-2">
+                                                <Label>{t("Confirmation Notes")}</Label>
+                                                <Textarea 
+                                                    placeholder={t("Add internal confirmation notes here (auto-saves)...")}
+                                                    defaultValue={order.customer_info?.confirmation_notes || ""} 
+                                                    onBlur={e => updateCustomerInfo(order, 'confirmation_notes', e.target.value)} 
+                                                    className="resize-none min-h-[80px]"
                                                 />
                                             </div>
                                         </div>
