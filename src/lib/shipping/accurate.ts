@@ -108,10 +108,15 @@ export function mapAccurateStatusToZuha(accurateStatusCode: string, accurateStat
     // If there's no code or we don't know it, fallback to name matching for final states
     if (accurateStatusName) {
         if (accurateStatusName.includes("تم التسليم") || accurateStatusName.includes("تسليم الطرد") || accurateStatusName.includes("تم التوصيل")) return "Delivered";
-        if (accurateStatusName.includes("مرتجع") || accurateStatusName.includes("رجيع") || accurateStatusName.includes("إرجاع") || accurateStatusName.includes("إلغاء") || accurateStatusName.includes("تم الغاء")) return "Returned";
+        
+        // Ignore "Returned" - handle manually (Return oldStatus to prevent update)
+        if (accurateStatusName.includes("مرتجع") || accurateStatusName.includes("رجيع") || accurateStatusName.includes("إرجاع") || accurateStatusName.includes("إلغاء") || accurateStatusName.includes("تم الغاء")) return oldStatus || null;
+        
+        // If it went out again for delivery
+        if (accurateStatusName.includes("جاري التوصيل") || accurateStatusName.includes("خرجت للتوصيل") || accurateStatusName.includes("مع المندوب") || accurateStatusName.includes("مندوب")) return "Shipped";
     }
     
-    // Don't downgrade existing tracking states to Shipped if we encounter an unknown intermediate status
+    // Don't downgrade existing tracking states to Shipped if we encounter an unknown intermediate status (like facility scans)
     if (oldStatus === "Returning" || oldStatus === "Hold To redeliver") return oldStatus;
 
     // Default to Shipped for any other states
