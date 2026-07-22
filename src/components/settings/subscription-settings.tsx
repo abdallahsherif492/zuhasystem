@@ -64,7 +64,12 @@ export function SubscriptionSettings({ businessId }: { businessId: string }) {
             const { data: publicUrlData } = supabase.storage.from('payment_receipts').getPublicUrl(fileName)
             
             // Submit request
-            await submitPaymentRequest(businessId, Number(topupAmount), paymentMethod, senderDetails, publicUrlData.publicUrl)
+            const res = await submitPaymentRequest(businessId, Number(topupAmount), paymentMethod, senderDetails, publicUrlData.publicUrl)
+            
+            if (!res.success) {
+                toast.error(res.error || 'Failed to submit top-up request')
+                return
+            }
             
             toast.success('Top-up request submitted successfully! It is pending approval.')
             
@@ -93,7 +98,13 @@ export function SubscriptionSettings({ businessId }: { businessId: string }) {
         
         setSubmittingPkg(pkg.id)
         try {
-            await buyPackage(businessId, pkg.id, pkg.price, pkg.duration_months)
+            const res = await buyPackage(businessId, pkg.id, pkg.price, pkg.duration_months)
+            
+            if (!res.success) {
+                toast.error(res.error || 'Failed to buy package')
+                return
+            }
+            
             toast.success('Subscription updated successfully!')
             
             // Update local state

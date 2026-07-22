@@ -24,7 +24,7 @@ export async function submitPaymentRequest(
     
   if (error) {
     console.error('Error submitting payment request:', error)
-    throw new Error('Failed to submit payment request')
+    return { success: false, error: error.message }
   }
   
   revalidatePath('/settings')
@@ -41,11 +41,11 @@ export async function buyPackage(businessId: string, packageId: string, packageP
     .single()
     
   if (bizError || !business) {
-    throw new Error('Business not found')
+    return { success: false, error: 'Business not found' }
   }
   
   if (business.wallet_balance < packagePrice) {
-    throw new Error('Insufficient wallet balance')
+    return { success: false, error: 'Insufficient wallet balance' }
   }
   
   // 2. Calculate new end date
@@ -66,7 +66,7 @@ export async function buyPackage(businessId: string, packageId: string, packageP
     .eq('id', businessId)
     
   if (updateError) {
-    throw new Error('Failed to update business subscription')
+    return { success: false, error: 'Failed to update business subscription' }
   }
   
   // 4. Log revenue transaction
