@@ -97,9 +97,59 @@ export async function fetchAccurateShipments(token: string, refNumbers: string[]
             break;
         }
     }
-    
     // Filter to those that match our refNumbers
-    return allShipments.filter(s => s.refNumber && refNumbers.includes(s.refNumber));
+    const matchedShipments = allShipments.filter(s => s.refNumber && refNumbers.includes(s.refNumber));
+    
+    // Find missing refNumbers that weren't in the 5000 recent shipments
+    const matchedRefs = matchedShipments.map(s => s.refNumber);
+    const missingRefs = refNumbers.filter(ref => !matchedRefs.includes(ref));
+
+    if (missingRefs.length > 0) {
+        console.log(`[Telegraph Sync] Missing ${missingRefs.length} shipments from recent batch. Fetching via fallback search...`);
+        const searchBatchSize = 10;
+        for (let i = 0; i < missingRefs.length; i += searchBatchSize) {
+            const batchRefs = missingRefs.slice(i, i + searchBatchSize);
+            const promises = batchRefs.map(ref => {
+                const query = `
+                    query {
+                        listShipments(first: 10, search: "${ref}") {
+                            data {
+                                id
+                                code
+                                refNumber
+                                status {
+                                    id
+                                    code
+                                    name
+                                }
+                            }
+                        }
+                    }
+                `;
+                return fetch("https://system.telegraphex.com:8443/graphql", {
+                    method: "POST",
+                    headers: { 
+                        "Content-Type": "application/json",
+                        "Authorization": `Bearer ${token}`
+                    },
+                    body: JSON.stringify({ query }),
+                    cache: "no-store"
+                })
+                .then(res => res.json())
+                .then(json => {
+                    if (json.errors) return [];
+                    return json.data?.listShipments?.data || [];
+                }).catch(() => []);
+            });
+
+            const results = await Promise.all(promises);
+            for (const shipments of results) {
+                matchedShipments.push(...shipments.filter((s: any) => s.refNumber && batchRefs.includes(s.refNumber)));
+            }
+        }
+    }
+
+    return matchedShipments;
 }
 
 export function mapAccurateStatusToZuha(accurateStatusCode: string, accurateStatusName: string): string | null {
