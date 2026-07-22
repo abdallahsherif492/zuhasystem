@@ -60,7 +60,7 @@ export async function previewShippingSyncAction(businessId: string): Promise<{ u
         const accurateShipments = await fetchAccurateShipments(token, refNumbers);
         
         // --- DEBUG LOGGING ---
-        await logIntegrationActivity(businessId, "Telegraph Debug", "info", `Fetched ${accurateShipments.length} matching shipments for ${refNumbers.length} active refNumbers.`, { 
+        await logIntegrationActivity(businessId, "Telegraph", "info", `[DEBUG] Fetched ${accurateShipments.length} matching shipments for ${refNumbers.length} active refNumbers.`, { 
             activeRefNumbers: refNumbers,
             fetchedShipments: accurateShipments.map(s => ({ ref: s.refNumber, code: s.status?.code, name: s.status?.name }))
         });
