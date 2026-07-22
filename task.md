@@ -1,10 +1,7 @@
-- [x] 1. Create SQL migration (`supabase/subscription_automation.sql`)
-  - [x] Add `auto_renew_enabled` and `auto_renew_package_id` to `businesses` table.
-  - [x] Write `process_auto_renewals()` stored procedure.
-  - [x] Create `pg_cron` schedule for the stored procedure.
-- [x] 2. Update `SubscriptionSettings` UI (`src/components/settings/subscription-settings.tsx`)
-  - [x] Add real-time countdown timer to the "Subscription Status" card.
-  - [x] Add `AlertDialog` confirmation prompt for package purchases.
-  - [x] Add "Auto-Renew" toggle switch for each package in the available packages list.
-  - [x] Handle updating `businesses` table when toggling auto-renew.
-- [/] 3. Verify changes locally.
+- [x] 1. Update Business Context (`src/contexts/BusinessContext.tsx`)
+  - [x] Add `subscription_end_date` to `Business` interface.
+  - [x] Include `subscription_end_date` in the Supabase query.
+- [x] 2. Create Expiration Banner (`src/components/layout/expiration-banner.tsx`)
+- [x] 3. Create Subscription Guard (`src/components/layout/subscription-guard.tsx`)
+- [x] 4. Inject into Layout (`src/app/(dashboard)/layout.tsx`)
+- [/] 5. Verify changes locally.

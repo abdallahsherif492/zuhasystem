@@ -2,7 +2,9 @@ import { Sidebar } from "@/components/layout/sidebar";
 import { MobileNav } from "@/components/layout/mobile-nav";
 import { BusinessSwitcher } from "@/components/layout/business-switcher";
 import { AnnouncementBanner } from "@/components/layout/announcement-banner";
+import { ExpirationBanner } from "@/components/layout/expiration-banner";
 import { PermissionGuard } from "@/components/layout/permission-guard";
+import { SubscriptionGuard } from "@/components/layout/subscription-guard";
 import { AutoSyncProvider } from "@/components/providers/AutoSyncProvider";
 
 export default function DashboardLayout({
@@ -15,6 +17,7 @@ export default function DashboardLayout({
       <Sidebar className="w-64 hidden md:block" />
       <div className="flex flex-col flex-1">
         <AnnouncementBanner />
+        <ExpirationBanner />
         <header className="flex h-14 items-center gap-4 border-b bg-muted/40 px-4 lg:h-[60px] lg:px-6">
           <MobileNav />
           <div className="w-full flex justify-end items-center gap-4">
@@ -24,7 +27,9 @@ export default function DashboardLayout({
         <main className="flex flex-1 flex-col gap-4 p-4 lg:gap-6 lg:p-6">
           <AutoSyncProvider>
             <PermissionGuard>
-              {children}
+              <SubscriptionGuard>
+                {children}
+              </SubscriptionGuard>
             </PermissionGuard>
           </AutoSyncProvider>
         </main>

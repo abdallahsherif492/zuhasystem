@@ -10,6 +10,7 @@ export interface Business {
   logo_url: string | null;
   theme_config: any;
   subscription_status: string;
+  subscription_end_date: string | null;
 }
 
 export interface BusinessUser {
@@ -118,7 +119,8 @@ export const BusinessProvider = ({ children }: { children: React.ReactNode }) =>
             name,
             logo_url,
             theme_config,
-            subscription_status
+            subscription_status,
+            subscription_end_date
           )
         `)
         .eq('user_email', user.email);

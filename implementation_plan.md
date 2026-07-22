@@ -1,28 +1,33 @@
-# User Dashboard Subscription Management Improvements
+# Expiration & Suspension Handling Plan
 
 ## Goal
-To improve the subscription management page for users by adding purchase confirmations, a real-time countdown timer for subscription expiration, and an automated package renewal system using Supabase `pg_cron`.
-
-## Open Questions
-1. **Automated Tasks**: To implement the automated auto-renew process, we will use Supabase's `pg_cron` extension. The provided SQL script will need to be executed in your Supabase SQL Editor, and it will require the `pg_cron` extension to be enabled in your database extensions.
+Implement a warning banner for subscriptions nearing expiration and a 7-day grace period suspension mechanism that locks the user out of the dashboard (except the settings page) if they fail to renew.
 
 ## Proposed Changes
 
-### Database Changes (`supabase/subscription_automation.sql`)
-- [MODIFY] Add `auto_renew_enabled` (BOOLEAN DEFAULT false) and `auto_renew_package_id` (UUID) columns to the `businesses` table.
-- [NEW] Create `process_auto_renewals()` function. This function will:
-  - Find all businesses where `subscription_end_date` is less than 24 hours away.
-  - Check if `auto_renew_enabled` is true and they have enough `wallet_balance`.
-  - Deduct the balance, extend the date, and insert a `package_purchase` transaction into `revenue_transactions`.
-- [NEW] Schedule the function to run every hour using `pg_cron`.
+### 1. Update Business Context (`src/contexts/BusinessContext.tsx`)
+- [MODIFY] Add `subscription_end_date: string | null` to the `Business` interface.
+- [MODIFY] Ensure `subscription_end_date` is included in the Supabase query when fetching the user's businesses.
 
-### UI Components (`src/components/settings/subscription-settings.tsx`)
-- [MODIFY] **Countdown Timer**: Implement a `useEffect` hook that updates every second to display remaining Months, Days, Hours, Minutes, and Seconds until the `subscription_end_date`.
-- [MODIFY] **Buy Confirmation Prompt**: Add an `AlertDialog` when the user clicks "Buy Package". The prompt will show the package name, cost, and the exact new expiration date.
-- [MODIFY] **Auto-Renew Switch**: Add a toggle switch to each package card allowing the user to enable/disable auto-renew for that specific package. When toggled, it will update the `businesses` table (`auto_renew_enabled`, `auto_renew_package_id`).
+### 2. Create Expiration Banner (`src/components/layout/expiration-banner.tsx`)
+- [NEW] Create a new banner component that reads `subscription_end_date` from `BusinessContext`.
+- Logic: If `subscription_end_date` is within the next 10 days (and hasn't expired yet), display a prominent yellow/red banner at the top of the screen warning them of the impending suspension, along with a "Renew Now" button that routes to `/settings?tab=subscription`.
+
+### 3. Create Subscription Guard (`src/components/layout/subscription-guard.tsx`)
+- [NEW] Create a new layout wrapper component.
+- Logic:
+  - If `isSystemAdmin` is true, bypass the check.
+  - If the `pathname` starts with `/settings`, bypass the check (allow access so they can renew).
+  - Calculate the difference between `now` and `subscription_end_date`.
+  - If the subscription has expired AND the 7-day grace period has passed (i.e., expired more than 7 days ago), block access. Render a full-page "Account Suspended" screen instead of the dashboard children, with a button to go to Settings to renew.
+  - Otherwise, render `children`.
+
+### 4. Inject into Layout (`src/app/(dashboard)/layout.tsx`)
+- [MODIFY] Add `<ExpirationBanner />` directly below `<AnnouncementBanner />`.
+- [MODIFY] Wrap the `{children}` with `<SubscriptionGuard>`.
 
 ## Verification Plan
-1. Ensure the `AlertDialog` correctly blocks accidental purchases and shows accurate future dates.
-2. Verify the countdown timer ticks down accurately in real-time.
-3. Test the toggle switch to ensure it correctly saves the auto-renew preference to the Supabase backend.
-4. The user will run the SQL script to activate the background cron job for auto-renewals.
+1. Manually manipulate a test business's `subscription_end_date` in Supabase to be 5 days in the future and verify the banner appears.
+2. Change it to 3 days in the past and verify the banner disappears but the system still works (grace period).
+3. Change it to 10 days in the past and verify the system locks the user out, but allows them to navigate to Settings.
+4. Verify System Admins are not accidentally locked out.
