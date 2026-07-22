@@ -287,10 +287,10 @@ export function SidebarContent({ onLinkClick }: { onLinkClick?: () => void }) {
                                                     variant={isActive ? "secondary" : "ghost"}
                                                     className={cn(
                                                         "w-full justify-start h-9 transition-all duration-200",
-                                                        isActive ? "bg-primary/10 text-primary font-medium hover:bg-primary/15" : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                                                        isActive ? "bg-primary text-primary-foreground font-medium hover:bg-primary/90 shadow-sm" : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
                                                     )}
                                                 >
-                                                    <item.icon className={cn("mr-3 h-4 w-4", isActive ? "text-primary" : "opacity-70")} />
+                                                    <item.icon className={cn("mr-3 h-4 w-4", isActive ? "text-primary-foreground" : "opacity-70")} />
                                                     {item.title}
                                                 </Button>
                                             </Link>
