@@ -15,7 +15,7 @@ export interface SyncPreviewItem {
     accurateStatusName: string;
 }
 
-export async function previewShippingSyncAction(businessId: string): Promise<{ updates: SyncPreviewItem[], error?: string }> {
+export async function previewShippingSyncAction(businessId: string): Promise<{ updates: SyncPreviewItem[], debugInfo?: any, error?: string }> {
     try {
         const cookieStore = await cookies();
         const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://telkkknuygjejmqcvyev.supabase.co";
@@ -39,7 +39,7 @@ export async function previewShippingSyncAction(businessId: string): Promise<{ u
             .in("status", ["Prepared", "Hold To redeliver", "Shipped", "Returning"]);
 
         if (ordersError) throw new Error(ordersError.message);
-        if (!orders || orders.length === 0) return { updates: [] };
+        if (!orders || orders.length === 0) return { updates: [], debugInfo: { message: "No active orders found" } };
 
         // Fetch Business Telegraph config
         const { data: business } = await supabase
@@ -59,11 +59,13 @@ export async function previewShippingSyncAction(businessId: string): Promise<{ u
         const token = await loginAccurate(telegraphConfig.username, telegraphConfig.password);
         const accurateShipments = await fetchAccurateShipments(token, refNumbers);
         
-        // --- DEBUG LOGGING ---
-        await logIntegrationActivity(businessId, "Telegraph", "info", `[DEBUG] Fetched ${accurateShipments.length} matching shipments for ${refNumbers.length} active refNumbers.`, { 
+        const debugInfo = {
             activeRefNumbers: refNumbers,
             fetchedShipments: accurateShipments.map(s => ({ ref: s.refNumber, code: s.status?.code, name: s.status?.name }))
-        });
+        };
+
+        // --- DEBUG LOGGING ---
+        await logIntegrationActivity(businessId, "Telegraph", "info", `[DEBUG] Fetched ${accurateShipments.length} matching shipments for ${refNumbers.length} active refNumbers.`, debugInfo);
         // ---------------------
 
         const updates: SyncPreviewItem[] = [];
@@ -87,7 +89,7 @@ export async function previewShippingSyncAction(businessId: string): Promise<{ u
             }
         }
 
-        return { updates };
+        return { updates, debugInfo };
     } catch (error: any) {
         console.error("Preview sync error:", error);
         return { updates: [], error: error.message };

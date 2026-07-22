@@ -66,6 +66,10 @@ export function ShippingSyncModal({ businessId, onSyncComplete }: ShippingSyncMo
                 setError(result.error);
             } else {
                 setUpdates(result.updates);
+                console.log("=== TELEGRAPH SYNC DEBUG ===");
+                console.log("Updates Found:", result.updates);
+                console.log("Debug Info:", result.debugInfo);
+                console.log("==============================");
                 setFetched(true);
             }
         } catch (err: any) {
