@@ -16,6 +16,7 @@ import { toast } from "sonner";
 import { Loader2, Upload, Trash2, CheckCircle2 } from "lucide-react";
 import Image from "next/image";
 import { IntegrationLogs } from "@/components/settings/integration-logs";
+import { SubscriptionSettings } from "@/components/settings/subscription-settings";
 
 export default function SettingsPage() {
     const { activeBusiness, userRole } = useBusiness();
@@ -289,6 +290,7 @@ export default function SettingsPage() {
                     <TabsTrigger value="platforms">{t("Order Platforms")}</TabsTrigger>
                     <TabsTrigger value="tools">{t("Tools")}</TabsTrigger>
                     <TabsTrigger value="inventory">{t("Inventory")}</TabsTrigger>
+                    <TabsTrigger value="billing">{t("Billing & Subscription")}</TabsTrigger>
                     <TabsTrigger value="logs">{t("System Logs")}</TabsTrigger>
                 </TabsList>
                 
@@ -746,6 +748,11 @@ export default function SettingsPage() {
                 {/* System Logs Tab */}
                 <TabsContent value="logs" className="space-y-4">
                     <IntegrationLogs />
+                </TabsContent>
+
+                {/* Billing Tab */}
+                <TabsContent value="billing" className="space-y-4">
+                    <SubscriptionSettings businessId={activeBusiness.id} />
                 </TabsContent>
 
             </Tabs>

@@ -73,6 +73,15 @@ function AdminSidebar({ pathname }: { pathname: string }) {
                             Settings
                         </Button>
                     </Link>
+                    <Link href="/system-admin/payment-requests">
+                        <Button
+                            variant={pathname.startsWith("/system-admin/payment-requests") ? "secondary" : "ghost"}
+                            className="w-full justify-start"
+                        >
+                            <Banknote className="mr-2 h-4 w-4" />
+                            Payment Requests
+                        </Button>
+                    </Link>
                     <Link href="/system-admin/accounting">
                         <Button
                             variant={pathname.startsWith("/system-admin/accounting") ? "secondary" : "ghost"}
