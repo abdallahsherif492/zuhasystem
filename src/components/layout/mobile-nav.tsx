@@ -21,7 +21,7 @@ export function MobileNav() {
             <SheetContent side="left" className="p-0">
                 <div className="flex flex-col h-full py-6 px-4">
                     <div className="flex items-center justify-center mb-8">
-                        <div className="relative h-16 w-32">
+                        <div className="relative h-20 w-40">
                             <Image
                                 src="/logo.png"
                                 alt="eCommerx Logo"

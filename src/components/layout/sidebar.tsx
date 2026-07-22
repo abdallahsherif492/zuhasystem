@@ -31,7 +31,7 @@ export function Sidebar({ className }: SidebarProps) {
             <div className="space-y-4 py-4 flex-1 overflow-auto custom-scrollbar">
                 <div className="px-3 py-2">
                     <div className="flex items-center justify-center mb-8 px-2 flex-col gap-2">
-                        <div className="relative h-16 w-32 transition-transform hover:scale-105 duration-300">
+                        <div className="relative h-20 w-40 transition-transform hover:scale-105 duration-300">
                             <Image
                                 src={activeBusiness?.logo_url || "/logo.png"}
                                 alt={activeBusiness?.name || "eCommerx Logo"}
