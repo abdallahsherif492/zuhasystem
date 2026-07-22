@@ -41,7 +41,7 @@ export async function GET(request: Request) {
                     try {
                         const { updates, error: syncError } = await previewShippingSyncAction(business.id);
                         if (!syncError && updates && updates.length > 0) {
-                            await applyShippingUpdatesAction(updates, business.id, "telegraph");
+                            await applyShippingUpdatesAction(updates, business.id, telegraphConfig.shippingCompanyId);
                             logIntegrationActivity(business.id, "Auto-Sync", "info", `Auto-Synced Telegraph: Found ${updates.length} updates.`);
                         }
                     } catch (e: any) {

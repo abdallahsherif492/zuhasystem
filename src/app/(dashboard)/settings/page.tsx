@@ -39,7 +39,7 @@ export default function SettingsPage() {
     // Integrations State
     const [integrations, setIntegrations] = useState<any>({
         shipping: {
-            telegraph: { enabled: false, username: "", password: "", autoSync: false, autoSyncIntervalMinutes: 15 }
+            telegraph: { enabled: false, username: "", password: "", autoSync: false, autoSyncIntervalMinutes: 15, shippingCompanyId: "" }
         },
         platforms: {
             easyorders: { enabled: false, apiKey: "", webhookToken: "" }
@@ -48,6 +48,8 @@ export default function SettingsPage() {
             vrobo: { enabled: false, apiKey: "", merchantId: "", autoSync: false, autoSyncIntervalMinutes: 60 }
         }
     });
+
+    const [shippingCompanies, setShippingCompanies] = useState<any[]>([]);
 
     useEffect(() => {
         if (activeBusiness) {
@@ -74,7 +76,8 @@ export default function SettingsPage() {
                         username: savedIntegrations.shipping?.telegraph?.username || "",
                         password: savedIntegrations.shipping?.telegraph?.password || "",
                         autoSync: savedIntegrations.shipping?.telegraph?.autoSync || false,
-                        autoSyncIntervalMinutes: savedIntegrations.shipping?.telegraph?.autoSyncIntervalMinutes || 15
+                        autoSyncIntervalMinutes: savedIntegrations.shipping?.telegraph?.autoSyncIntervalMinutes || 15,
+                        shippingCompanyId: savedIntegrations.shipping?.telegraph?.shippingCompanyId || ""
                     }
                 },
                 platforms: {
@@ -94,6 +97,19 @@ export default function SettingsPage() {
                     }
                 }
             });
+        }
+    }, [activeBusiness]);
+
+    useEffect(() => {
+        if (activeBusiness) {
+            const fetchShippingCompanies = async () => {
+                const { data } = await supabase
+                    .from("shipping_companies")
+                    .select("id, name")
+                    .eq("business_id", activeBusiness.id);
+                if (data) setShippingCompanies(data);
+            };
+            fetchShippingCompanies();
         }
     }, [activeBusiness]);
 
@@ -480,6 +496,26 @@ export default function SettingsPage() {
                                                 </p>
                                             </div>
                                         )}
+                                        
+                                        <div className="space-y-2">
+                                            <Label>{t("Linked Shipping Company")}</Label>
+                                            <Select
+                                                value={integrations.shipping.telegraph.shippingCompanyId}
+                                                onValueChange={(val) => handleIntegrationChange('shipping', 'telegraph', 'shippingCompanyId', val)}
+                                            >
+                                                <SelectTrigger>
+                                                    <SelectValue placeholder={t("Select a shipping company")} />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    {shippingCompanies.map(sc => (
+                                                        <SelectItem key={sc.id} value={sc.id}>{sc.name}</SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
+                                            <p className="text-xs text-muted-foreground">
+                                                {t("Select the system shipping company ID that will be applied to orders when auto-sync marks them as shipped.")}
+                                            </p>
+                                        </div>
                                     </div>
                                 )}
                             </div>
