@@ -21,7 +21,7 @@ import {
 } from "@/components/ui/table";
 import { RefreshCw, AlertCircle, CheckCircle2 } from "lucide-react";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { previewShippingSyncAction, applyShippingUpdatesAction, SyncPreviewItem } from "@/app/(dashboard)/orders/sync-actions";
+import { previewShippingSyncAction, applyShippingUpdatesAction, SyncPreviewItem, debugTelegraphSearch } from "@/app/(dashboard)/orders/sync-actions";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -43,6 +43,24 @@ export function ShippingSyncModal({ businessId, onSyncComplete }: ShippingSyncMo
     const [error, setError] = useState<string | null>(null);
     const [shippingCompanies, setShippingCompanies] = useState<any[]>([]);
     const [selectedCompanyId, setSelectedCompanyId] = useState("");
+    const [debugRef, setDebugRef] = useState("");
+    const [searchingDebug, setSearchingDebug] = useState(false);
+
+    const handleDebugSearch = async () => {
+        if (!debugRef.trim()) return;
+        setSearchingDebug(true);
+        try {
+            console.log(`=== DEBUG SEARCH TELEGRAPH FOR ${debugRef} ===`);
+            const res = await debugTelegraphSearch(businessId, debugRef.trim());
+            console.log("Telegraph Response:", res);
+            toast.success("Debug output logged to console");
+        } catch (e: any) {
+            console.error("Debug search error:", e);
+            toast.error(e.message);
+        } finally {
+            setSearchingDebug(false);
+        }
+    };
 
     const handleOpen = async (isOpen: boolean) => {
         setOpen(isOpen);
@@ -234,18 +252,32 @@ export function ShippingSyncModal({ businessId, onSyncComplete }: ShippingSyncMo
                     ) : null}
                 </div>
 
-                <DialogFooter className="mt-4">
-                    <Button variant="outline" onClick={() => setOpen(false)} disabled={applying}>
-                        {t("Cancel")}
-                    </Button>
-                    <Button 
-                        onClick={handleApply} 
-                        disabled={loading || applying || (!loading && fetched && updates.length === 0)}
-                        className="gap-2"
-                    >
-                        {applying && <RefreshCw className="h-3 w-3 animate-spin" />}
-                        {t("Apply Updates")} ({updates.length})
-                    </Button>
+                <DialogFooter className="mt-4 flex flex-wrap gap-2 items-center justify-between sm:justify-between w-full">
+                    <div className="flex items-center gap-2">
+                        <input 
+                            type="text" 
+                            placeholder="Debug RefNumber" 
+                            className="flex h-9 w-32 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                            value={debugRef}
+                            onChange={(e) => setDebugRef(e.target.value)}
+                        />
+                        <Button variant="secondary" size="sm" onClick={handleDebugSearch} disabled={searchingDebug}>
+                            {searchingDebug ? "..." : "Debug Search"}
+                        </Button>
+                    </div>
+                    <div className="flex gap-2">
+                        <Button variant="outline" onClick={() => setOpen(false)} disabled={applying}>
+                            {t("Cancel")}
+                        </Button>
+                        <Button 
+                            onClick={handleApply} 
+                            disabled={loading || applying || (!loading && fetched && updates.length === 0)}
+                            className="gap-2"
+                        >
+                            {applying && <RefreshCw className="h-3 w-3 animate-spin" />}
+                            {t("Apply Updates")} ({updates.length})
+                        </Button>
+                    </div>
                 </DialogFooter>
             </DialogContent>
         </Dialog>

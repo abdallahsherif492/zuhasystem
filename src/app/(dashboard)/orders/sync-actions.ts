@@ -148,3 +148,62 @@ export async function applyShippingUpdatesAction(updates: SyncPreviewItem[], bus
         return { success: false, error: error.message };
     }
 }
+
+export async function debugTelegraphSearch(businessId: string, refNumber: string): Promise<any> {
+    try {
+        const cookieStore = await cookies();
+        const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://telkkknuygjejmqcvyev.supabase.co";
+        const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
+        
+        const supabase = createServerClient(
+            supabaseUrl,
+            supabaseKey,
+            {
+                cookies: {
+                    get(name: string) { return cookieStore.get(name)?.value; },
+                },
+            }
+        );
+
+        const { data: business } = await supabase.from("businesses").select("theme_config").eq("id", businessId).single();
+        const telegraphConfig = business?.theme_config?.integrations?.shipping?.telegraph;
+        
+        if (!telegraphConfig || !telegraphConfig.enabled) {
+            return { error: "Telegraph not enabled" };
+        }
+
+        const token = await loginAccurate(telegraphConfig.username, telegraphConfig.password);
+        
+        const query = `
+            query {
+                listShipments(first: 10, search: "${refNumber}") {
+                    data {
+                        id
+                        code
+                        refNumber
+                        status {
+                            id
+                            code
+                            name
+                        }
+                    }
+                }
+            }
+        `;
+        
+        const res = await fetch("https://system.telegraphex.com:8443/graphql", {
+            method: "POST",
+            headers: { 
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${token}`
+            },
+            body: JSON.stringify({ query }),
+            cache: "no-store"
+        });
+        
+        const json = await res.json();
+        return { data: json };
+    } catch (error: any) {
+        return { error: error.message };
+    }
+}
