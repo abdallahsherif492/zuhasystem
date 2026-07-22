@@ -190,7 +190,6 @@ export function SidebarContent({ onLinkClick }: { onLinkClick?: () => void }) {
                         { title: t("Leave Requests"), href: "/team/requests", icon: Inbox },
                     ]
                 },
-                { title: t("Users & Permissions"), href: "/users", icon: ShieldCheck, systemAdminOnly: true },
                 { title: t("Settings"), href: "/settings", icon: Settings, adminOnly: true },
             ]
         }
