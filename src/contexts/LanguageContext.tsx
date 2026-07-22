@@ -26,11 +26,14 @@ export const LanguageProvider = ({ children }: { children: React.ReactNode }) =>
   const { activeBusiness } = useBusiness();
   const [language, setLanguage] = useState<Language>("en");
 
-  useEffect(() => {
-    if (activeBusiness?.theme_config?.language) {
-      setLanguage(activeBusiness.theme_config.language as Language);
-    }
-  }, [activeBusiness]);
+    useEffect(() => {
+        const currentLang = activeBusiness?.theme_config?.language as Language || "en";
+        setLanguage(currentLang);
+        
+        // Update document dir and lang for actual RTL/LTR layout
+        document.documentElement.dir = currentLang === "ar" ? "rtl" : "ltr";
+        document.documentElement.lang = currentLang;
+    }, [activeBusiness]);
 
   const t = (key: string): string => {
     const dict = dictionaries[language];

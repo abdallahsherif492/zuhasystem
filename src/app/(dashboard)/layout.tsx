@@ -1,5 +1,4 @@
 import { Sidebar } from "@/components/layout/sidebar";
-import { ModeToggle } from "@/components/layout/theme-toggle";
 import { MobileNav } from "@/components/layout/mobile-nav";
 import { BusinessSwitcher } from "@/components/layout/business-switcher";
 import { AnnouncementBanner } from "@/components/layout/announcement-banner";
@@ -20,7 +19,6 @@ export default function DashboardLayout({
           <MobileNav />
           <div className="w-full flex justify-end items-center gap-4">
             <BusinessSwitcher />
-            <ModeToggle />
           </div>
         </header>
         <main className="flex flex-1 flex-col gap-4 p-4 lg:gap-6 lg:p-6">
