@@ -82,9 +82,9 @@ export function SubscriptionSettings({ businessId }: { businessId: string }) {
             const { data } = await supabase.from('payment_requests').select('*').eq('business_id', businessId).order('created_at', { ascending: false }).limit(5)
             if (data) setRequests(data)
             
-        } catch (error) {
+        } catch (error: any) {
             console.error('Topup error:', error)
-            toast.error('Failed to submit top-up request')
+            toast.error(error.message || 'Failed to submit top-up request')
         } finally {
             setUploading(false)
         }
