@@ -34,10 +34,10 @@ export function ItemsSummary({ orders }: SummaryProps) {
     if (summaryList.length === 0) return null;
 
     return (
-        <Card className="bg-blue-50/50 border-blue-100 mb-6">
+        <Card className="bg-primary/10 border-primary/20 mb-6">
             <CardHeader className="pb-2 flex flex-row items-center justify-between">
-                <CardTitle className="text-lg text-blue-900">Required Items Summary (Pick List)</CardTitle>
-                <div className="text-lg font-bold text-blue-900">
+                <CardTitle className="text-lg text-primary">Required Items Summary (Pick List)</CardTitle>
+                <div className="text-lg font-bold text-primary">
                     Total Cost: {formatCurrency(grandTotalCost)}
                 </div>
             </CardHeader>
@@ -64,10 +64,10 @@ export function ItemsSummary({ orders }: SummaryProps) {
                                     <TableRow key={idx}>
                                         <TableCell className="font-medium">{item.productName}</TableCell>
                                         <TableCell>{item.variantTitle}</TableCell>
-                                        <TableCell className="text-right font-bold text-blue-600">
+                                        <TableCell className="text-right font-bold text-primary">
                                             {item.totalQuantity}
                                         </TableCell>
-                                        <TableCell className="text-right text-gray-600">
+                                        <TableCell className="text-right text-muted-foreground">
                                             {item.stockQty}
                                         </TableCell>
                                         <TableCell className="text-right">

@@ -352,7 +352,7 @@ export default function DamagesPage() {
                                                 <TableCell>
                                                     <div className="font-medium">{d.variants?.products?.name}</div>
                                                     <div className="text-xs text-muted-foreground">{d.variants?.title}</div>
-                                                    {d.notes && <div className="text-xs italic text-gray-500 mt-1">{t("Note")}: {d.notes}</div>}
+                                                    {d.notes && <div className="text-xs italic text-muted-foreground mt-1">{t("Note")}: {d.notes}</div>}
                                                 </TableCell>
                                                 <TableCell className="text-right">{d.quantity}</TableCell>
                                                 <TableCell className="text-right text-red-600">{formatCurrency(d.total_loss)}</TableCell>

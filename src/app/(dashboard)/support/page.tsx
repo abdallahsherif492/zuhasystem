@@ -75,7 +75,7 @@ export default function SupportPage() {
     const getStatusBadge = (status: string) => {
         switch (status) {
             case "open":
-                return <Badge variant="default" className="bg-blue-500">Open</Badge>;
+                return <Badge variant="default" className="bg-primary">Open</Badge>;
             case "in_progress":
                 return <Badge variant="secondary" className="bg-yellow-500 text-white hover:bg-yellow-600">In Progress</Badge>;
             case "resolved":

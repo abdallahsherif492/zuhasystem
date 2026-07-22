@@ -190,8 +190,8 @@ export function RestockPredictor() {
 
     return (
         <div className="space-y-6 mt-6">
-            <div className="flex items-center gap-2 bg-blue-50 text-blue-800 p-4 rounded-md border border-blue-200">
-                <AlertCircle className="h-5 w-5 text-blue-600" />
+            <div className="flex items-center gap-2 bg-primary/10 text-primary p-4 rounded-md border border-primary/20">
+                <AlertCircle className="h-5 w-5 text-primary" />
                 <p className="text-sm">
                     Showing predictions based on the last <strong>{historyDays} days</strong> of sales, covering demand for the next <strong>{coverageDays} days</strong>.
                 </p>

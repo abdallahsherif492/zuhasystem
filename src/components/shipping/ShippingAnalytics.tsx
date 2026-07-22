@@ -182,7 +182,7 @@ export function ShippingAnalytics() {
                                                 <span className="text-xs text-muted-foreground">{getPercentage(m.shipped_count, m.total_orders)}</span>
                                             </div>
                                         </TableCell>
-                                        <TableCell className="text-right font-mono text-blue-600">
+                                        <TableCell className="text-right font-mono text-primary">
                                             {formatCurrency(m.shipped_value)}
                                         </TableCell>
                                         <TableCell className="text-right">

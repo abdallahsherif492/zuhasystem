@@ -52,7 +52,7 @@ export default async function PaymentRequestsPage() {
                   <TableCell className="capitalize">{req.payment_method}</TableCell>
                   <TableCell>{req.sender_details}</TableCell>
                   <TableCell>
-                    <a href={req.receipt_url} target="_blank" rel="noreferrer" className="text-blue-500 hover:underline">
+                    <a href={req.receipt_url} target="_blank" rel="noreferrer" className="text-primary hover:underline">
                       View Image
                     </a>
                   </TableCell>

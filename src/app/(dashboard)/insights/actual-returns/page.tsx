@@ -252,20 +252,20 @@ function ActualReturnsContent() {
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between pb-2">
                         <CardTitle className="text-sm font-medium">Ads Expenses</CardTitle>
-                        <TrendingDown className="h-4 w-4 text-blue-500" />
+                        <TrendingDown className="h-4 w-4 text-primary" />
                     </CardHeader>
                     <CardContent>
-                        <div className="text-2xl font-bold text-blue-500">-{formatCurrency(metrics.adsExpenses)}</div>
+                        <div className="text-2xl font-bold text-primary">-{formatCurrency(metrics.adsExpenses)}</div>
                         <p className="text-xs text-muted-foreground mt-1">Marketing spend</p>
                     </CardContent>
                 </Card>
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between pb-2">
                         <CardTitle className="text-sm font-medium">Courier Cost</CardTitle>
-                        <Truck className="h-4 w-4 text-purple-500" />
+                        <Truck className="h-4 w-4 text-primary" />
                     </CardHeader>
                     <CardContent>
-                        <div className="text-2xl font-bold text-purple-500">-{formatCurrency(metrics.courierShippingCost)}</div>
+                        <div className="text-2xl font-bold text-primary">-{formatCurrency(metrics.courierShippingCost)}</div>
                         <p className="text-xs text-muted-foreground mt-1">Delivery fees on store</p>
                     </CardContent>
                 </Card>
@@ -368,11 +368,11 @@ function ActualReturnsContent() {
                         </div>
                         <div className="flex justify-between items-center py-2 border-b">
                             <span className="font-medium text-muted-foreground">- Ad Spends</span>
-                            <span className="text-blue-500 font-semibold">-{formatCurrency(metrics.adsExpenses)}</span>
+                            <span className="text-primary font-semibold">-{formatCurrency(metrics.adsExpenses)}</span>
                         </div>
                         <div className="flex justify-between items-center py-2 border-b">
                             <span className="font-medium text-muted-foreground">- Courier Fees (Actual Cost)</span>
-                            <span className="text-purple-500 font-semibold">-{formatCurrency(metrics.courierShippingCost)}</span>
+                            <span className="text-primary font-semibold">-{formatCurrency(metrics.courierShippingCost)}</span>
                         </div>
                         <div className="flex justify-between items-center py-4 bg-primary/5 rounded-lg px-4 mt-4">
                             <span className="font-bold text-lg text-primary">Actual Net Profit</span>

@@ -142,22 +142,22 @@ export default function InvoicePage({ params }: { params: Promise<{ id: string }
                             />
                         </div>
                         <h1 className="text-2xl font-bold">Zuha System</h1>
-                        <p className="text-sm text-gray-500">Cairo, Egypt</p>
-                        <p className="text-sm text-gray-500">+20 100 000 0000</p>
+                        <p className="text-sm text-muted-foreground">Cairo, Egypt</p>
+                        <p className="text-sm text-muted-foreground">+20 100 000 0000</p>
                     </div>
                     <div className="text-right">
-                        <h2 className="text-3xl font-bold text-gray-800 uppercase tracking-wide">Invoice</h2>
+                        <h2 className="text-3xl font-bold text-foreground uppercase tracking-wide">Invoice</h2>
                         <div className="flex justify-end my-2">
                             <Barcode value={order.id.slice(0, 8)} width={1.5} height={40} fontSize={12} />
                         </div>
-                        <p className="text-gray-500 mt-2">Order #: {order.id.slice(0, 8)}</p>
-                        <p className="text-gray-500">Date: {format(new Date(order.created_at), "dd MMM yyyy")}</p>
+                        <p className="text-muted-foreground mt-2">Order #: {order.id.slice(0, 8)}</p>
+                        <p className="text-muted-foreground">Date: {format(new Date(order.created_at), "dd MMM yyyy")}</p>
                     </div>
                 </div>
 
                 {/* Customer & Shipping Info */}
                 <div className="mb-8 border-t border-b py-4">
-                    <h3 className="font-semibold text-gray-700 mb-2 uppercase text-sm">Bill To:</h3>
+                    <h3 className="font-semibold text-foreground mb-2 uppercase text-sm">Bill To:</h3>
                     <p className="text-lg font-bold">{order.customer_info.name}</p>
                     <p>{order.customer_info.phone}</p>
                     <p className="whitespace-pre-wrap">{order.customer_info.address}</p>
@@ -168,15 +168,15 @@ export default function InvoicePage({ params }: { params: Promise<{ id: string }
                 <table className="w-full mb-8">
                     <thead>
                         <tr className="border-b-2 border-gray-800">
-                            <th className="text-left py-2 font-bold text-gray-700">Item</th>
-                            <th className="text-center py-2 font-bold text-gray-700">Qty</th>
-                            <th className="text-right py-2 font-bold text-gray-700">Price</th>
-                            <th className="text-right py-2 font-bold text-gray-700">Total</th>
+                            <th className="text-left py-2 font-bold text-foreground">Item</th>
+                            <th className="text-center py-2 font-bold text-foreground">Qty</th>
+                            <th className="text-right py-2 font-bold text-foreground">Price</th>
+                            <th className="text-right py-2 font-bold text-foreground">Total</th>
                         </tr>
                     </thead>
                     <tbody>
                         {order.items.map((item, index) => (
-                            <tr key={index} className="border-b border-gray-200">
+                            <tr key={index} className="border-b border-border">
                                 <td className="py-2">
                                     <p className="font-semibold">{item.variant?.product?.name || 'Unknown Product'}</p>
                                     <p className="text-sm text-muted-foreground">{item.variant?.title || 'Unknown'}</p>
@@ -193,11 +193,11 @@ export default function InvoicePage({ params }: { params: Promise<{ id: string }
                 <div className="flex justify-end">
                     <div className="w-1/2">
                         <div className="flex justify-between py-2 border-b">
-                            <span className="font-semibold text-gray-600">Subtotal:</span>
+                            <span className="font-semibold text-muted-foreground">Subtotal:</span>
                             <span>{order.subtotal.toFixed(2)} EGP</span>
                         </div>
                         <div className="flex justify-between py-2 border-b">
-                            <span className="font-semibold text-gray-600">Shipping:</span>
+                            <span className="font-semibold text-muted-foreground">Shipping:</span>
                             <span>{order.shipping_cost.toFixed(2)} EGP</span>
                         </div>
                         {order.discount > 0 && (
@@ -216,7 +216,7 @@ export default function InvoicePage({ params }: { params: Promise<{ id: string }
                                     <span className="font-semibold">Paid ({order.payment_status}):</span>
                                     <span>{order.payment_status === "Paid" ? order.total_amount.toFixed(2) : order.paid_amount?.toFixed(2)} EGP</span>
                                 </div>
-                                <div className="flex justify-between py-4 border-b-2 border-gray-800 bg-gray-50 px-2">
+                                <div className="flex justify-between py-4 border-b-2 border-gray-800 bg-secondary px-2">
                                     <span className="font-bold text-xl">Balance Due:</span>
                                     <span className="font-bold text-xl">
                                         {(order.payment_status === "Paid" ? 0 : Math.max(0, order.total_amount - (order.paid_amount || 0))).toFixed(2)} EGP
@@ -225,7 +225,7 @@ export default function InvoicePage({ params }: { params: Promise<{ id: string }
                             </>
                         )}
                         {order.payment_status === "Not Paid" && (
-                            <div className="flex justify-between py-4 border-b-2 border-gray-800 bg-gray-50 px-2">
+                            <div className="flex justify-between py-4 border-b-2 border-gray-800 bg-secondary px-2">
                                 <span className="font-bold text-xl">Balance Due:</span>
                                 <span className="font-bold text-xl">{order.total_amount.toFixed(2)} EGP</span>
                             </div>
@@ -234,7 +234,7 @@ export default function InvoicePage({ params }: { params: Promise<{ id: string }
                 </div>
 
                 {/* Footer */}
-                <div className="mt-12 text-center text-sm text-gray-500">
+                <div className="mt-12 text-center text-sm text-muted-foreground">
                     <p>Thank you for your business!</p>
                 </div>
             </div>

@@ -206,7 +206,7 @@ export function AdvancedSearch() {
                                                 className="flex items-center gap-3 p-2 hover:bg-muted rounded-md cursor-pointer transition-colors"
                                                 onClick={() => setSelectedItem({ type: 'order', data: order })}
                                             >
-                                                <ShoppingCart className="h-4 w-4 text-blue-500" />
+                                                <ShoppingCart className="h-4 w-4 text-primary" />
                                                 <div className="flex-1">
                                                     <div className="font-medium">Order #{order.id.slice(0, 8)}</div>
                                                     <div className="text-xs text-muted-foreground">

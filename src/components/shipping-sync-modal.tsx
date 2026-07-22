@@ -214,7 +214,7 @@ export function ShippingSyncModal({ businessId, onSyncComplete }: ShippingSyncMo
                                                     <Badge variant="outline" className="text-xs">{t(item.oldStatus)}</Badge>
                                                 </TableCell>
                                                 <TableCell>
-                                                    <Badge className="bg-blue-100 text-blue-800 hover:bg-blue-100 border-none text-xs">
+                                                    <Badge className="bg-primary/20 text-primary hover:bg-primary/20 border-none text-xs">
                                                         {t(item.newStatus)}
                                                     </Badge>
                                                 </TableCell>
@@ -225,16 +225,16 @@ export function ShippingSyncModal({ businessId, onSyncComplete }: ShippingSyncMo
                             </div>
                             
                             {hasShippedUpdate && (
-                                <div className="bg-blue-50 border border-blue-100 p-4 rounded-md space-y-2 mt-2">
-                                    <div className="flex items-center gap-2 text-blue-800">
+                                <div className="bg-primary/10 border border-primary/20 p-4 rounded-md space-y-2 mt-2">
+                                    <div className="flex items-center gap-2 text-primary">
                                         <AlertCircle className="h-4 w-4" />
                                         <h4 className="text-sm font-semibold">{t("Shipping Company Required")}</h4>
                                     </div>
-                                    <p className="text-xs text-blue-700">
+                                    <p className="text-xs text-primary">
                                         {t("Some orders are transitioning to Shipped. Please select the shipping company to assign them to.")}
                                     </p>
                                     <div className="pt-2 max-w-sm">
-                                        <Label className="text-xs mb-1 block text-blue-900">{t("Shipping Company")}</Label>
+                                        <Label className="text-xs mb-1 block text-primary">{t("Shipping Company")}</Label>
                                         <Select value={selectedCompanyId} onValueChange={setSelectedCompanyId}>
                                             <SelectTrigger className="bg-white">
                                                 <SelectValue placeholder={t("Select a company")} />

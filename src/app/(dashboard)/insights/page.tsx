@@ -379,7 +379,7 @@ function InsightsContent() {
                     {/* SECTION 2: ADS INSIGHTS */}
                     <div className="space-y-4">
                         <h2 className="text-xl font-semibold flex items-center gap-2">
-                            <Megaphone className="h-5 w-5 text-blue-600" />
+                            <Megaphone className="h-5 w-5 text-primary" />
                             Ads Insights
                         </h2>
                         <div className="grid grid-cols-2 lg:grid-cols-6 gap-4">
@@ -471,7 +471,7 @@ function InsightsContent() {
                     {/* SECTION 3: ORDERS INSIGHTS */}
                     <div className="space-y-4">
                         <h2 className="text-xl font-semibold flex items-center gap-2">
-                            <Package className="h-5 w-5 text-purple-600" />
+                            <Package className="h-5 w-5 text-primary" />
                             Orders Insights
                         </h2>
                         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">

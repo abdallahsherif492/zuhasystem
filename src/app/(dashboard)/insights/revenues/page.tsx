@@ -191,10 +191,10 @@ function RevenuesContent() {
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between pb-2">
                         <CardTitle className="text-sm font-medium">Orders Collection</CardTitle>
-                        <PackageCheck className="h-4 w-4 text-blue-500" />
+                        <PackageCheck className="h-4 w-4 text-primary" />
                     </CardHeader>
                     <CardContent>
-                        <div className="text-2xl font-bold text-blue-500">{formatCurrency(collectionsValue)}</div>
+                        <div className="text-2xl font-bold text-primary">{formatCurrency(collectionsValue)}</div>
                         <p className="text-xs text-muted-foreground mt-1">
                             {collectionsCount} transactions ({colValPct.toFixed(1)}% of total)
                         </p>
@@ -308,7 +308,7 @@ function RevenuesContent() {
                         </div>
                         <div className="flex justify-between items-center py-2 border-b">
                             <span className="font-medium text-muted-foreground">+ Orders Collection Revenue ({collectionsCount}x)</span>
-                            <span className="text-blue-500 font-semibold">{formatCurrency(collectionsValue)}</span>
+                            <span className="text-primary font-semibold">{formatCurrency(collectionsValue)}</span>
                         </div>
                         <div className="flex justify-between items-center py-2 border-b">
                             <span className="font-medium text-muted-foreground">+ Other Revenues ({othersCount}x)</span>

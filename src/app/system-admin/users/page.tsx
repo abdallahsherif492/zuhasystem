@@ -311,7 +311,7 @@ export default function PlatformUsersDirectory() {
                                                         <Button 
                                                             variant="ghost" 
                                                             size="sm" 
-                                                            className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                                                            className="text-primary hover:text-primary hover:bg-primary/10"
                                                             onClick={() => handleOpenQuota(user.user_email, user.id)}
                                                             title="Edit Quota"
                                                         >

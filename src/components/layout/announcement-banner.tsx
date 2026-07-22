@@ -19,7 +19,7 @@ export function AnnouncementBanner() {
 
     if (!platformSettings.announcement_active) return null;
 
-    let bgColor = "bg-blue-500 text-white";
+    let bgColor = "bg-primary text-white";
     let Icon = Info;
 
     switch (platformSettings.announcement_type) {

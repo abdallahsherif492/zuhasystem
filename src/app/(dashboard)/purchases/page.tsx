@@ -264,11 +264,11 @@ export default function PurchasesPage() {
                                     </CardHeader>
                                     <CardContent className="flex-1 pt-4">
                                         <div className="mb-4 space-y-1 text-sm">
-                                            <div className="flex items-center gap-2 text-gray-700">
+                                            <div className="flex items-center gap-2 text-foreground">
                                                 <User className="h-4 w-4" />
                                                 <span className="font-semibold">{order.customer_info?.name || "Unknown"}</span>
                                             </div>
-                                            <div className="flex items-center gap-2 text-gray-500">
+                                            <div className="flex items-center gap-2 text-muted-foreground">
                                                 <MapPin className="h-4 w-4" />
                                                 <span>{order.customer_info?.governorate || "No Location"}</span>
                                             </div>
@@ -292,7 +292,7 @@ export default function PurchasesPage() {
                                                         />
                                                         <label
                                                             htmlFor={`item-${order.id}-${idx}`}
-                                                            className={`text-sm leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 flex-1 cursor-pointer ${checked.has(idx) ? 'line-through text-gray-400' : 'font-medium'}`}
+                                                            className={`text-sm leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 flex-1 cursor-pointer ${checked.has(idx) ? 'line-through text-muted-foreground' : 'font-medium'}`}
                                                         >
                                                             <div className="flex justify-between w-full">
                                                                 <span>{item.variant?.product?.name || "Unknown Product"}</span>

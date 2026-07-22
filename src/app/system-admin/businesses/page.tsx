@@ -151,7 +151,7 @@ export default function BusinessesManagement() {
                                                             Open Dashboard
                                                         </Button>
                                                         {biz.subscription_status === "trialing" || biz.subscription_status === "trial" ? (
-                                                            <Button size="sm" variant="outline" className="text-blue-600 border-blue-200 hover:bg-blue-50" onClick={() => extendTrial(biz)}>
+                                                            <Button size="sm" variant="outline" className="text-primary border-primary/20 hover:bg-primary/10" onClick={() => extendTrial(biz)}>
                                                                 +7 Days Trial
                                                             </Button>
                                                         ) : null}

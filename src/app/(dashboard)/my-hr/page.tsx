@@ -403,24 +403,24 @@ export default function MyHRPage() {
 
             {/* Shift Info */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-                <Card className="bg-blue-50/50 dark:bg-blue-900/10 border-blue-100 dark:border-blue-900/30">
+                <Card className="bg-primary/10 dark:bg-primary border-primary/20 dark:border-primary/30">
                     <CardHeader className="py-4">
-                        <CardTitle className="text-sm text-blue-700 dark:text-blue-300 flex items-center gap-2">
+                        <CardTitle className="text-sm text-primary dark:text-blue-300 flex items-center gap-2">
                             <Clock className="h-4 w-4" /> Shift Start
                         </CardTitle>
                     </CardHeader>
                     <CardContent>
-                        <p className="text-2xl font-mono font-bold text-blue-900 dark:text-blue-100">{formatTime12(shiftStart)}</p>
+                        <p className="text-2xl font-mono font-bold text-primary dark:text-blue-100">{formatTime12(shiftStart)}</p>
                     </CardContent>
                 </Card>
-                <Card className="bg-indigo-50/50 dark:bg-indigo-900/10 border-indigo-100 dark:border-indigo-900/30">
+                <Card className="bg-primary/10 dark:bg-primary border-primary/20 dark:border-primary/30">
                     <CardHeader className="py-4">
-                        <CardTitle className="text-sm text-indigo-700 dark:text-indigo-300 flex items-center gap-2">
+                        <CardTitle className="text-sm text-primary dark:text-indigo-300 flex items-center gap-2">
                             <LogOut className="h-4 w-4" /> Shift End
                         </CardTitle>
                     </CardHeader>
                     <CardContent>
-                        <p className="text-2xl font-mono font-bold text-indigo-900 dark:text-indigo-100">{formatTime12(shiftEnd)}</p>
+                        <p className="text-2xl font-mono font-bold text-primary dark:text-indigo-100">{formatTime12(shiftEnd)}</p>
                     </CardContent>
                 </Card>
                 <Card className="bg-orange-50/50 dark:bg-orange-900/10 border-orange-100 dark:border-orange-900/30">
@@ -440,13 +440,13 @@ export default function MyHRPage() {
             </div>
 
             {/* Attendance Section */}
-            <Card className="border-indigo-100 dark:border-indigo-900/50 shadow-sm overflow-hidden relative">
+            <Card className="border-primary/20 dark:border-primary/50 shadow-sm overflow-hidden relative">
                 <div className="absolute top-0 right-0 p-12 opacity-5 pointer-events-none">
                     <Clock className="w-64 h-64" />
                 </div>
                 <CardHeader>
                     <CardTitle className="flex items-center gap-2">
-                        <Clock className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
+                        <Clock className="h-5 w-5 text-primary dark:text-primary" />
                         Today's Attendance
                     </CardTitle>
                     <CardDescription>Record your daily clock in and clock out times.</CardDescription>

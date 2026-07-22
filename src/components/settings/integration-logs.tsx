@@ -73,7 +73,7 @@ export function IntegrationLogs() {
                                         <span className="font-semibold">{log.integration_name}</span>
                                         {log.status === 'success' && <Badge className="bg-green-100 text-green-800 border-green-200">Success</Badge>}
                                         {log.status === 'error' && <Badge className="bg-red-100 text-red-800 border-red-200">Error</Badge>}
-                                        {log.status === 'info' && <Badge className="bg-blue-100 text-blue-800 border-blue-200">Info</Badge>}
+                                        {log.status === 'info' && <Badge className="bg-primary/20 text-primary border-primary/20">Info</Badge>}
                                     </div>
                                     <p className="text-sm text-muted-foreground">{log.message}</p>
                                     

@@ -119,24 +119,24 @@ export default async function MarketingLandingPage() {
             <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-8">
               {/* Feature 1 */}
               <div className="flex flex-col items-center text-center p-6 border rounded-2xl bg-card shadow-sm hover:shadow-md transition-shadow">
-                <div className="p-3 bg-indigo-100 dark:bg-indigo-900/30 rounded-xl mb-4">
-                  <Package className="h-6 w-6 text-indigo-600 dark:text-indigo-400" />
+                <div className="p-3 bg-primary/20 dark:bg-primary rounded-xl mb-4">
+                  <Package className="h-6 w-6 text-primary dark:text-primary" />
                 </div>
                 <h3 className="text-xl font-bold mb-2">Inventory Management</h3>
                 <p className="text-muted-foreground">Track stock levels across multiple locations in real-time and prevent overselling.</p>
               </div>
               {/* Feature 2 */}
               <div className="flex flex-col items-center text-center p-6 border rounded-2xl bg-card shadow-sm hover:shadow-md transition-shadow">
-                <div className="p-3 bg-purple-100 dark:bg-purple-900/30 rounded-xl mb-4">
-                  <TrendingUp className="h-6 w-6 text-purple-600 dark:text-purple-400" />
+                <div className="p-3 bg-primary/20 dark:bg-primary rounded-xl mb-4">
+                  <TrendingUp className="h-6 w-6 text-primary dark:text-primary" />
                 </div>
                 <h3 className="text-xl font-bold mb-2">Profit Analytics</h3>
                 <p className="text-muted-foreground">Understand your true profitability with built-in accounting and ad expense tracking.</p>
               </div>
               {/* Feature 3 */}
               <div className="flex flex-col items-center text-center p-6 border rounded-2xl bg-card shadow-sm hover:shadow-md transition-shadow">
-                <div className="p-3 bg-blue-100 dark:bg-blue-900/30 rounded-xl mb-4">
-                  <Users className="h-6 w-6 text-blue-600 dark:text-blue-400" />
+                <div className="p-3 bg-primary/20 dark:bg-primary rounded-xl mb-4">
+                  <Users className="h-6 w-6 text-primary dark:text-primary" />
                 </div>
                 <h3 className="text-xl font-bold mb-2">Team Collaboration</h3>
                 <p className="text-muted-foreground">Invite your whole team with role-based access control and detailed audit logs.</p>

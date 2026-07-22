@@ -183,11 +183,11 @@ export default function PlatformSettingsPage() {
                 </Card>
 
                 {/* Global Announcements */}
-                <Card className={announcementActive ? "border-blue-500 shadow-sm" : ""}>
+                <Card className={announcementActive ? "border-primary shadow-sm" : ""}>
                     <CardHeader>
                         <div className="flex items-center justify-between">
                             <div>
-                                <CardTitle className="flex items-center gap-2 text-blue-600">
+                                <CardTitle className="flex items-center gap-2 text-primary">
                                     <Megaphone className="h-5 w-5" />
                                     Global Announcement
                                 </CardTitle>

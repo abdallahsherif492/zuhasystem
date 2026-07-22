@@ -339,18 +339,18 @@ function DashboardContent() {
           </CardContent>
         </Card>
         
-        <Card className="bg-blue-50/50 dark:bg-blue-950/20 border-blue-100 dark:border-blue-900/50">
+        <Card className="bg-primary/10 dark:bg-blue-950/20 border-primary/20 dark:border-primary/50">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">{t("Confirmed Orders")}</CardTitle>
-            <CheckCircle2 className="h-4 w-4 text-blue-600" />
+            <CheckCircle2 className="h-4 w-4 text-primary" />
           </CardHeader>
           <CardContent>
             <div className="flex items-baseline gap-2">
                <div className="text-2xl font-bold">{formatCurrency(stats.confirmedValue)}</div>
             </div>
             <div className="flex items-baseline gap-2 mt-1">
-               <span className="text-3xl font-black text-blue-700 dark:text-blue-400">{stats.confirmedCount}</span>
-               <span className="text-sm font-medium text-blue-600/80 dark:text-blue-400/80">{t("Orders")}</span>
+               <span className="text-3xl font-black text-primary dark:text-primary">{stats.confirmedCount}</span>
+               <span className="text-sm font-medium text-primary/80 dark:text-primary/80">{t("Orders")}</span>
             </div>
           </CardContent>
         </Card>
@@ -371,18 +371,18 @@ function DashboardContent() {
           </CardContent>
         </Card>
 
-        <Card className="bg-purple-50/50 dark:bg-purple-950/20 border-purple-100 dark:border-purple-900/50">
+        <Card className="bg-primary/10 dark:bg-purple-950/20 border-primary/20 dark:border-primary/50">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">{t("Stock Value")}</CardTitle>
-            <Package className="h-4 w-4 text-purple-600" />
+            <Package className="h-4 w-4 text-primary" />
           </CardHeader>
           <CardContent>
             <div className="flex items-baseline gap-2">
                <div className="text-2xl font-bold">{formatCurrency(stats.stockValue)}</div>
             </div>
             <div className="flex items-baseline gap-2 mt-1">
-               <span className="text-3xl font-black text-purple-700 dark:text-purple-400">{stats.totalItems}</span>
-               <span className="text-sm font-medium text-purple-600/80 dark:text-purple-400/80">{t("Total Units")}</span>
+               <span className="text-3xl font-black text-primary dark:text-primary">{stats.totalItems}</span>
+               <span className="text-sm font-medium text-primary/80 dark:text-primary/80">{t("Total Units")}</span>
             </div>
           </CardContent>
         </Card>

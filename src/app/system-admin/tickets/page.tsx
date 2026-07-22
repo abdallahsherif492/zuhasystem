@@ -83,7 +83,7 @@ export default function AdminSupportTickets() {
     const getStatusBadge = (status: string) => {
         switch (status) {
             case "open":
-                return <Badge variant="default" className="bg-blue-500">Open</Badge>;
+                return <Badge variant="default" className="bg-primary">Open</Badge>;
             case "in_progress":
                 return <Badge variant="secondary" className="bg-yellow-500 text-white">In Progress</Badge>;
             case "resolved":
