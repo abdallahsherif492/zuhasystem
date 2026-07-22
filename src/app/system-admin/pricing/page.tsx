@@ -10,6 +10,13 @@ import { Badge } from '@/components/ui/badge'
 export default async function PricingPage() {
   const supabase = await createSupabaseServerClient()
   const { data: packages, error } = await supabase.from('packages').select('*').order('created_at', { ascending: false })
+  
+  const { data: history } = await supabase
+    .from('revenue_transactions')
+    .select('*, business:businesses(name)')
+    .eq('type', 'package_purchase')
+    .order('created_at', { ascending: false })
+    .limit(50)
 
   return (
     <div className="space-y-6">
@@ -101,7 +108,50 @@ export default async function PricingPage() {
             </Table>
           </CardContent>
         </Card>
-      </div>
+    </div>
+
+      {/* Subscription History Table */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Subscription History</CardTitle>
+          <CardDescription>Recent package purchases and auto-renewals by businesses.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Date</TableHead>
+                <TableHead>Business</TableHead>
+                <TableHead>Description</TableHead>
+                <TableHead>Amount</TableHead>
+                <TableHead>Status</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {history?.map((txn) => (
+                <TableRow key={txn.id}>
+                  <TableCell>{new Date(txn.created_at).toLocaleDateString()}</TableCell>
+                  <TableCell className="font-medium">
+                    {txn.business?.name || txn.business_id || 'Unknown'}
+                  </TableCell>
+                  <TableCell>{txn.description}</TableCell>
+                  <TableCell>{txn.amount} EGP</TableCell>
+                  <TableCell>
+                    <Badge variant="default">Completed</Badge>
+                  </TableCell>
+                </TableRow>
+              ))}
+              {(!history || history.length === 0) && (
+                <TableRow>
+                  <TableCell colSpan={5} className="text-center text-muted-foreground h-24">
+                    No subscription history found.
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
     </div>
   )
 }

@@ -102,6 +102,7 @@ export function SystemAccountingContent() {
             let query = supabase
                 .from("revenue_transactions")
                 .select("*")
+                .neq("type", "package_purchase")
                 .order("created_at", { ascending: false });
 
             if (fromDate) query = query.gte("created_at", fromDate);
