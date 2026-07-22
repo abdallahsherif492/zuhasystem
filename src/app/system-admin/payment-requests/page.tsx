@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase/server'
+import { supabase } from '@/lib/supabase'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -8,7 +8,6 @@ import { revalidatePath } from 'next/cache'
 import { Badge } from '@/components/ui/badge'
 
 export default async function PaymentRequestsPage() {
-  const supabase = createClient()
   
   // Fetch pending requests with business info
   const { data: requests, error } = await supabase

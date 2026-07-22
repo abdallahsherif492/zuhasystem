@@ -1,6 +1,6 @@
 'use server'
 
-import { createClient } from '@/lib/supabase/server'
+import { supabase } from '@/lib/supabase'
 import { revalidatePath } from 'next/cache'
 
 export async function submitPaymentRequest(
@@ -10,7 +10,6 @@ export async function submitPaymentRequest(
   senderDetails: string,
   receiptUrl: string
 ) {
-  const supabase = createClient()
   
   const { data, error } = await supabase
     .from('payment_requests')
@@ -33,7 +32,6 @@ export async function submitPaymentRequest(
 }
 
 export async function buyPackage(businessId: string, packageId: string, packagePrice: number, packageMonths: number) {
-  const supabase = createClient()
   
   // 1. Get current business wallet balance
   const { data: business, error: bizError } = await supabase

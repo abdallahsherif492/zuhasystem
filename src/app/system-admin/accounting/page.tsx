@@ -1,10 +1,9 @@
-import { createClient } from '@/lib/supabase/server'
+import { supabase } from '@/lib/supabase'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
 
 export default async function AccountingPage() {
-  const supabase = createClient()
   
   const { data: transactions, error } = await supabase
     .from('revenue_transactions')
