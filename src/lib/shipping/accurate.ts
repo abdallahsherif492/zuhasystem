@@ -112,7 +112,7 @@ export async function fetchAccurateShipments(token: string, refNumbers: string[]
             const promises = batchRefs.map(ref => {
                 const query = `
                     query {
-                        listShipments(first: 10, search: "${ref}") {
+                        listShipments(first: 10, input: { refNumber: "${ref}" }) {
                             data {
                                 id
                                 code

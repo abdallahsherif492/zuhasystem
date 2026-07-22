@@ -176,19 +176,15 @@ export async function debugTelegraphSearch(businessId: string, refNumber: string
         
         const query = `
             query {
-                __type(name: "Query") {
-                    fields(includeDeprecated: true) {
-                        name
-                        args {
+                listShipments(first: 10, input: { refNumber: "${refNumber}" }) {
+                    data {
+                        id
+                        code
+                        refNumber
+                        status {
+                            id
+                            code
                             name
-                            type {
-                                name
-                                kind
-                                inputFields {
-                                    name
-                                    type { name, kind }
-                                }
-                            }
                         }
                     }
                 }
@@ -206,15 +202,7 @@ export async function debugTelegraphSearch(businessId: string, refNumber: string
         });
         
         const json = await res.json();
-        
-        // Filter specifically for listShipments
-        const queryType = json.data?.__type;
-        const listShipmentsField = queryType?.fields?.find((f: any) => f.name === "listShipments");
-        
-        return { 
-            message: "Introspection for listShipments",
-            args: listShipmentsField?.args 
-        };
+        return { data: json };
     } catch (error: any) {
         return { error: error.message };
     }
