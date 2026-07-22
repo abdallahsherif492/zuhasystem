@@ -86,7 +86,7 @@ type NavGroup = {
     items: NavItem[];
 };
 
-export function SidebarContent() {
+export function SidebarContent({ onLinkClick }: { onLinkClick?: () => void }) {
     const pathname = usePathname();
     const { userRole, allowedPages, isSystemAdmin, loading } = useBusiness();
     const { t } = useLanguage();
@@ -276,7 +276,7 @@ export function SidebarContent() {
                                     
                                     return (
                                         <div key={itemIndex} className="space-y-1">
-                                            <Link href={item.href}>
+                                            <Link href={item.href} onClick={onLinkClick}>
                                                 <Button
                                                     variant={isActive ? "secondary" : "ghost"}
                                                     className={cn(
@@ -295,7 +295,7 @@ export function SidebarContent() {
                                                     {item.subItems.map((subItem, subIndex) => {
                                                         const isSubActive = subItem.exactMatch ? pathname === subItem.href : pathname.startsWith(subItem.href);
                                                         return (
-                                                            <Link key={subIndex} href={subItem.href}>
+                                                            <Link key={subIndex} href={subItem.href} onClick={onLinkClick}>
                                                                 <Button
                                                                     variant="ghost"
                                                                     size="sm"

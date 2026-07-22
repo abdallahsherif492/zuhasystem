@@ -31,10 +31,8 @@ export function MobileNav() {
                             />
                         </div>
                     </div>
-                    {/* Reuse the Sidebar logic but ensure clicking a link closes the sheet */}
-                    <div onClick={() => setOpen(false)}>
-                        <SidebarContent />
-                    </div>
+                    {/* Reuse the Sidebar logic, pass onLinkClick to close sheet only on real navigation */}
+                    <SidebarContent onLinkClick={() => setOpen(false)} />
                 </div>
             </SheetContent>
         </Sheet>
