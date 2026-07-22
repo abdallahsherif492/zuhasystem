@@ -76,23 +76,15 @@ export function DynamicThemeProvider({ children }: { children: React.ReactNode }
                 root.style.removeProperty('--secondary-foreground');
                 root.style.removeProperty('--foreground');
             }
-            
-            // Dark Mode
-            const desiredTheme = config.darkMode === true || config.darkMode === 'dark' ? 'dark' : (config.darkMode === false || config.darkMode === 'light' ? 'light' : 'system');
-            if (theme !== desiredTheme) {
-                 setTheme(desiredTheme);
-            }
         } else {
             // Revert to defaults
             root.style.removeProperty('--primary');
             root.style.removeProperty('--primary-foreground');
             root.style.removeProperty('--secondary');
             root.style.removeProperty('--secondary-foreground');
-            if (theme !== 'system') {
-                setTheme('system');
-            }
+            root.style.removeProperty('--foreground');
         }
-    }, [activeBusiness, theme, setTheme]);
+    }, [activeBusiness]);
 
     return <>{children}</>;
 }
