@@ -1,11 +1,10 @@
-- [x] 1. Apply database changes for System Admin Accounting (`system_admin_accounting.sql`).
-  - [x] 1.1 Create `system_financial_accounts` table.
-  - [x] 1.2 Alter `revenue_transactions` table to add `account_name`, `category`, `status`.
-  - [x] 1.3 Create RPC `get_system_treasury_balances`.
-- [x] 2. Create UI components for System Admin Accounting.
-  - [x] 2.1 `system-add-transaction-dialog.tsx`.
-  - [x] 2.2 `system-manage-accounts-dialog.tsx`.
-  - [x] 2.3 `system-transfer-dialog.tsx`.
-  - [x] 2.4 `system-accounting-content.tsx`.
-- [x] 3. Update `/system-admin/accounting/page.tsx` to integrate the new `SystemAccountingContent`.
-- [/] 4. Test and Verify.
+- [x] 1. Create SQL migration (`supabase/subscription_automation.sql`)
+  - [x] Add `auto_renew_enabled` and `auto_renew_package_id` to `businesses` table.
+  - [x] Write `process_auto_renewals()` stored procedure.
+  - [x] Create `pg_cron` schedule for the stored procedure.
+- [x] 2. Update `SubscriptionSettings` UI (`src/components/settings/subscription-settings.tsx`)
+  - [x] Add real-time countdown timer to the "Subscription Status" card.
+  - [x] Add `AlertDialog` confirmation prompt for package purchases.
+  - [x] Add "Auto-Renew" toggle switch for each package in the available packages list.
+  - [x] Handle updating `businesses` table when toggling auto-renew.
+- [/] 3. Verify changes locally.

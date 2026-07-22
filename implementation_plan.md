@@ -1,34 +1,28 @@
-# Add Expenses and Treasuries to System Admin Accounting
+# User Dashboard Subscription Management Improvements
 
 ## Goal
-To implement the exact same accounting logic (expenses, treasuries, transfers, multiple accounts, filters) found in the user dashboard's `/accounting` page, but specifically for the System Admin in `/system-admin/accounting`.
+To improve the subscription management page for users by adding purchase confirmations, a real-time countdown timer for subscription expiration, and an automated package renewal system using Supabase `pg_cron`.
 
 ## Open Questions
-None. The requirement is clear: replicate the user dashboard accounting functionality for the system admin's internal SaaS ledger.
+1. **Automated Tasks**: To implement the automated auto-renew process, we will use Supabase's `pg_cron` extension. The provided SQL script will need to be executed in your Supabase SQL Editor, and it will require the `pg_cron` extension to be enabled in your database extensions.
 
 ## Proposed Changes
 
-### Database Changes (`supabase/system_admin_accounting.sql`)
-- [NEW] Create `system_financial_accounts` table (id, name, created_at) with RLS for system admins.
-- [MODIFY] Alter `platform_transactions` table to add `account_name` TEXT.
-- [MODIFY] Alter `platform_transactions` table to allow `type = 'transfer'` (currently constrained to `expense`, `revenue`).
-- [NEW] Create RPC `get_system_treasury_balances` to aggregate balances for the system admin based on `platform_transactions`.
+### Database Changes (`supabase/subscription_automation.sql`)
+- [MODIFY] Add `auto_renew_enabled` (BOOLEAN DEFAULT false) and `auto_renew_package_id` (UUID) columns to the `businesses` table.
+- [NEW] Create `process_auto_renewals()` function. This function will:
+  - Find all businesses where `subscription_end_date` is less than 24 hours away.
+  - Check if `auto_renew_enabled` is true and they have enough `wallet_balance`.
+  - Deduct the balance, extend the date, and insert a `package_purchase` transaction into `revenue_transactions`.
+- [NEW] Schedule the function to run every hour using `pg_cron`.
 
-### Components (`src/components/system-admin/accounting/`)
-- [NEW] `system-accounting-content.tsx`: The main Client Component replicating `AccountingContent` but targeting `platform_transactions`, `system_financial_accounts`, and `get_system_treasury_balances`.
-- [NEW] `system-add-transaction-dialog.tsx`: Replicates `AddTransactionDialog`.
-- [NEW] `system-manage-accounts-dialog.tsx`: Replicates `ManageAccountsDialog`.
-- [NEW] `system-transfer-dialog.tsx`: Replicates `TransferDialog`.
-
-### Pages
-- [MODIFY] `src/app/system-admin/accounting/page.tsx`: 
-  - Convert to use the new `SystemAccountingContent`.
-  - Ensure the existing "Wallet Top-ups" (Revenue Transactions) data is preserved, perhaps in a separate tab or merged into the new system. (I will put the top-ups as a read-only tab or card since they are auto-generated).
+### UI Components (`src/components/settings/subscription-settings.tsx`)
+- [MODIFY] **Countdown Timer**: Implement a `useEffect` hook that updates every second to display remaining Months, Days, Hours, Minutes, and Seconds until the `subscription_end_date`.
+- [MODIFY] **Buy Confirmation Prompt**: Add an `AlertDialog` when the user clicks "Buy Package". The prompt will show the package name, cost, and the exact new expiration date.
+- [MODIFY] **Auto-Renew Switch**: Add a toggle switch to each package card allowing the user to enable/disable auto-renew for that specific package. When toggled, it will update the `businesses` table (`auto_renew_enabled`, `auto_renew_package_id`).
 
 ## Verification Plan
-1. Apply the SQL migration.
-2. Navigate to System Admin -> Accounting.
-3. Add a new treasury account (e.g., "Vodafone Cash").
-4. Add an expense (e.g., "Server Hosting") and verify the balance decreases.
-5. Add a revenue (e.g., "Manual Subscription Payment") and verify the balance increases.
-6. Verify existing wallet top-up revenue is still visible.
+1. Ensure the `AlertDialog` correctly blocks accidental purchases and shows accurate future dates.
+2. Verify the countdown timer ticks down accurately in real-time.
+3. Test the toggle switch to ensure it correctly saves the auto-renew preference to the Supabase backend.
+4. The user will run the SQL script to activate the background cron job for auto-renewals.
