@@ -109,6 +109,12 @@ export async function GET(request: Request) {
                     })
                     .eq('id', business.id);
                 syncedBusinessesCount++;
+
+                // Limit to 2 businesses per cron run to avoid Vercel Serverless 10s timeout!
+                if (syncedBusinessesCount >= 2) {
+                    console.log("[Auto-Sync] Reached limit of 2 businesses for this run. Stopping to prevent timeout.");
+                    break;
+                }
             }
         }
 
