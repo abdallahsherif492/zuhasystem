@@ -67,7 +67,7 @@ export async function previewShippingSyncAction(businessId: string): Promise<{ u
             const accurateMatch = accurateShipments.find(s => s.refNumber === shortId);
 
             if (accurateMatch) {
-                const newStatus = mapAccurateStatusToZuha(accurateMatch.status.code, accurateMatch.status.name, order.status);
+                const newStatus = mapAccurateStatusToZuha(accurateMatch.status.code, accurateMatch.status.name);
                 if (newStatus && newStatus !== order.status) {
                     updates.push({
                         orderId: order.id,
@@ -106,10 +106,7 @@ export async function applyShippingUpdatesAction(updates: SyncPreviewItem[], bus
         for (const update of updates) {
             const updatePayload: any = { status: update.newStatus };
             if (update.newStatus === "Shipped" && shippingProvider) {
-                const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(shippingProvider);
-                if (isUUID) {
-                    updatePayload.shipping_company_id = shippingProvider;
-                }
+                updatePayload.shipping_company_id = shippingProvider;
             }
             const { error } = await supabase
                 .from("orders")
