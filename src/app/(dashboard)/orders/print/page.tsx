@@ -74,7 +74,7 @@ function InvoiceCard({ order, isFirstOnPage, business }: { order: InvoiceData, i
                         <Image src={business?.logo_url || "/logo.png"} alt={business?.name || "Logo"} fill className="object-contain" />
                     </div>
                     <div>
-                        <h1 className="text-base font-bold leading-none">{business?.name || "Zuha Home"}</h1>
+                        <h1 className="text-base font-bold leading-none">{business?.name || "eCommerx Home"}</h1>
                         <p className="text-[9px] text-muted-foreground">Fast & Reliable Shipping</p>
                     </div>
                 </div>

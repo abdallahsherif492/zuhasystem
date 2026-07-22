@@ -136,7 +136,7 @@ export default function OnboardingPage() {
                     <div className="relative h-16 w-40">
                         <Image
                             src="/logo.png"
-                            alt="Zuha Logo"
+                            alt="eCommerx Logo"
                             fill
                             className="object-contain"
                         />

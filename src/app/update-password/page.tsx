@@ -56,7 +56,7 @@ export default function UpdatePasswordPage() {
                 <div className="mx-auto w-full max-w-sm lg:w-96">
                     <div>
                         <div className="relative h-12 w-32 mb-8">
-                            <Image src="/logo.png" alt="Zuha Logo" fill className="object-contain object-left" />
+                            <Image src="/logo.png" alt="eCommerx Logo" fill className="object-contain object-left" />
                         </div>
                         <h2 className="text-3xl font-bold tracking-tight text-foreground">
                             Update Password

@@ -24,7 +24,7 @@ import { Trash2, Plus, Loader2 } from "lucide-react";
 
 // Helper to generate random SKU
 const generateSKU = () => {
-    return 'ZUHA-' + Math.random().toString(36).substring(2, 8).toUpperCase();
+    return 'ECOMMERX-' + Math.random().toString(36).substring(2, 8).toUpperCase();
 };
 const variantSchema = z.object({
     title: z.string().min(1, "Title is required (e.g. Red/XL)"),
@@ -210,7 +210,7 @@ export default function NewProductPage() {
                                                     <FormLabel>SKU (Auto)</FormLabel>
                                                     <FormControl>
                                                         <div className="flex gap-2">
-                                                            <Input placeholder="ZUHA-XXXXXX" {...field} />
+                                                            <Input placeholder="ECOMMERX-XXXXXX" {...field} />
                                                             <Button
                                                                 type="button"
                                                                 variant="ghost"

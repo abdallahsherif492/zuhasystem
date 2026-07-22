@@ -15,7 +15,7 @@ function AdminSidebar({ pathname }: { pathname: string }) {
             <div className="px-3 py-2">
                 <div className="flex items-center justify-center mb-8 px-2">
                     <div className="relative h-16 w-32">
-                        <Image src="/logo.png" alt="Zuha Logo" fill className="object-contain" />
+                        <Image src="/logo.png" alt="eCommerx Logo" fill className="object-contain" />
                     </div>
                 </div>
                 <div className="space-y-1">
@@ -151,7 +151,7 @@ export default function SystemAdminLayout({ children }: { children: React.ReactN
                             <AdminSidebar pathname={pathname} />
                         </SheetContent>
                     </Sheet>
-                    <div className="font-semibold text-lg">Zuha Admin</div>
+                    <div className="font-semibold text-lg">eCommerx Admin</div>
                 </header>
 
                 <main className="flex-1 p-6 lg:p-8 max-w-7xl mx-auto w-full">

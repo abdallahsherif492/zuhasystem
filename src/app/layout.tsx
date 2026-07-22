@@ -18,7 +18,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Zuha Admin System",
+  title: "eCommerx Admin System",
   description: "Internal E-commerce Dashboard",
 };
 

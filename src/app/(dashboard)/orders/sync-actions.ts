@@ -72,7 +72,7 @@ export async function previewShippingSyncAction(businessId: string): Promise<{ u
 
         for (const order of orders) {
             const shortId = order.id.substring(0, 8);
-            // We added zuhaRef in accurate.ts to explicitly tell us which zuha ref the shipment matched
+            // We added zuhaRef in accurate.ts to explicitly tell us which ecommerx ref the shipment matched
             // fallback to refNumber if zuhaRef isn't present
             const accurateMatch = accurateShipments.find(s => {
                 const matchRef = s.zuhaRef ? s.zuhaRef : s.refNumber;

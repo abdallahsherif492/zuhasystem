@@ -34,7 +34,7 @@ export function Sidebar({ className }: SidebarProps) {
                         <div className="relative h-16 w-32 transition-transform hover:scale-105 duration-300">
                             <Image
                                 src={activeBusiness?.logo_url || "/logo.png"}
-                                alt={activeBusiness?.name || "Zuha Logo"}
+                                alt={activeBusiness?.name || "eCommerx Logo"}
                                 fill
                                 className="object-contain"
                                 priority

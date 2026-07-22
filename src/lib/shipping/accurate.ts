@@ -112,7 +112,7 @@ export async function fetchAccurateShipments(token: string, refNumbers: string[]
     const matchedShipments = allShipments.filter(isMatch);
     
     // Find missing refNumbers that weren't in the 5000 recent shipments
-    // Note: a shipment might have matched via 'code', so we remove matched Zuha refs
+    // Note: a shipment might have matched via 'code', so we remove matched eCommerx refs
     const matchedRefs = matchedShipments.map(s => {
         const sRef = s.refNumber ? s.refNumber.toLowerCase() : null;
         const sCode = s.code ? s.code.toLowerCase() : null;
@@ -166,16 +166,16 @@ export async function fetchAccurateShipments(token: string, refNumbers: string[]
         }
     }
 
-    // Now we need to normalize the matched shipments so that we can easily map them back to the original Zuha refNumber.
-    // Because some matched via `code`, we should explicitly attach the original Zuha refNumber to it.
+    // Now we need to normalize the matched shipments so that we can easily map them back to the original eCommerx refNumber.
+    // Because some matched via `code`, we should explicitly attach the original eCommerx refNumber to it.
     const normalizedShipments = matchedShipments.map(s => {
         const sRef = s.refNumber ? s.refNumber.toLowerCase() : null;
         const sCode = s.code ? s.code.toLowerCase() : null;
-        // Find which Zuha refNumber it matched
+        // Find which eCommerx refNumber it matched
         const matchedZuhaRef = refNumbers.find(r => r.toLowerCase() === sRef || r.toLowerCase() === sCode);
         return {
             ...s,
-            zuhaRef: matchedZuhaRef // Ensure we know which Zuha order this shipment belongs to
+            zuhaRef: matchedZuhaRef // Ensure we know which eCommerx order this shipment belongs to
         };
     });
 

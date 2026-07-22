@@ -537,7 +537,7 @@ export default function SettingsPage() {
                         <CardHeader>
                             <CardTitle>{t("Order Platforms")}</CardTitle>
                             <CardDescription>
-                                {t("Connect Zuha System with order aggregation platforms.")}
+                                {t("Connect eCommerx with order aggregation platforms.")}
                             </CardDescription>
                         </CardHeader>
                         <CardContent className="space-y-6">

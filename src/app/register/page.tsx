@@ -65,7 +65,7 @@ export default function RegisterPage() {
                         <div className="relative h-12 w-32 mb-8">
                             <Image
                                 src="/logo.png"
-                                alt="Zuha Logo"
+                                alt="eCommerx Logo"
                                 fill
                                 className="object-contain object-left"
                             />

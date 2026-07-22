@@ -24,7 +24,7 @@ export function MobileNav() {
                         <div className="relative h-16 w-32">
                             <Image
                                 src="/logo.png"
-                                alt="Zuha Logo"
+                                alt="eCommerx Logo"
                                 fill
                                 className="object-contain"
                                 priority

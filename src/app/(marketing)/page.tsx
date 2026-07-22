@@ -37,7 +37,7 @@ export default async function MarketingLandingPage() {
       <header className="px-4 lg:px-6 h-16 flex items-center border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-0 z-50">
         <Link className="flex items-center justify-center" href="/">
           <div className="relative h-10 w-24">
-            <Image src="/logo.png" alt="Zuha Logo" fill className="object-contain object-left" />
+            <Image src="/logo.png" alt="eCommerx Logo" fill className="object-contain object-left" />
           </div>
         </Link>
         <nav className="ml-auto flex gap-4 sm:gap-6 items-center">
@@ -113,7 +113,7 @@ export default async function MarketingLandingPage() {
             <div className="text-center mb-16">
               <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">Everything you need to scale</h2>
               <p className="mt-4 text-muted-foreground text-lg max-w-2xl mx-auto">
-                Stop juggling spreadsheets and disconnected tools. Zuha brings your entire operations into one cohesive platform.
+                Stop juggling spreadsheets and disconnected tools. eCommerx brings your entire operations into one cohesive platform.
               </p>
             </div>
             <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-8">
@@ -162,7 +162,7 @@ export default async function MarketingLandingPage() {
       <footer className="w-full py-6 border-t bg-background">
         <div className="container px-4 md:px-6 mx-auto flex flex-col sm:flex-row justify-between items-center gap-4">
           <p className="text-sm text-muted-foreground">
-            © {new Date().getFullYear()} Zuha System. All rights reserved.
+            © {new Date().getFullYear()} eCommerx. All rights reserved.
           </p>
           <div className="flex gap-4">
             <Link className="text-sm text-muted-foreground hover:text-foreground" href="#">Terms of Service</Link>

@@ -11,7 +11,7 @@ export async function sendOrderToVrobo(order: any, vroboApiKey: string, vroboMer
         customer_phone1: order.customer_info?.phone || "Unknown",
         customer_phone2: order.customer_info?.phone2 || "",
         customer_address: `${order.customer_info?.city || ''}, ${order.customer_info?.address || ''}`.trim(),
-        merchant_name: order.business?.name || "Zuha System",
+        merchant_name: order.business?.name || "eCommerx",
         merchant_id: vroboMerchantId || order.business_id || "1",
         order_content: `Order #${order.id.substring(0, 6)}`,
         order_COD: String(order.total_amount || 0),

@@ -135,13 +135,13 @@ export default function InvoicePage({ params }: { params: Promise<{ id: string }
                         <div className="relative h-24 w-24 mb-2">
                             <Image
                                 src="/logo.png"
-                                alt="Zuha Logo"
+                                alt="eCommerx Logo"
                                 fill
                                 className="object-contain" // Simplified for print
                                 priority
                             />
                         </div>
-                        <h1 className="text-2xl font-bold">Zuha System</h1>
+                        <h1 className="text-2xl font-bold">eCommerx</h1>
                         <p className="text-sm text-muted-foreground">Cairo, Egypt</p>
                         <p className="text-sm text-muted-foreground">+20 100 000 0000</p>
                     </div>
