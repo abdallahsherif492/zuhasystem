@@ -106,7 +106,10 @@ export async function applyShippingUpdatesAction(updates: SyncPreviewItem[], bus
         for (const update of updates) {
             const updatePayload: any = { status: update.newStatus };
             if (update.newStatus === "Shipped" && shippingProvider) {
-                updatePayload.shipping_company_id = shippingProvider;
+                const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(shippingProvider);
+                if (isUUID) {
+                    updatePayload.shipping_company_id = shippingProvider;
+                }
             }
             const { error } = await supabase
                 .from("orders")
