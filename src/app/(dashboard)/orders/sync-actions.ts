@@ -129,7 +129,7 @@ export async function applyShippingUpdatesAction(updates: SyncPreviewItem[], bus
         }
 
         if (updates.length > 0) {
-            logIntegrationActivity(businessId, "Telegraph", "success", `Successfully synced ${updates.length} orders.`, { updates: updates.map(u => u.orderId) });
+            logIntegrationActivity(businessId, "Telegraph", "success", `Successfully synced ${updates.length} orders.`, { updates });
         }
 
         return { success: true };
