@@ -176,14 +176,22 @@ export async function debugTelegraphSearch(businessId: string, refNumber: string
         
         const query = `
             query {
-                listShipments(first: 10, input: { refNumber: "${refNumber}" }) {
+                byRef: listShipments(first: 10, input: { refNumber: "${refNumber}" }) {
                     data {
                         id
                         code
                         refNumber
                         status {
-                            id
-                            code
+                            name
+                        }
+                    }
+                }
+                bySearch: listShipments(first: 10, input: { search: "${refNumber}" }) {
+                    data {
+                        id
+                        code
+                        refNumber
+                        status {
                             name
                         }
                     }
