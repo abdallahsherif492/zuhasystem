@@ -1,6 +1,6 @@
 'use server'
 
-import { supabase } from '@/lib/supabase'
+import { supabaseAdmin as supabase } from '@/lib/supabase-server'
 import { revalidatePath } from 'next/cache'
 
 export async function submitPaymentRequest(
