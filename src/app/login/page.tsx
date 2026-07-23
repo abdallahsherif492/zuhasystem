@@ -177,13 +177,13 @@ export default function LoginPage() {
                             transition={{ duration: 0.7, delay: 0.2 }}
                             className="max-w-2xl"
                         >
-                            <div className="inline-flex items-center justify-center p-3 bg-white/10 rounded-2xl backdrop-blur-md border border-white/10 mb-8 shadow-2xl">
+                            <div className="inline-flex items-center justify-center p-6 bg-white/10 rounded-3xl backdrop-blur-md border border-white/10 mb-10 shadow-2xl">
                                 <Image
                                     src="/logo.png"
-                                    alt="Icon"
-                                    width={40}
-                                    height={40}
-                                    className="opacity-90 drop-shadow-md brightness-0 invert"
+                                    alt="eCommerx Logo"
+                                    width={240}
+                                    height={80}
+                                    className="opacity-100 drop-shadow-xl brightness-0 invert object-contain"
                                 />
                             </div>
                             <h1 className="text-5xl lg:text-6xl font-black tracking-tight mb-6 leading-tight drop-shadow-lg" style={{ lineHeight: "1.3" }}>
