@@ -59,6 +59,7 @@ export async function middleware(request: NextRequest) {
         const isForgotPage = request.nextUrl.pathname.startsWith('/forgot-password')
         const isUpdatePasswordPage = request.nextUrl.pathname.startsWith('/update-password')
         const isAuthCallback = request.nextUrl.pathname.startsWith('/auth')
+        const isLandingPage = request.nextUrl.pathname.startsWith('/landing')
         const isStatic = request.nextUrl.pathname.startsWith('/_next') ||
             request.nextUrl.pathname.includes('.') ||
             request.nextUrl.pathname.startsWith('/api')
@@ -66,7 +67,7 @@ export async function middleware(request: NextRequest) {
         // 4. Redirect Rules
 
         // If user is NOT logged in AND trying to access a protected page
-        if (!user && request.nextUrl.pathname !== '/' && !isLoginPage && !isRegisterPage && !isForgotPage && !isUpdatePasswordPage && !isAuthCallback && !request.nextUrl.pathname.includes('.') && !request.nextUrl.pathname.startsWith('/api')) {
+        if (!user && request.nextUrl.pathname !== '/' && !isLandingPage && !isLoginPage && !isRegisterPage && !isForgotPage && !isUpdatePasswordPage && !isAuthCallback && !request.nextUrl.pathname.includes('.') && !request.nextUrl.pathname.startsWith('/api')) {
             const loginUrl = request.nextUrl.clone()
             loginUrl.pathname = '/login'
             return NextResponse.redirect(loginUrl)
