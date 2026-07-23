@@ -47,16 +47,16 @@
 
 :root {
   --radius: 0.625rem;
-  --background: oklch(1 0 0); /* White */
+  --background: #F8FAFC; /* Light Gray */
   --foreground: var(--secondary);
   --card: var(--background);
   --card-foreground: var(--foreground);
   --popover: var(--background);
   --popover-foreground: var(--foreground);
-  --primary: oklch(0.55 0.2 270); /* Vibrant Purple/Indigo */
-  --primary-foreground: oklch(0.985 0 0); /* White */
-  --secondary: oklch(0.25 0.05 260); /* Dark Navy */
-  --secondary-foreground: oklch(0.985 0 0); /* White */
+  --primary: #6366F1; /* Indigo */
+  --primary-foreground: #FFFFFF; /* White */
+  --secondary: #0F172A; /* Dark Navy */
+  --secondary-foreground: #FFFFFF; /* White */
   --muted: color-mix(in oklch, var(--secondary) 8%, var(--background));
   --muted-foreground: color-mix(in oklch, var(--secondary) 60%, var(--background));
   --accent: color-mix(in oklch, var(--primary) 10%, var(--background));
@@ -81,16 +81,16 @@
 }
 
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: color-mix(in oklch, var(--secondary) 15%, white);
-  --card: oklch(0.15 0 0);
+  --background: #0F172A; /* Dark Navy for dark mode bg */
+  --foreground: #F8FAFC; /* Light gray text */
+  --card: color-mix(in srgb, var(--background) 95%, white);
   --card-foreground: var(--foreground);
-  --popover: oklch(0.15 0 0);
+  --popover: color-mix(in srgb, var(--background) 95%, white);
   --popover-foreground: var(--foreground);
-  --primary: oklch(0.65 0.2 270); /* Lighter purple for dark mode */
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.85 0.05 260); /* Light Navy for dark mode */
-  --secondary-foreground: oklch(0.1 0 0);
+  --primary: #6366F1; /* Indigo */
+  --primary-foreground: #FFFFFF;
+  --secondary: #1E293B; /* Slightly lighter navy for secondary dark */
+  --secondary-foreground: #F8FAFC;
   --muted: color-mix(in oklch, var(--secondary) 15%, var(--background));
   --muted-foreground: color-mix(in oklch, var(--secondary) 60%, var(--background));
   --accent: color-mix(in oklch, var(--primary) 15%, var(--background));
