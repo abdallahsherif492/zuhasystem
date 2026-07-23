@@ -42,12 +42,12 @@ export default function LoginPage() {
     return (
         <div className="flex min-h-screen bg-slate-50 font-sans" dir="rtl">
             {/* Right Side - Form (appears on right in RTL) */}
-            <div className="flex flex-1 flex-col justify-center px-4 sm:px-6 lg:flex-none lg:w-[480px] lg:px-20 xl:px-24 bg-white relative z-10 shadow-2xl">
+            <div className="flex flex-1 flex-col justify-center px-8 sm:px-12 lg:flex-none lg:w-[550px] xl:w-[600px] lg:px-24 bg-white relative z-10 shadow-2xl border-l border-slate-100">
                 <motion.div 
                     initial={{ opacity: 0, x: 20 }}
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ duration: 0.5 }}
-                    className="mx-auto w-full max-w-sm lg:w-96"
+                    className="mx-auto w-full max-w-sm lg:max-w-md"
                 >
                     <div className="text-right">
                         <Link href="/landing" className="inline-block relative h-12 w-40 mb-10 transition-transform hover:scale-105">
@@ -91,7 +91,7 @@ export default function LoginPage() {
                                         required
                                         value={email}
                                         onChange={(e) => setEmail(e.target.value)}
-                                        className="h-12 pr-10 bg-slate-50 border-slate-200 focus:border-indigo-500 focus:ring-indigo-500 rounded-xl text-right transition-all"
+                                        className="h-12 pr-10 pl-4 bg-slate-50 border-slate-200 focus:border-indigo-500 focus:ring-indigo-500 rounded-xl text-right transition-all"
                                         placeholder="name@company.com"
                                         dir="ltr"
                                     />
@@ -119,7 +119,7 @@ export default function LoginPage() {
                                         required
                                         value={password}
                                         onChange={(e) => setPassword(e.target.value)}
-                                        className="h-12 pr-10 bg-slate-50 border-slate-200 focus:border-indigo-500 focus:ring-indigo-500 rounded-xl text-right transition-all"
+                                        className="h-12 pr-10 pl-4 bg-slate-50 border-slate-200 focus:border-indigo-500 focus:ring-indigo-500 rounded-xl text-right transition-all"
                                         placeholder="••••••••"
                                         dir="ltr"
                                     />
