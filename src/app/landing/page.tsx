@@ -44,7 +44,7 @@ const floatingAnimation = {
     duration: 3,
     repeat: Infinity,
     repeatType: "reverse" as const,
-    ease: "easeInOut"
+    ease: "easeInOut" as const
   }
 };
 
