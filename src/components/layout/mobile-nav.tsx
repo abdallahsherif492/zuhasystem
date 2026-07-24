@@ -6,7 +6,7 @@ import { Menu } from "lucide-react";
 import { SidebarContent } from "@/components/layout/sidebar";
 import Image from "next/image";
 import { useState } from "react";
-import { useBusiness } from "@/hooks/useBusiness";
+import { useBusiness } from "@/contexts/BusinessContext";
 export function MobileNav() {
     const [open, setOpen] = useState(false);
     const { activeBusiness } = useBusiness();
