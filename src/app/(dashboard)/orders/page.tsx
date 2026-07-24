@@ -323,7 +323,7 @@ function OrdersContent() {
             return {
                 "كـــود الــتــاجــر": "",
                 "رقم الأوردر": order.id.slice(0, 8),
-                "اسم الراسل علي البوليصة": "eCommerx Home",
+                "اسم الراسل علي البوليصة": activeBusiness?.name || "eCommerx Home",
                 "الـــــمــــــســـــتــــــــلـــــــــم": order.customer_info?.name || "",
                 "مــوبــايــل 1": phone1,
                 "مــوبــايــل 2": phone2 || "",
@@ -468,16 +468,7 @@ function OrdersContent() {
                 {/* Filters Bar */}
                 <div className="bg-muted/40 p-4 rounded-lg space-y-4">
                     <div className="flex flex-col sm:flex-row gap-4">
-                        <div className="relative flex-1">
-                            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                            <Input
-                                placeholder={t("Search orders...")}
-                                className="pl-8 bg-white"
-                                value={searchQuery}
-                                onChange={(e) => setSearchQuery(e.target.value)}
-                            />
-                        </div>
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-2 flex-[2]">
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-2 flex-[2] w-full">
                             <MultiSelect
                                 options={statusOptions}
                                 selected={statusFilter}

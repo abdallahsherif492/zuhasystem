@@ -6,9 +6,10 @@ import { Menu } from "lucide-react";
 import { SidebarContent } from "@/components/layout/sidebar";
 import Image from "next/image";
 import { useState } from "react";
-
+import { useBusiness } from "@/hooks/useBusiness";
 export function MobileNav() {
     const [open, setOpen] = useState(false);
+    const { activeBusiness } = useBusiness();
 
     return (
         <Sheet open={open} onOpenChange={setOpen}>
@@ -23,8 +24,8 @@ export function MobileNav() {
                     <div className="flex items-center justify-center mb-8">
                         <div className="relative h-20 w-40">
                             <Image
-                                src="/logo.png"
-                                alt="eCommerx Logo"
+                                src={activeBusiness?.logo_url || "/logo.png"}
+                                alt="Store Logo"
                                 fill
                                 className="object-contain"
                                 priority
