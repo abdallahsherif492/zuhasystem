@@ -1,33 +1,32 @@
-# Expiration & Suspension Handling Plan
+# Replace Hardcoded Colors with Theme Variables
 
-## Goal
-Implement a warning banner for subscriptions nearing expiration and a 7-day grace period suspension mechanism that locks the user out of the dashboard (except the settings page) if they fail to renew.
+## Problem
+The system is using hardcoded Tailwind colors (e.g., `bg-blue-500`, `text-gray-900`) instead of the dynamic theme variables (`primary`, `secondary`, `muted`, `foreground`). This causes the user's custom brand colors not to appear across the dashboard.
 
-## Proposed Changes
+## Proposed Solution
+I will write a script to search the entire `src/` directory and replace hardcoded color classes with their semantic equivalents. 
 
-### 1. Update Business Context (`src/contexts/BusinessContext.tsx`)
-- [MODIFY] Add `subscription_end_date: string | null` to the `Business` interface.
-- [MODIFY] Ensure `subscription_end_date` is included in the Supabase query when fetching the user's businesses.
+### Mapping Rules
+1. **Primary Actions & Highlights (Blue, Indigo, Purple, Pink)**
+   - `bg-[color]-500/600/700` ➔ `bg-primary`
+   - `hover:bg-[color]-600/700` ➔ `hover:bg-primary/90`
+   - `text-[color]-500/600/700` ➔ `text-primary`
+   - `bg-[color]-50/100` ➔ `bg-primary/10` or `bg-primary/20`
 
-### 2. Create Expiration Banner (`src/components/layout/expiration-banner.tsx`)
-- [NEW] Create a new banner component that reads `subscription_end_date` from `BusinessContext`.
-- Logic: If `subscription_end_date` is within the next 10 days (and hasn't expired yet), display a prominent yellow/red banner at the top of the screen warning them of the impending suspension, along with a "Renew Now" button that routes to `/settings?tab=subscription`.
+2. **Neutral Colors (Gray, Slate, Zinc)**
+   - `bg-[color]-50` ➔ `bg-secondary` or `bg-muted/50`
+   - `bg-[color]-100/200` ➔ `bg-muted`
+   - `text-[color]-400/500/600` ➔ `text-muted-foreground`
+   - `text-[color]-700/800/900` ➔ `text-foreground`
+   - `border-[color]-200/300` ➔ `border-border`
 
-### 3. Create Subscription Guard (`src/components/layout/subscription-guard.tsx`)
-- [NEW] Create a new layout wrapper component.
-- Logic:
-  - If `isSystemAdmin` is true, bypass the check.
-  - If the `pathname` starts with `/settings`, bypass the check (allow access so they can renew).
-  - Calculate the difference between `now` and `subscription_end_date`.
-  - If the subscription has expired AND the 7-day grace period has passed (i.e., expired more than 7 days ago), block access. Render a full-page "Account Suspended" screen instead of the dashboard children, with a button to go to Settings to renew.
-  - Otherwise, render `children`.
+> [!IMPORTANT]
+> **Semantic Colors Exception**: I plan to **EXCLUDE** status colors like `green` (Success/Delivered), `red` (Failed/Cancelled/Destructive), and `yellow` (Pending/Warning) from this mass replacement. Replacing these with `primary` and `secondary` would make all status badges look identical and harm the user experience. 
+> 
+> *Do you agree with leaving `green`, `red`, and `yellow` alone for statuses?*
 
-### 4. Inject into Layout (`src/app/(dashboard)/layout.tsx`)
-- [MODIFY] Add `<ExpirationBanner />` directly below `<AnnouncementBanner />`.
-- [MODIFY] Wrap the `{children}` with `<SubscriptionGuard>`.
-
-## Verification Plan
-1. Manually manipulate a test business's `subscription_end_date` in Supabase to be 5 days in the future and verify the banner appears.
-2. Change it to 3 days in the past and verify the banner disappears but the system still works (grace period).
-3. Change it to 10 days in the past and verify the system locks the user out, but allows them to navigate to Settings.
-4. Verify System Admins are not accidentally locked out.
+## Execution Plan
+1. Create a Node.js script in `scratch/replace-colors.js`.
+2. Run the script over the `src/` directory.
+3. Verify the changes locally and ensure no components break visually.
+4. Push the changes to GitHub.

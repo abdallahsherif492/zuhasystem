@@ -3,6 +3,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { loginAccurate, fetchAccurateShipments, mapAccurateStatusToZuha } from "@/lib/shipping/accurate";
+import { fetchBostaShipments, mapBostaStatusToZuha } from "@/lib/shipping/bosta";
 import { syncStatusToEasyOrders } from "@/lib/easyorders";
 import { processOrderForVrobo } from "@/lib/vrobo/api";
 import { logIntegrationActivity } from "@/lib/logs/integration-logger";
@@ -96,6 +97,83 @@ export async function previewShippingSyncAction(businessId: string): Promise<{ u
         return { updates, debugInfo };
     } catch (error: any) {
         console.error("Preview sync error:", error);
+        return { updates: [], error: error.message };
+    }
+}
+
+export async function previewBostaShippingSyncAction(businessId: string): Promise<{ updates: SyncPreviewItem[], debugInfo?: any, error?: string }> {
+    try {
+        const cookieStore = await cookies();
+        const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://telkkknuygjejmqcvyev.supabase.co";
+        const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
+        
+        const supabase = createServerClient(
+            supabaseUrl,
+            supabaseKey,
+            {
+                cookies: {
+                    get(name: string) { return cookieStore.get(name)?.value; },
+                },
+            }
+        );
+
+        const { data: orders, error: ordersError } = await supabase
+            .from("orders")
+            .select("id, customer_info, status, tags")
+            .eq("business_id", businessId)
+            .in("status", ["Prepared", "Hold To redeliver", "Shipped", "Returning"]);
+
+        if (ordersError) throw new Error(ordersError.message);
+        if (!orders || orders.length === 0) return { updates: [], debugInfo: { message: "No active orders found" } };
+
+        const { data: business } = await supabase
+            .from("businesses")
+            .select("theme_config")
+            .eq("id", businessId)
+            .single();
+
+        const bostaConfig = business?.theme_config?.integrations?.shipping?.bosta;
+        
+        if (!bostaConfig || !bostaConfig.enabled || !bostaConfig.apiKey) {
+            return { updates: [], error: "Bosta integration is not configured or disabled in settings." };
+        }
+
+        const refNumbers = orders.map(o => o.id.substring(0, 8));
+        const bostaShipments = await fetchBostaShipments(bostaConfig.apiKey, refNumbers);
+        
+        const debugInfo = {
+            activeRefNumbers: refNumbers,
+            fetchedShipments: bostaShipments.map(s => ({ ref: s.zuhaRef || s.trackingNumber, code: s.state?.code, value: s.state?.value }))
+        };
+
+        await logIntegrationActivity(businessId, "Bosta", "info", `[DEBUG] Fetched ${bostaShipments.length} matching shipments for ${refNumbers.length} active refNumbers.`, debugInfo);
+
+        const updates: SyncPreviewItem[] = [];
+
+        for (const order of orders) {
+            const shortId = order.id.substring(0, 8);
+            const bostaMatch = bostaShipments.find(s => {
+                const matchRef = s.zuhaRef ? s.zuhaRef : s.trackingNumber;
+                return matchRef && matchRef.toLowerCase() === shortId.toLowerCase();
+            });
+
+            if (bostaMatch) {
+                const newStatus = mapBostaStatusToZuha(bostaMatch.state.value);
+                if (newStatus && newStatus !== order.status) {
+                    updates.push({
+                        orderId: order.id,
+                        customerName: (order.customer_info as any)?.name || "N/A",
+                        oldStatus: order.status,
+                        newStatus: newStatus,
+                        accurateStatusName: bostaMatch.state.value
+                    });
+                }
+            }
+        }
+
+        return { updates, debugInfo };
+    } catch (error: any) {
+        console.error("Preview sync error (Bosta):", error);
         return { updates: [], error: error.message };
     }
 }

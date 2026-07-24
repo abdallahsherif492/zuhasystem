@@ -68,8 +68,8 @@
   --chart-1: var(--primary);
   --chart-2: color-mix(in oklch, var(--secondary) 80%, var(--background));
   --chart-3: color-mix(in oklch, var(--primary) 60%, var(--background));
-  --chart-4: color-mix(in oklch, var(--secondary) 60%, var(--background));
-  --chart-5: color-mix(in oklch, var(--primary) 40%, var(--background));
+  --chart-4: color-mix(in oklch, var(--primary) 65%, white);
+  --chart-5: color-mix(in oklch, var(--primary) 75%, white);
   --sidebar: color-mix(in oklch, var(--secondary) 3%, var(--background));
   --sidebar-foreground: var(--secondary);
   --sidebar-primary: var(--primary);

@@ -40,7 +40,8 @@ export default function SettingsPage() {
     // Integrations State
     const [integrations, setIntegrations] = useState<any>({
         shipping: {
-            telegraph: { enabled: false, username: "", password: "", autoSync: false, autoSyncIntervalMinutes: 15, shippingCompanyId: "" }
+            telegraph: { enabled: false, username: "", password: "", autoSync: false, autoSyncIntervalMinutes: 15, shippingCompanyId: "" },
+            bosta: { enabled: false, apiKey: "", autoSync: false, autoSyncIntervalMinutes: 15, shippingCompanyId: "" }
         },
         platforms: {
             easyorders: { enabled: false, apiKey: "", webhookToken: "" }
@@ -79,6 +80,13 @@ export default function SettingsPage() {
                         autoSync: savedIntegrations.shipping?.telegraph?.autoSync || false,
                         autoSyncIntervalMinutes: savedIntegrations.shipping?.telegraph?.autoSyncIntervalMinutes || 15,
                         shippingCompanyId: savedIntegrations.shipping?.telegraph?.shippingCompanyId || ""
+                    },
+                    bosta: {
+                        enabled: savedIntegrations.shipping?.bosta?.enabled || false,
+                        apiKey: savedIntegrations.shipping?.bosta?.apiKey || "",
+                        autoSync: savedIntegrations.shipping?.bosta?.autoSync || false,
+                        autoSyncIntervalMinutes: savedIntegrations.shipping?.bosta?.autoSyncIntervalMinutes || 15,
+                        shippingCompanyId: savedIntegrations.shipping?.bosta?.shippingCompanyId || ""
                     }
                 },
                 platforms: {
@@ -504,6 +512,82 @@ export default function SettingsPage() {
                                             <Select
                                                 value={integrations.shipping.telegraph.shippingCompanyId}
                                                 onValueChange={(val) => handleIntegrationChange('shipping', 'telegraph', 'shippingCompanyId', val)}
+                                            >
+                                                <SelectTrigger>
+                                                    <SelectValue placeholder={t("Select a shipping company")} />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    {shippingCompanies.map(sc => (
+                                                        <SelectItem key={sc.id} value={sc.id}>{sc.name}</SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
+                                            <p className="text-xs text-muted-foreground">
+                                                {t("Select the system shipping company ID that will be applied to orders when auto-sync marks them as shipped.")}
+                                            </p>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+
+                            <div className="space-y-4 border rounded-md p-4 bg-muted/20">
+                                <div className="flex items-center justify-between">
+                                    <h3 className="text-lg font-medium flex items-center">
+                                        Bosta Integration
+                                        {integrations.shipping.bosta.enabled && (
+                                            <Badge variant="outline" className="ml-3 bg-green-50 text-green-700 border-green-200">Active</Badge>
+                                        )}
+                                    </h3>
+                                    <Switch 
+                                        checked={integrations.shipping.bosta.enabled} 
+                                        onCheckedChange={(c) => handleIntegrationChange('shipping', 'bosta', 'enabled', c)}
+                                    />
+                                </div>
+                                <p className="text-sm text-muted-foreground">
+                                    {t("Connect to Bosta shipping to sync statuses and tracking.")}
+                                </p>
+                                
+                                {integrations.shipping.bosta.enabled && (
+                                    <div className="space-y-4 pt-4 border-t">
+                                        <div className="space-y-2">
+                                            <Label>{t("Bosta API Key")}</Label>
+                                            <Input 
+                                                placeholder={t("Enter API Key")} 
+                                                value={integrations.shipping.bosta.apiKey}
+                                                onChange={(e) => handleIntegrationChange('shipping', 'bosta', 'apiKey', e.target.value)}
+                                                type="password"
+                                            />
+                                        </div>
+
+                                        <div className="flex items-center space-x-2 pt-2">
+                                            <Switch 
+                                                checked={integrations.shipping.bosta.autoSync} 
+                                                onCheckedChange={(c) => handleIntegrationChange('shipping', 'bosta', 'autoSync', c)}
+                                            />
+                                            <Label>{t("Enable Auto Sync")}</Label>
+                                        </div>
+                                        
+                                        {integrations.shipping.bosta.autoSync && (
+                                            <div className="space-y-2">
+                                                <Label>{t("Auto Sync Interval (Minutes)")}</Label>
+                                                <Input 
+                                                    type="number"
+                                                    min="1"
+                                                    max="1440"
+                                                    value={integrations.shipping.bosta.autoSyncIntervalMinutes}
+                                                    onChange={(e) => handleIntegrationChange('shipping', 'bosta', 'autoSyncIntervalMinutes', parseInt(e.target.value) || 15)}
+                                                />
+                                                <p className="text-xs text-muted-foreground">
+                                                    {t("How often should the system check for status updates automatically.")}
+                                                </p>
+                                            </div>
+                                        )}
+                                        
+                                        <div className="space-y-2">
+                                            <Label>{t("Linked Shipping Company")}</Label>
+                                            <Select
+                                                value={integrations.shipping.bosta.shippingCompanyId}
+                                                onValueChange={(val) => handleIntegrationChange('shipping', 'bosta', 'shippingCompanyId', val)}
                                             >
                                                 <SelectTrigger>
                                                     <SelectValue placeholder={t("Select a shipping company")} />

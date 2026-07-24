@@ -1,7 +1,4 @@
-- [x] 1. Update Business Context (`src/contexts/BusinessContext.tsx`)
-  - [x] Add `subscription_end_date` to `Business` interface.
-  - [x] Include `subscription_end_date` in the Supabase query.
-- [x] 2. Create Expiration Banner (`src/components/layout/expiration-banner.tsx`)
-- [x] 3. Create Subscription Guard (`src/components/layout/subscription-guard.tsx`)
-- [x] 4. Inject into Layout (`src/app/(dashboard)/layout.tsx`)
-- [/] 5. Verify changes locally.
+- [x] 1. Create a Node.js script to find and replace Tailwind color classes based on the mapping rules.
+- [x] 2. Run the script on the `src/` directory.
+- [x] 3. Review the changes using `git diff`.
+- [/] 4. Commit and push the changes.

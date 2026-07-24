@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import { previewShippingSyncAction, applyShippingUpdatesAction } from '@/app/(dashboard)/orders/sync-actions';
+import { previewShippingSyncAction, previewBostaShippingSyncAction, applyShippingUpdatesAction } from '@/app/(dashboard)/orders/sync-actions';
 import { processOrderForVrobo } from '@/lib/vrobo/api';
 import { logIntegrationActivity } from '@/lib/logs/integration-logger';
 
@@ -57,7 +57,37 @@ export async function GET(request: Request) {
                 }
             }
 
-            // 2. VROBO Auto-Sync (retry logic for problematic orders)
+            // 2. Bosta Auto-Sync
+            const bostaConfig = integrations.shipping?.bosta;
+            if (bostaConfig?.enabled && bostaConfig?.autoSync) {
+                const lastSyncStr = bostaConfig.lastSyncAt;
+                const lastSync = lastSyncStr ? new Date(lastSyncStr) : new Date(0);
+                const intervalMinutes = bostaConfig.autoSyncIntervalMinutes || 15;
+                
+                const minutesSinceLastSync = (now.getTime() - lastSync.getTime()) / (1000 * 60);
+
+                if (minutesSinceLastSync >= intervalMinutes) {
+                    console.log(`[Auto-Sync] Running Bosta sync for business: ${business.id}`);
+                    try {
+                        const { updates, error: syncError } = await previewBostaShippingSyncAction(business.id);
+                        if (!syncError && updates && updates.length > 0) {
+                            await applyShippingUpdatesAction(updates, business.id, bostaConfig.shippingCompanyId);
+                            logIntegrationActivity(business.id, "Auto-Sync", "info", `Auto-Synced Bosta: Found ${updates.length} updates.`, { results: updates });
+                        }
+                    } catch (e: any) {
+                        console.error(`[Auto-Sync] Error in Bosta sync for ${business.id}:`, e);
+                        logIntegrationActivity(business.id, "Auto-Sync", "error", `Bosta Auto-Sync Error: ${e.message}`);
+                    }
+
+                    // Update lastSyncAt
+                    if (!integrations.shipping) integrations.shipping = {};
+                    if (!integrations.shipping.bosta) integrations.shipping.bosta = {};
+                    integrations.shipping.bosta.lastSyncAt = now.toISOString();
+                    configChanged = true;
+                }
+            }
+
+            // 3. VROBO Auto-Sync (retry logic for problematic orders)
             const vroboConfig = integrations.tools?.vrobo;
             if (vroboConfig?.enabled && vroboConfig?.autoSync) {
                 const lastSyncStr = vroboConfig.lastSyncAt;
