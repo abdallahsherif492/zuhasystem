@@ -72,6 +72,9 @@ export function SubscriptionSettings({ businessId }: { businessId: string }) {
     const [autoRenewEnabled, setAutoRenewEnabled] = useState(false)
     const [autoRenewPackageId, setAutoRenewPackageId] = useState<string | null>(null)
     
+    // Platform settings for payment instructions
+    const [platformSettings, setPlatformSettings] = useState<any>(null)
+    
     // Top up form
     const [topupAmount, setTopupAmount] = useState('')
     const [paymentMethod, setPaymentMethod] = useState('instapay')
@@ -101,6 +104,9 @@ export function SubscriptionSettings({ businessId }: { businessId: string }) {
                 
             const { data: reqs } = await supabase.from('payment_requests').select('*').eq('business_id', businessId).order('created_at', { ascending: false }).limit(5)
             if (reqs) setRequests(reqs)
+
+            const { data: globalSettings } = await supabase.from('platform_settings').select('*').eq('id', 'global').single()
+            if (globalSettings) setPlatformSettings(globalSettings)
         }
         fetchData()
     }, [businessId])
@@ -256,6 +262,32 @@ export function SubscriptionSettings({ businessId }: { businessId: string }) {
                                     </SelectContent>
                                 </Select>
                             </div>
+
+                            {/* Payment Instructions */}
+                            {platformSettings && (
+                                <div className="bg-muted p-4 rounded-md space-y-2 text-sm border border-primary/20">
+                                    <p className="font-semibold text-primary">Instructions:</p>
+                                    {paymentMethod === 'instapay' && platformSettings.instapay_number && (
+                                        <div className="space-y-1">
+                                            <p>Please transfer the amount using <strong>Instapay</strong> to:</p>
+                                            <p className="flex items-center gap-2">
+                                                <span className="font-mono bg-background px-2 py-1 rounded border">{platformSettings.instapay_number}</span>
+                                            </p>
+                                            {platformSettings.instapay_name && <p>Account Name: <strong>{platformSettings.instapay_name}</strong></p>}
+                                        </div>
+                                    )}
+                                    {paymentMethod === 'e-wallet' && platformSettings.ewallet_number && (
+                                        <div className="space-y-1">
+                                            <p>Please transfer the amount using <strong>E-Wallet</strong> to:</p>
+                                            <p className="flex items-center gap-2">
+                                                <span className="font-mono bg-background px-2 py-1 rounded border">{platformSettings.ewallet_number}</span>
+                                            </p>
+                                            {platformSettings.ewallet_name && <p>Wallet Name: <strong>{platformSettings.ewallet_name}</strong></p>}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
                             <div className="space-y-2">
                                 <label className="text-sm font-medium">Amount (EGP)</label>
                                 <Input type="number" min="1" value={topupAmount} onChange={e => setTopupAmount(e.target.value)} required />

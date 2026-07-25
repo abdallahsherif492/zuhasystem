@@ -28,6 +28,8 @@ export default function PlatformSettingsPage() {
     const [defaultTrialDays, setDefaultTrialDays] = useState(14);
     const [instapayNumber, setInstapayNumber] = useState("");
     const [instapayName, setInstapayName] = useState("");
+    const [ewalletNumber, setEwalletNumber] = useState("");
+    const [ewalletName, setEwalletName] = useState("");
 
     const fetchSettings = async () => {
         setLoading(true);
@@ -46,6 +48,8 @@ export default function PlatformSettingsPage() {
             setDefaultTrialDays(data.default_trial_days || 14);
             setInstapayNumber(data.instapay_number || "");
             setInstapayName(data.instapay_name || "");
+            setEwalletNumber(data.ewallet_number || "");
+            setEwalletName(data.ewallet_name || "");
         }
         setLoading(false);
     };
@@ -66,7 +70,9 @@ export default function PlatformSettingsPage() {
                 announcement_type: announcementType,
                 default_trial_days: defaultTrialDays,
                 instapay_number: instapayNumber,
-                instapay_name: instapayName
+                instapay_name: instapayName,
+                ewallet_number: ewalletNumber,
+                ewallet_name: ewalletName
             })
             .eq("id", "global");
 
@@ -139,6 +145,28 @@ export default function PlatformSettingsPage() {
                                         id="instapayName" 
                                         value={instapayName} 
                                         onChange={e => setInstapayName(e.target.value)} 
+                                        placeholder="e.g. Abdallah Sherif"
+                                    />
+                                </div>
+                            </div>
+                            
+                            <h4 className="font-semibold mb-4 mt-6">E-Wallet Payment Details</h4>
+                            <div className="grid sm:grid-cols-2 gap-4 max-w-2xl">
+                                <div className="space-y-2">
+                                    <Label htmlFor="ewalletNumber">Wallet Number</Label>
+                                    <Input 
+                                        id="ewalletNumber" 
+                                        value={ewalletNumber} 
+                                        onChange={e => setEwalletNumber(e.target.value)} 
+                                        placeholder="01xxxxxxxxx"
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label htmlFor="ewalletName">Wallet Account Name</Label>
+                                    <Input 
+                                        id="ewalletName" 
+                                        value={ewalletName} 
+                                        onChange={e => setEwalletName(e.target.value)} 
                                         placeholder="e.g. Abdallah Sherif"
                                     />
                                 </div>
