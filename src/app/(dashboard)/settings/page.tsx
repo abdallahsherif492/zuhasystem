@@ -449,7 +449,7 @@ export default function SettingsPage() {
                             <div className="space-y-4 border rounded-md p-4 bg-muted/20">
                                 <div className="flex items-center justify-between">
                                     <h3 className="text-lg font-medium flex items-center">
-                                        Telegraph Integration
+                                        <Image src="/telegraph.png" alt="Telegraph" width={120} height={40} className="object-contain" />
                                         {integrations.shipping.telegraph.enabled && (
                                             <Badge variant="outline" className="ml-3 bg-green-50 text-green-700 border-green-200">Active</Badge>
                                         )}
@@ -533,7 +533,7 @@ export default function SettingsPage() {
                             <div className="space-y-4 border rounded-md p-4 bg-muted/20">
                                 <div className="flex items-center justify-between">
                                     <h3 className="text-lg font-medium flex items-center">
-                                        Bosta Integration
+                                        <Image src="/bosta.png" alt="Bosta" width={100} height={40} className="object-contain" />
                                         {integrations.shipping.bosta.enabled && (
                                             <Badge variant="outline" className="ml-3 bg-green-50 text-green-700 border-green-200">Active</Badge>
                                         )}
