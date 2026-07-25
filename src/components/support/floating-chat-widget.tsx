@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useState, useEffect, useRef } from "react";
 import { supabase } from "@/lib/supabase";
 import { useBusiness } from "@/contexts/BusinessContext";
@@ -12,6 +13,7 @@ import {
 } from "lucide-react";
 import { format } from "date-fns";
 import { ar } from "date-fns/locale";
+
 
 interface ChatMessage {
     id: string;
@@ -306,18 +308,18 @@ export function FloatingChatWidget() {
                     <CardHeader className="bg-gradient-to-r from-primary via-indigo-600 to-violet-600 text-white p-4 flex flex-row items-center justify-between shrink-0 shadow-md">
                         <div className="flex items-center gap-3">
                             <div className="relative">
-                                <div className="h-10 w-10 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center border border-white/30 shadow-inner">
-                                    <Headset className="h-5 w-5 text-white" />
+                                <div className="h-10 w-10 rounded-full bg-white p-1 flex items-center justify-center border border-white/40 shadow-md overflow-hidden shrink-0">
+                                    <Image src="/logo.png" alt="eCommerx" width={32} height={32} className="object-contain" />
                                 </div>
                                 <span className="absolute bottom-0 right-0 h-3 w-3 rounded-full bg-emerald-400 border-2 border-primary animate-pulse" />
                             </div>
                             <div>
                                 <CardTitle className="text-base font-bold text-white flex items-center gap-1.5">
-                                    الدعم الفني زُهى
+                                    دعم eCommerx المباشر
                                     <Sparkles className="h-3.5 w-3.5 text-amber-300" />
                                 </CardTitle>
                                 <p className="text-xs text-white/80 font-normal">
-                                    متصل الآن | مساعدة سريعة ومباشرة
+                                    متصل الآن | خدمة عملاء على مدار الساعة
                                 </p>
                             </div>
                         </div>
@@ -330,6 +332,7 @@ export function FloatingChatWidget() {
                             <X className="h-4 w-4" />
                         </Button>
                     </CardHeader>
+
 
                     {/* Messages Body */}
                     <CardContent className="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-50/50 dark:bg-zinc-950/50">
