@@ -448,8 +448,8 @@ export default function SettingsPage() {
                         <CardContent className="space-y-6">
                             <div className="space-y-4 border rounded-md p-4 bg-muted/20">
                                 <div className="flex items-center justify-between">
-                                    <h3 className="text-lg font-medium flex items-center">
-                                        <Image src="/telegraph.png" alt="Telegraph" width={120} height={40} className="object-contain" />
+                                    <h3 className="text-lg font-medium flex items-center gap-3">
+                                        <img src="/telegraph.png" alt="Telegraph" className="h-8 w-auto object-contain" />
                                         {integrations.shipping.telegraph.enabled && (
                                             <Badge variant="outline" className="ml-3 bg-green-50 text-green-700 border-green-200">Active</Badge>
                                         )}
@@ -532,8 +532,8 @@ export default function SettingsPage() {
 
                             <div className="space-y-4 border rounded-md p-4 bg-muted/20">
                                 <div className="flex items-center justify-between">
-                                    <h3 className="text-lg font-medium flex items-center">
-                                        <Image src="/bosta.png" alt="Bosta" width={100} height={40} className="object-contain" />
+                                    <h3 className="text-lg font-medium flex items-center gap-3">
+                                        <img src="/bosta.png" alt="Bosta" className="h-8 w-auto object-contain" />
                                         {integrations.shipping.bosta.enabled && (
                                             <Badge variant="outline" className="ml-3 bg-green-50 text-green-700 border-green-200">Active</Badge>
                                         )}
