@@ -69,12 +69,13 @@ function AccountingContent() {
     const toDate = searchParams.get("to");
 
     useEffect(() => {
-        fetchData();
-        fetchBalances(); // Balance usually tracked across ALL time, but let's check user intent. "Account Balances" suggests total current money. Date filter applies to the TABLE list.
-    }, [fromDate, toDate]);
+        if (activeBusiness) {
+            fetchData();
+            fetchBalances();
+        }
+    }, [activeBusiness?.id, fromDate, toDate]);
 
     async function fetchBalances() {
-        if (!activeBusiness) return;
         if (!activeBusiness) return;
         
         try {
@@ -118,6 +119,7 @@ function AccountingContent() {
             let query = supabase
                 .from("transactions")
                 .select("*")
+                .eq("business_id", activeBusiness.id)
                 .order("transaction_date", { ascending: false });
 
             if (fromDate) query = query.gte("transaction_date", fromDate);
@@ -134,8 +136,13 @@ function AccountingContent() {
     }
 
     async function deleteTransaction(id: string) {
+        if (!activeBusiness) return;
         try {
-            const { error } = await supabase.from("transactions").delete().eq("id", id);
+            const { error } = await supabase
+                .from("transactions")
+                .delete()
+                .eq("id", id)
+                .eq("business_id", activeBusiness.id);
             if (error) throw error;
             refresh();
         } catch (error) {
@@ -143,6 +150,7 @@ function AccountingContent() {
             alert("Failed to delete transaction");
         }
     }
+
 
     const refresh = () => {
         fetchData();
