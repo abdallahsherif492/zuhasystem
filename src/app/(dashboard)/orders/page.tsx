@@ -17,7 +17,7 @@ import {
     TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Loader2, MoreHorizontal, Download, Search, Printer, FilterX, ChevronLeft, ChevronRight } from "lucide-react";
+import { Plus, Loader2, MoreHorizontal, Download, Search, Printer, FilterX, ChevronLeft, ChevronRight, Upload } from "lucide-react";
 import * as XLSX from "xlsx";
 import { DateRangePicker } from "@/components/date-range-picker";
 import { Input } from "@/components/ui/input";
@@ -467,57 +467,20 @@ function OrdersContent() {
 
                 {/* Filters Bar */}
                 <div className="bg-muted/40 p-4 rounded-lg space-y-4">
-                    <div className="flex flex-col sm:flex-row gap-4">
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-2 flex-[2] w-full">
-                            <MultiSelect
-                                options={statusOptions}
-                                selected={statusFilter}
-                                onChange={setStatusFilter}
-                                placeholder={t("Status")}
-                                className="bg-white"
-                            />
-                            <MultiSelect
-                                options={channelOptions}
-                                selected={channelFilter}
-                                onChange={setChannelFilter}
-                                placeholder={t("Channel")}
-                                className="bg-white"
-                            />
-                            <MultiSelect
-                                options={govOptions}
-                                selected={govFilter}
-                                onChange={setGovFilter}
-                                placeholder={t("Governorate")}
-                                className="bg-white"
-                                showSelectAll={true}
-                            />
-                            <MultiSelect
-                                options={productsOptions}
-                                selected={productFilter}
-                                onChange={setProductFilter}
-                                placeholder={t("Product")}
-                                className="bg-white"
-                            />
-                        </div>
-                        <Button variant="ghost" size="icon" onClick={clearFilters} title="Clear Filters">
-                            <FilterX className="h-4 w-4" />
-                        </Button>
-                    </div>
-
-                    <div className="flex justify-between items-center">
-                        <div className="text-sm text-muted-foreground">
-                            {totalCount} {t("orders found")}. {selectedOrders.size > 0 && <span className="text-primary font-bold ml-2">({selectedOrders.size} {t("selected")})</span>}
-                        </div>
-                        <div className="flex gap-2">
+                    {/* Top Row: Search and Actions */}
+                    <div className="flex flex-col xl:flex-row gap-4 items-start xl:items-center justify-between">
+                        <div className="w-full xl:w-[450px] relative">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                             <Input
                                 placeholder={t("Search by name, phone, order id...")}
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
-                                className="w-full sm:w-[250px]"
+                                className="w-full bg-white pl-9 h-10 text-base rounded-md border-muted-foreground/20 focus-visible:ring-primary shadow-sm"
                             />
-                            
+                        </div>
+                        <div className="flex flex-wrap gap-2 items-center w-full xl:w-auto">
                             <Select value={shippingCompanyFilter} onValueChange={setShippingCompanyFilter}>
-                                <SelectTrigger className="w-[180px]">
+                                <SelectTrigger className="w-[160px] bg-white h-10">
                                     <SelectValue placeholder="Shipping Company" />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -535,12 +498,12 @@ function OrdersContent() {
                                 ref={fileInputRef} 
                                 onChange={handleFileUpload} 
                             />
-                            <Button variant="outline" onClick={() => fileInputRef.current?.click()}>
-                                <FilterX className="mr-2 h-4 w-4" />
+                            <Button variant="outline" className="bg-white h-10" onClick={() => fileInputRef.current?.click()}>
+                                <Upload className="mr-2 h-4 w-4" />
                                 Upload Sheet
                             </Button>
                             {uploadedOrderFilters.length > 0 && (
-                                <Button variant="ghost" className="text-destructive" onClick={() => {
+                                <Button variant="ghost" className="text-destructive h-10" onClick={() => {
                                     setUploadedOrderFilters([]);
                                     if (fileInputRef.current) fileInputRef.current.value = "";
                                 }}>
@@ -551,15 +514,61 @@ function OrdersContent() {
                                 variant="secondary"
                                 onClick={handlePrintSelected}
                                 disabled={selectedOrders.size === 0}
-                                className="bg-white"
+                                className="bg-white h-10 shadow-sm"
                             >
                                 <Printer className="mr-2 h-4 w-4" />
                                 {t("Print Selected")}
                             </Button>
-                            <Button variant="outline" onClick={handleExport} className="bg-white">
+                            <Button variant="outline" onClick={handleExport} className="bg-white h-10 shadow-sm">
                                 <Download className="mr-2 h-4 w-4" />
                                 {selectedOrders.size > 0 ? t("Export Selected") : t("Export All")}
                             </Button>
+                        </div>
+                    </div>
+
+                    {/* Middle Row: Filters */}
+                    <div className="flex flex-col sm:flex-row gap-4 items-center">
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-2 flex-[2] w-full">
+                            <MultiSelect
+                                options={statusOptions}
+                                selected={statusFilter}
+                                onChange={setStatusFilter}
+                                placeholder={t("Status")}
+                                className="bg-white h-10"
+                            />
+                            <MultiSelect
+                                options={channelOptions}
+                                selected={channelFilter}
+                                onChange={setChannelFilter}
+                                placeholder={t("Channel")}
+                                className="bg-white h-10"
+                            />
+                            <MultiSelect
+                                options={govOptions}
+                                selected={govFilter}
+                                onChange={setGovFilter}
+                                placeholder={t("Governorate")}
+                                className="bg-white h-10"
+                                showSelectAll={true}
+                            />
+                            <MultiSelect
+                                options={productsOptions}
+                                selected={productFilter}
+                                onChange={setProductFilter}
+                                placeholder={t("Product")}
+                                className="bg-white h-10"
+                            />
+                        </div>
+                        <Button variant="ghost" size="icon" onClick={clearFilters} title="Clear Filters" className="shrink-0 h-10 w-10 text-muted-foreground hover:text-foreground">
+                            <FilterX className="h-4 w-4" />
+                        </Button>
+                    </div>
+
+                    {/* Bottom Row: Stats */}
+                    <div className="flex justify-between items-center pt-2 border-t border-muted-foreground/10">
+                        <div className="text-sm font-medium text-muted-foreground flex items-center">
+                            <span className="bg-muted px-2 py-1 rounded-md text-foreground border mr-2 shadow-sm">{totalCount}</span> {t("orders found")}
+                            {selectedOrders.size > 0 && <span className="text-primary font-bold ml-2">({selectedOrders.size} {t("selected")})</span>}
                         </div>
                     </div>
                 </div>
