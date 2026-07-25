@@ -127,6 +127,8 @@ export default function NewOrderPage() {
         (v) => v.id === selectedVariant
     );
 
+    const [accounts, setAccounts] = useState<{ id: string; name: string }[]>([]);
+
     useEffect(() => {
         if (activeVariant) {
             setCustomPrice(activeVariant.sale_price);
@@ -134,9 +136,12 @@ export default function NewOrderPage() {
     }, [activeVariant]);
 
     useEffect(() => {
-        fetchProducts();
-        searchCustomers("");
-    }, []);
+        if (activeBusiness) {
+            fetchProducts();
+            searchCustomers("");
+            fetchAccounts();
+        }
+    }, [activeBusiness]);
 
     // Update Shipping when Gov changes
     useEffect(() => {
@@ -152,10 +157,12 @@ export default function NewOrderPage() {
     }, [customerGov]);
 
     async function fetchProducts() {
+        if (!activeBusiness) return;
         try {
             const { data, error } = await supabase
                 .from("products")
                 .select(`*, variants (*)`)
+                .eq("business_id", activeBusiness.id)
                 .order("name");
             if (error) throw error;
             setProducts(data || []);
@@ -166,10 +173,30 @@ export default function NewOrderPage() {
         }
     }
 
+    async function fetchAccounts() {
+        if (!activeBusiness) return;
+        try {
+            const { data } = await supabase
+                .from("financial_accounts")
+                .select("id, name")
+                .eq("business_id", activeBusiness.id)
+                .order("name");
+            if (data && data.length > 0) {
+                setAccounts(data);
+            } else {
+                setAccounts([{ id: "default", name: "الخزينة الرئيسية" }]);
+            }
+        } catch (e) {
+            console.error("Error fetching treasuries:", e);
+        }
+    }
+
     async function searchCustomers(query: string) {
+        if (!activeBusiness) return;
         let req = supabase
             .from("customers")
             .select("id, name, phone, phone2, address, governorate")
+            .eq("business_id", activeBusiness.id)
             .limit(10);
 
         if (query) {
@@ -179,6 +206,7 @@ export default function NewOrderPage() {
         const { data } = await req;
         setExistingCustomers(data || []);
     }
+
 
     function handleCustomerSelect(customerId: string) {
         if (customerId === "new") {
@@ -879,15 +907,19 @@ export default function NewOrderPage() {
                     </DialogHeader>
                     <div className="space-y-4 py-4">
                         <div className="space-y-2">
-                            <Label>Select Account</Label>
+                            <Label>اختر الخزينة / الحساب (Treasury Account)</Label>
                             <Select value={transactionAccount} onValueChange={setTransactionAccount}>
-                                <SelectTrigger><SelectValue placeholder="Choose Account" /></SelectTrigger>
+                                <SelectTrigger><SelectValue placeholder="اختر الخزينة" /></SelectTrigger>
                                 <SelectContent>
-                                    <SelectItem value="Mohamed Adel">Mohamed Adel</SelectItem>
-                                    <SelectItem value="Abdallah Sherif">Abdallah Sherif</SelectItem>
-                                    <SelectItem value="Split">Split (50/50)</SelectItem>
+                                    {accounts.map((acc) => (
+                                        <SelectItem key={acc.id} value={acc.name}>
+                                            {acc.name}
+                                        </SelectItem>
+                                    ))}
+                                    <SelectItem value="Split">Split (تقسيم مناصفة 50/50)</SelectItem>
                                 </SelectContent>
                             </Select>
+
                         </div>
                     </div>
                     <DialogFooter>

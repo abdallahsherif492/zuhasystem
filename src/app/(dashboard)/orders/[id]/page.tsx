@@ -112,21 +112,49 @@ export default function OrderDetailsPage() {
     const [completedOrder, setCompletedOrder] = useState<{ id: string, amount: number, cName: string, cPhone: string } | null>(null);
     const [transactionAccount, setTransactionAccount] = useState<string>("");
     const [transactionLoading, setTransactionLoading] = useState(false);
+    const [accounts, setAccounts] = useState<{ id: string; name: string }[]>([]);
 
     useEffect(() => {
         fetchOrderDetails();
-        fetchProducts();
+        if (activeBusiness) {
+            fetchProducts();
+            fetchAccounts();
+        }
         fetchShippingCompanies();
-    }, [orderId]);
+    }, [orderId, activeBusiness]);
 
     // Helpers for Product Selection
     const activeProduct = products.find((p) => p.id === selectedProduct);
     const activeVariant = activeProduct?.variants.find((v: any) => v.id === selectedVariant);
 
     async function fetchProducts() {
-        const { data } = await supabase.from("products").select("*, variants(*)").order("name");
+        if (!activeBusiness) return;
+        const { data } = await supabase
+            .from("products")
+            .select("*, variants(*)")
+            .eq("business_id", activeBusiness.id)
+            .order("name");
         setProducts(data || []);
     }
+
+    async function fetchAccounts() {
+        if (!activeBusiness) return;
+        try {
+            const { data } = await supabase
+                .from("financial_accounts")
+                .select("id, name")
+                .eq("business_id", activeBusiness.id)
+                .order("name");
+            if (data && data.length > 0) {
+                setAccounts(data);
+            } else {
+                setAccounts([{ id: "default", name: "الخزينة الرئيسية" }]);
+            }
+        } catch (e) {
+            console.error("Error fetching treasuries:", e);
+        }
+    }
+
 
     async function fetchShippingCompanies() {
         const { data } = await supabase.from("shipping_companies").select("*").eq("active", true).order("name");
@@ -893,15 +921,19 @@ export default function OrderDetailsPage() {
                     </DialogHeader>
                     <div className="space-y-4 py-4">
                         <div className="space-y-2">
-                            <Label>Select Account</Label>
+                            <Label>اختر الخزينة / الحساب (Treasury Account)</Label>
                             <Select value={transactionAccount} onValueChange={setTransactionAccount}>
-                                <SelectTrigger><SelectValue placeholder="Choose Account" /></SelectTrigger>
+                                <SelectTrigger><SelectValue placeholder="اختر الخزينة" /></SelectTrigger>
                                 <SelectContent>
-                                    <SelectItem value="Mohamed Adel">Mohamed Adel</SelectItem>
-                                    <SelectItem value="Abdallah Sherif">Abdallah Sherif</SelectItem>
-                                    <SelectItem value="Split">Split (50/50)</SelectItem>
+                                    {accounts.map((acc) => (
+                                        <SelectItem key={acc.id} value={acc.name}>
+                                            {acc.name}
+                                        </SelectItem>
+                                    ))}
+                                    <SelectItem value="Split">Split (تقسيم مناصفة 50/50)</SelectItem>
                                 </SelectContent>
                             </Select>
+
                         </div>
                     </div>
                     <DialogFooter>
