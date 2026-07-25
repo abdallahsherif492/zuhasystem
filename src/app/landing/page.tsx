@@ -244,19 +244,19 @@ export default function MarketingLandingPage() {
                 {[...Array(4)].map((_, i) => (
                   <div key={i} className="flex w-1/2 justify-around items-center px-4">
                     <motion.div whileHover={{ scale: 1.15, rotate: 2 }} className="relative h-16 w-36 mx-6 cursor-pointer drop-shadow-md">
-                      <Image src="/shopify.png" alt="Shopify" fill className="object-contain" />
+                      <img src="/shopify.png" alt="Shopify" className="w-full h-full object-contain" />
                     </motion.div>
                     <motion.div whileHover={{ scale: 1.15, rotate: -2 }} className="relative h-16 w-36 mx-6 cursor-pointer drop-shadow-md">
-                      <Image src="/woocommerce.png" alt="WooCommerce" fill className="object-contain" />
+                      <img src="/woocommerce.png" alt="WooCommerce" className="w-full h-full object-contain" />
                     </motion.div>
                     <motion.div whileHover={{ scale: 1.15, rotate: 2 }} className="relative h-16 w-36 mx-6 cursor-pointer drop-shadow-md">
-                      <Image src="/easyorders.png" alt="EasyOrders" fill className="object-contain" />
+                      <img src="/easyorders.png" alt="EasyOrders" className="w-full h-full object-contain" />
                     </motion.div>
                     <motion.div whileHover={{ scale: 1.15, rotate: -2 }} className="relative h-16 w-36 mx-6 cursor-pointer drop-shadow-md">
-                      <Image src="/vrobo.png" alt="vRobo" fill className="object-contain" />
+                      <img src="/vrobo.png" alt="vRobo" className="w-full h-full object-contain" />
                     </motion.div>
                     <motion.div whileHover={{ scale: 1.15, rotate: 2 }} className="relative h-16 w-48 mx-6 cursor-pointer drop-shadow-md">
-                      <Image src="/shipping-logos.png" alt="Shipping Companies" fill className="object-contain" />
+                      <img src="/shipping-logos.png" alt="Shipping Companies" className="w-full h-full object-contain" />
                     </motion.div>
                   </div>
                 ))}
