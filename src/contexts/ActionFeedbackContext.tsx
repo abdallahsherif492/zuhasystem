@@ -1,1 +1,57 @@
-"use client"\n\nimport React, { createContext, useContext, useState, ReactNode } from 'react';\nimport { ActionFeedback } from '@/components/ui/action-feedback';\n\nexport type FeedbackState = 'idle' | 'loading' | 'success' | 'error';\n\ninterface ActionFeedbackContextProps {\n    startAction: (message?: string) => void;\n    completeAction: (message?: string) => void;\n    failAction: (message?: string) => void;\n}\n\nconst ActionFeedbackContext = createContext<ActionFeedbackContextProps | undefined>(undefined);\n\nexport const ActionFeedbackProvider = ({ children }: { children: ReactNode }) => {\n    const [state, setState] = useState<FeedbackState>('idle');\n    const [message, setMessage] = useState<string>('');\n\n    const startAction = (msg = 'Processing...') => {\n        setMessage(msg);\n        setState('loading');\n    };\n\n    const completeAction = (msg = 'Operation successful') => {\n        setMessage(msg);\n        setState('success');\n        setTimeout(() => {\n            setState('idle');\n        }, 1500); // 1.5s delay before hiding\n    };\n\n    const failAction = (msg = 'Operation failed') => {\n        setMessage(msg);\n        setState('error');\n        setTimeout(() => {\n            setState('idle');\n        }, 2000); // 2s delay before hiding\n    };\n\n    return (\n        <ActionFeedbackContext.Provider value={{ startAction, completeAction, failAction }}>\n            {children}\n            {state !== 'idle' && (\n                <ActionFeedback state={state} message={message} />\n            )}\n        </ActionFeedbackContext.Provider>\n    );\n};\n\nexport const useActionFeedback = () => {\n    const context = useContext(ActionFeedbackContext);\n    if (!context) {\n        throw new Error('useActionFeedback must be used within an ActionFeedbackProvider');\n    }\n    return context;\n};\n
+"use client"
+
+import React, { createContext, useContext, useState, ReactNode } from 'react';
+import { ActionFeedback } from '@/components/ui/action-feedback';
+
+export type FeedbackState = 'idle' | 'loading' | 'success' | 'error';
+
+interface ActionFeedbackContextProps {
+    startAction: (message?: string) => void;
+    completeAction: (message?: string) => void;
+    failAction: (message?: string) => void;
+}
+
+const ActionFeedbackContext = createContext<ActionFeedbackContextProps | undefined>(undefined);
+
+export const ActionFeedbackProvider = ({ children }: { children: ReactNode }) => {
+    const [state, setState] = useState<FeedbackState>('idle');
+    const [message, setMessage] = useState<string>('');
+
+    const startAction = (msg = 'Processing...') => {
+        setMessage(msg);
+        setState('loading');
+    };
+
+    const completeAction = (msg = 'Operation successful') => {
+        setMessage(msg);
+        setState('success');
+        setTimeout(() => {
+            setState('idle');
+        }, 1500); // 1.5s delay before hiding
+    };
+
+    const failAction = (msg = 'Operation failed') => {
+        setMessage(msg);
+        setState('error');
+        setTimeout(() => {
+            setState('idle');
+        }, 2000); // 2s delay before hiding
+    };
+
+    return (
+        <ActionFeedbackContext.Provider value={{ startAction, completeAction, failAction }}>
+            {children}
+            {state !== 'idle' && (
+                <ActionFeedback state={state} message={message} />
+            )}
+        </ActionFeedbackContext.Provider>
+    );
+};
+
+export const useActionFeedback = () => {
+    const context = useContext(ActionFeedbackContext);
+    if (!context) {
+        throw new Error('useActionFeedback must be used within an ActionFeedbackProvider');
+    }
+    return context;
+};
