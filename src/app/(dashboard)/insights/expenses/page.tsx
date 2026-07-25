@@ -2,7 +2,8 @@
 
 import { useEffect, useState, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
-import { supabase } from "@/lib/supabase";
+import { supabase, fetchAll } from "@/lib/supabase";
+
 import { formatCurrency } from "@/lib/utils";
 import { DateRangePicker } from "@/components/date-range-picker";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -53,26 +54,16 @@ function ExpensesAnalyticsContent() {
             if (expError) throw expError;
 
             // 2. Get Total Orders for "Cost Per Order" (Confirmed Orders only)
-            let allPeriodOrders: any[] = [];
-            let pageP = 0;
-            let hasMoreP = true;
-            while (hasMoreP) {
-                const { data, error } = await supabase
+            const allPeriodOrders = await fetchAll((from, to) =>
+                supabase
                     .from("orders")
                     .select("status")
                     .eq("business_id", activeBusiness.id)
                     .gte("created_at", start)
                     .lte("created_at", end)
-                    .range(pageP * 1000, (pageP + 1) * 1000 - 1);
-                if (error) throw error;
-                if (data && data.length > 0) {
-                    allPeriodOrders.push(...data);
-                    if (data.length < 1000) hasMoreP = false;
-                    else pageP++;
-                } else {
-                    hasMoreP = false;
-                }
-            }
+                    .range(from, to)
+            );
+
 
             let cCount = 0;
             allPeriodOrders.forEach(o => {

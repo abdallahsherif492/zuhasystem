@@ -4,7 +4,8 @@ import { useEffect, useState, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useBusiness } from "@/contexts/BusinessContext";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { supabase } from "@/lib/supabase";
+import { supabase, fetchAll } from "@/lib/supabase";
+
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { DateRangePicker } from "@/components/date-range-picker";
 import { Loader2, ArrowUpDown, Search, PackageSearch, XCircle, CheckCircle2, Clock } from "lucide-react";
@@ -93,13 +94,9 @@ function EasyOrdersInsightsContent() {
             const start = fromDate ? `${fromDate}T00:00:00` : new Date().toISOString();
             const end = toDate ? `${toDate}T23:59:59` : new Date().toISOString();
 
-            // Fetch easyorders with pagination to avoid 1000 limit
-            let allOrdersData: any[] = [];
-            let page = 0;
-            let hasMore = true;
-
-            while (hasMore) {
-                const { data: ordersData, error: ordersError } = await supabase
+            // Fetch easyorders with fetchAll to avoid 1000 limit
+            const allOrdersData = await fetchAll((from, to) =>
+                supabase
                     .from('orders')
                     .select(`
                         id, 
@@ -118,21 +115,9 @@ function EasyOrdersInsightsContent() {
                     .eq('business_id', activeBusiness!.id)
                     .gte('created_at', start)
                     .lte('created_at', end)
-                    .range(page * 1000, (page + 1) * 1000 - 1);
+                    .range(from, to)
+            );
 
-                if (ordersError) throw ordersError;
-
-                if (ordersData && ordersData.length > 0) {
-                    allOrdersData.push(...ordersData);
-                    if (ordersData.length < 1000) {
-                        hasMore = false;
-                    } else {
-                        page++;
-                    }
-                } else {
-                    hasMore = false;
-                }
-            }
 
             // Filter out only easy orders
             const easyOrders = allOrdersData?.filter(o => {

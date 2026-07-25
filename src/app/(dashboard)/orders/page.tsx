@@ -466,89 +466,54 @@ function OrdersContent() {
                 </div>
 
                 {/* Filters Bar */}
-                <div className="bg-muted/40 p-4 rounded-lg space-y-4">
-                    {/* Top Row: Search and Actions */}
-                    <div className="flex flex-col xl:flex-row gap-4 items-start xl:items-center justify-between">
-                        <div className="w-full xl:w-[450px] relative">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                            <Input
-                                placeholder={t("Search by name, phone, order id...")}
-                                value={searchQuery}
-                                onChange={(e) => setSearchQuery(e.target.value)}
-                                className="w-full bg-white pl-9 h-10 text-base rounded-md border-muted-foreground/20 focus-visible:ring-primary shadow-sm"
-                            />
+                <div className="bg-white p-5 rounded-xl border border-border/50 shadow-sm space-y-5">
+                    {/* Top Row: Main Search */}
+                    <div className="relative group">
+                        <div className="absolute left-4 top-1/2 -translate-y-1/2 flex items-center justify-center text-muted-foreground group-focus-within:text-primary transition-colors">
+                            <Search className="h-6 w-6" />
                         </div>
-                        <div className="flex flex-wrap gap-2 items-center w-full xl:w-auto">
+                        <Input
+                            placeholder={t("Search by name, phone, order id...")}
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            className="w-full bg-muted/10 hover:bg-muted/20 transition-colors pl-14 h-16 text-lg rounded-xl border-muted-foreground/20 focus-visible:ring-2 focus-visible:ring-primary shadow-inner"
+                        />
+                    </div>
+
+                    {/* Middle Row: Filters and Clear */}
+                    <div className="flex flex-col xl:flex-row gap-4 justify-between items-start xl:items-center">
+                        <div className="flex-1 w-full grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3">
                             <Select value={shippingCompanyFilter} onValueChange={setShippingCompanyFilter}>
-                                <SelectTrigger className="w-[160px] bg-white h-10">
-                                    <SelectValue placeholder="Shipping Company" />
+                                <SelectTrigger className="w-full bg-white h-10 rounded-lg">
+                                    <SelectValue placeholder={t("Shipping Company")} />
                                 </SelectTrigger>
                                 <SelectContent>
-                                    <SelectItem value="all">All Companies</SelectItem>
+                                    <SelectItem value="all">{t("All Companies")}</SelectItem>
                                     {shippingCompanies.map(c => (
                                         <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
                                     ))}
                                 </SelectContent>
                             </Select>
-
-                            <input 
-                                type="file" 
-                                accept=".xlsx, .csv" 
-                                className="hidden" 
-                                ref={fileInputRef} 
-                                onChange={handleFileUpload} 
-                            />
-                            <Button variant="outline" className="bg-white h-10" onClick={() => fileInputRef.current?.click()}>
-                                <Upload className="mr-2 h-4 w-4" />
-                                Upload Sheet
-                            </Button>
-                            {uploadedOrderFilters.length > 0 && (
-                                <Button variant="ghost" className="text-destructive h-10" onClick={() => {
-                                    setUploadedOrderFilters([]);
-                                    if (fileInputRef.current) fileInputRef.current.value = "";
-                                }}>
-                                    Clear Sheet Filter
-                                </Button>
-                            )}
-                            <Button
-                                variant="secondary"
-                                onClick={handlePrintSelected}
-                                disabled={selectedOrders.size === 0}
-                                className="bg-white h-10 shadow-sm"
-                            >
-                                <Printer className="mr-2 h-4 w-4" />
-                                {t("Print Selected")}
-                            </Button>
-                            <Button variant="outline" onClick={handleExport} className="bg-white h-10 shadow-sm">
-                                <Download className="mr-2 h-4 w-4" />
-                                {selectedOrders.size > 0 ? t("Export Selected") : t("Export All")}
-                            </Button>
-                        </div>
-                    </div>
-
-                    {/* Middle Row: Filters */}
-                    <div className="flex flex-col sm:flex-row gap-4 items-center">
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-2 flex-[2] w-full">
                             <MultiSelect
                                 options={statusOptions}
                                 selected={statusFilter}
                                 onChange={setStatusFilter}
                                 placeholder={t("Status")}
-                                className="bg-white h-10"
+                                className="bg-white h-10 rounded-lg"
                             />
                             <MultiSelect
                                 options={channelOptions}
                                 selected={channelFilter}
                                 onChange={setChannelFilter}
                                 placeholder={t("Channel")}
-                                className="bg-white h-10"
+                                className="bg-white h-10 rounded-lg"
                             />
                             <MultiSelect
                                 options={govOptions}
                                 selected={govFilter}
                                 onChange={setGovFilter}
                                 placeholder={t("Governorate")}
-                                className="bg-white h-10"
+                                className="bg-white h-10 rounded-lg"
                                 showSelectAll={true}
                             />
                             <MultiSelect
@@ -556,19 +521,55 @@ function OrdersContent() {
                                 selected={productFilter}
                                 onChange={setProductFilter}
                                 placeholder={t("Product")}
-                                className="bg-white h-10"
+                                className="bg-white h-10 rounded-lg"
                             />
                         </div>
-                        <Button variant="ghost" size="icon" onClick={clearFilters} title="Clear Filters" className="shrink-0 h-10 w-10 text-muted-foreground hover:text-foreground">
+                        <Button variant="secondary" size="icon" onClick={clearFilters} title={t("Clear Filters")} className="shrink-0 h-10 w-10 rounded-lg bg-muted/50 hover:bg-muted text-muted-foreground hover:text-foreground">
                             <FilterX className="h-4 w-4" />
                         </Button>
                     </div>
 
-                    {/* Bottom Row: Stats */}
-                    <div className="flex justify-between items-center pt-2 border-t border-muted-foreground/10">
-                        <div className="text-sm font-medium text-muted-foreground flex items-center">
-                            <span className="bg-muted px-2 py-1 rounded-md text-foreground border mr-2 shadow-sm">{totalCount}</span> {t("orders found")}
+                    {/* Bottom Row: Actions and Stats */}
+                    <div className="flex flex-col sm:flex-row justify-between items-center gap-4 pt-4 border-t border-border/50">
+                        <div className="text-sm font-medium text-muted-foreground flex items-center bg-muted/30 py-1.5 px-3 rounded-md">
+                            <span className="bg-primary/10 text-primary px-2 py-0.5 rounded text-sm font-bold mr-2">{totalCount}</span> {t("orders found")}
                             {selectedOrders.size > 0 && <span className="text-primary font-bold ml-2">({selectedOrders.size} {t("selected")})</span>}
+                        </div>
+                        
+                        <div className="flex flex-wrap gap-2 items-center">
+                            <input 
+                                type="file" 
+                                accept=".xlsx, .csv" 
+                                className="hidden" 
+                                ref={fileInputRef} 
+                                onChange={handleFileUpload} 
+                            />
+                            <Button variant="outline" size="sm" className="bg-white rounded-lg h-9" onClick={() => fileInputRef.current?.click()}>
+                                <Upload className="mr-2 h-4 w-4" />
+                                {t("Upload Sheet")}
+                            </Button>
+                            {uploadedOrderFilters.length > 0 && (
+                                <Button variant="ghost" size="sm" className="text-destructive rounded-lg bg-destructive/10 hover:bg-destructive/20 h-9" onClick={() => {
+                                    setUploadedOrderFilters([]);
+                                    if (fileInputRef.current) fileInputRef.current.value = "";
+                                }}>
+                                    {t("Clear Sheet Filter")}
+                                </Button>
+                            )}
+                            <Button
+                                variant="secondary"
+                                size="sm"
+                                onClick={handlePrintSelected}
+                                disabled={selectedOrders.size === 0}
+                                className="bg-white rounded-lg shadow-sm h-9"
+                            >
+                                <Printer className="mr-2 h-4 w-4" />
+                                {t("Print Selected")}
+                            </Button>
+                            <Button variant="outline" size="sm" onClick={handleExport} className="bg-white rounded-lg shadow-sm border-primary/20 text-primary hover:bg-primary/5 h-9">
+                                <Download className="mr-2 h-4 w-4" />
+                                {selectedOrders.size > 0 ? t("Export Selected") : t("Export All")}
+                            </Button>
                         </div>
                     </div>
                 </div>

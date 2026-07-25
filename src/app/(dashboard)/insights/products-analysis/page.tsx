@@ -3,7 +3,8 @@
 import { useEffect, useState, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useBusiness } from "@/contexts/BusinessContext";
-import { supabase } from "@/lib/supabase";
+import { supabase, fetchAll } from "@/lib/supabase";
+
 import { formatCurrency } from "@/lib/utils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { DateRangePicker } from "@/components/date-range-picker";
@@ -86,12 +87,13 @@ function ProductAnalysisContent() {
             const end = toDate ? `${toDate}T23:59:59` : new Date().toISOString();
 
             // 1. Fetch all products for this business
-            const { data: productsData, error: productsError } = await supabase
-                .from('products')
-                .select('id, name')
-                .eq('business_id', activeBusiness!.id);
-            
-            if (productsError) throw productsError;
+            const productsData = await fetchAll((from, to) =>
+                supabase
+                    .from('products')
+                    .select('id, name')
+                    .eq('business_id', activeBusiness!.id)
+                    .range(from, to)
+            );
             
             const productIds = productsData?.map(p => p.id) || [];
             if (productIds.length === 0) {
@@ -101,37 +103,40 @@ function ProductAnalysisContent() {
             }
 
             // 2. Fetch all variants for those products
-            const { data: variantsData, error: variantsError } = await supabase
-                .from('variants')
-                .select(`
-                    id, 
-                    title, 
-                    product_id
-                `)
-                .in('product_id', productIds);
+            const variantsData = await fetchAll((from, to) =>
+                supabase
+                    .from('variants')
+                    .select(`
+                        id, 
+                        title, 
+                        product_id
+                    `)
+                    .in('product_id', productIds)
+                    .range(from, to)
+            );
 
-            if (variantsError) throw variantsError;
-
-            // 2. Fetch orders with items and variants
-            const { data: ordersData, error: ordersError } = await supabase
-                .from('orders')
-                .select(`
-                    id, 
-                    status, 
-                    order_items (
-                        quantity,
-                        price_at_sale,
-                        variants (
-                            id
+            // 3. Fetch orders with items and variants
+            const ordersData = await fetchAll((from, to) =>
+                supabase
+                    .from('orders')
+                    .select(`
+                        id, 
+                        status, 
+                        order_items (
+                            quantity,
+                            price_at_sale,
+                            variants (
+                                id
+                            )
                         )
-                    )
-                `)
-                .eq('business_id', activeBusiness!.id)
-                .gte('created_at', start)
-                .lte('created_at', end)
-                .neq('status', 'Cancelled');
+                    `)
+                    .eq('business_id', activeBusiness!.id)
+                    .gte('created_at', start)
+                    .lte('created_at', end)
+                    .neq('status', 'Cancelled')
+                    .range(from, to)
+            );
 
-            if (ordersError) throw ordersError;
 
             // 3. Aggregate Metrics
             const metricsMap = new Map<string, VariantMetric>();

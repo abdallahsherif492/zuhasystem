@@ -2,8 +2,10 @@
 
 import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { supabase } from "@/lib/supabase";
+import { supabase, fetchAll } from "@/lib/supabase";
+import { useBusiness } from "@/contexts/BusinessContext";
 import { formatCurrency } from "@/lib/utils";
+
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Loader2, DollarSign, ArrowDownRight, ArrowUpRight, Percent, Package, Wallet, TrendingDown, Truck, AlertTriangle } from "lucide-react";
 import { DateRangePicker } from "@/components/date-range-picker";
@@ -26,6 +28,7 @@ import { Suspense } from "react";
 const COLORS = ['#10b981', '#ef4444', '#f59e0b', '#3b82f6', '#8b5cf6'];
 
 function ActualReturnsContent() {
+    const { activeBusiness } = useBusiness();
     const searchParams = useSearchParams();
     const [loading, setLoading] = useState(true);
 
@@ -48,7 +51,7 @@ function ActualReturnsContent() {
 
     useEffect(() => {
         fetchActualReturns();
-    }, [fromDate, toDate]);
+    }, [fromDate, toDate, activeBusiness]);
 
     async function fetchActualReturns() {
         setLoading(true);
@@ -60,42 +63,52 @@ function ActualReturnsContent() {
             const start = fromDate || defaultStart;
             const end = toDate || defaultEnd;
 
-            // 1. Fetch Collected Orders
-            const { data: orders, error: ordersError } = await supabase
-                .from('orders')
-                .select('created_at, total_amount, total_cost, shipping_cost, actual_shipping_cost, status, customer_info')
-                .eq('status', 'Collected')
-                .gte('created_at', start)
-                .lte('created_at', end);
+            // 1. Fetch Collected Orders with fetchAll
+            const orders = await fetchAll((from, to) => {
+                let q = supabase
+                    .from('orders')
+                    .select('created_at, total_amount, total_cost, shipping_cost, actual_shipping_cost, status, customer_info')
+                    .eq('status', 'Collected')
+                    .gte('created_at', start)
+                    .lte('created_at', end);
+                if (activeBusiness?.id) {
+                    q = q.eq('business_id', activeBusiness.id);
+                }
+                return q.range(from, to);
+            });
 
-            if (ordersError) throw ordersError;
+            // 2. Fetch Operational Expenses with fetchAll
+            const transactions = await fetchAll((from, to) => {
+                let q = supabase
+                    .from('transactions')
+                    .select('transaction_date, amount, category, type')
+                    .eq('type', 'expense')
+                    .gte('transaction_date', start)
+                    .lte('transaction_date', end);
+                if (activeBusiness?.id) {
+                    q = q.eq('business_id', activeBusiness.id);
+                }
+                return q.range(from, to);
+            });
 
-            // 2. Fetch Operational Expenses (Excluding Ads if they are separated)
-            const { data: transactions, error: transError } = await supabase
-                .from('transactions')
-                .select('transaction_date, amount, category, type')
-                .eq('type', 'expense')
-                .gte('transaction_date', start)
-                .lte('transaction_date', end);
-
-            if (transError) throw transError;
-
-            // 3. (Removed ads_expenses fetch)
-
-            
-            // 4. Fetch Damages
-            const { data: damages, error: damagesError } = await supabase
-                .from('inventory_damages')
-                .select('total_loss')
-                .gte('date', start)
-                .lte('date', end);
-
-            if (damagesError) throw damagesError;
+            // 4. Fetch Damages with fetchAll
+            const damages = await fetchAll((from, to) => {
+                let q = supabase
+                    .from('inventory_damages')
+                    .select('total_loss')
+                    .gte('date', start)
+                    .lte('date', end);
+                if (activeBusiness?.id) {
+                    q = q.eq('business_id', activeBusiness.id);
+                }
+                return q.range(from, to);
+            });
 
             let damagesLoss = 0;
             (damages || []).forEach(d => {
                 damagesLoss += Number(d.total_loss) || 0;
             });
+
 
             // Aggregation
             let rev = 0;

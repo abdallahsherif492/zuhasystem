@@ -2,7 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { supabase } from "@/lib/supabase";
+import { supabase, fetchAll } from "@/lib/supabase";
+import { useBusiness } from "@/contexts/BusinessContext";
+
 import { formatCurrency } from "@/lib/utils";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Loader2, DollarSign, ArrowDownToLine, PackageCheck, ListOrdered } from "lucide-react";
@@ -26,6 +28,7 @@ import { Suspense } from "react";
 const COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#8b5cf6'];
 
 function RevenuesContent() {
+    const { activeBusiness } = useBusiness();
     const searchParams = useSearchParams();
     const [loading, setLoading] = useState(true);
 
@@ -47,7 +50,7 @@ function RevenuesContent() {
 
     useEffect(() => {
         fetchRevenues();
-    }, [fromDate, toDate]);
+    }, [fromDate, toDate, activeBusiness]);
 
     async function fetchRevenues() {
         setLoading(true);
@@ -59,15 +62,20 @@ function RevenuesContent() {
             const start = fromDate || defaultStart;
             const end = toDate || defaultEnd;
 
-            // Fetch Revenue Transactions
-            const { data: revTrans, error: transError } = await supabase
-                .from('transactions')
-                .select('transaction_date, amount, category, type')
-                .eq('type', 'revenue')
-                .gte('transaction_date', start)
-                .lte('transaction_date', end);
+            // Fetch Revenue Transactions with fetchAll
+            const revTrans = await fetchAll((from, to) => {
+                let q = supabase
+                    .from('transactions')
+                    .select('transaction_date, amount, category, type')
+                    .eq('type', 'revenue')
+                    .gte('transaction_date', start)
+                    .lte('transaction_date', end);
+                if (activeBusiness?.id) {
+                    q = q.eq('business_id', activeBusiness.id);
+                }
+                return q.range(from, to);
+            });
 
-            if (transError) throw transError;
 
             let dVal = 0, dCount = 0;
             let cVal = 0, cCount = 0;

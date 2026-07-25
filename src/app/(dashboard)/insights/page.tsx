@@ -3,7 +3,7 @@
 import { useEffect, useState, Suspense } from "react";
 import { cn } from "@/lib/utils";
 import { useSearchParams } from "next/navigation";
-import { supabase } from "@/lib/supabase";
+import { supabase, fetchAll } from "@/lib/supabase";
 import { useBusiness } from "@/contexts/BusinessContext";
 import { formatCurrency } from "@/lib/utils";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -18,6 +18,7 @@ import { useRouter } from "next/navigation";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d'];
+
 
 function InsightsContent() {
     const { activeBusiness } = useBusiness();
@@ -107,20 +108,27 @@ function InsightsContent() {
 
             // --- 1. ADS INSIGHTS ---
             const [
-                { data: rawAdsExpenses },
-                { data: rawOrders }
+                rawAdsExpenses,
+                rawOrders
             ] = await Promise.all([
-                supabase.from('ads_expenses')
-                    .select('ad_date, amount')
-                    .eq('business_id', activeBusiness.id)
-                    .gte('ad_date', dateOnlyStart)
-                    .lte('ad_date', dateOnlyEnd),
-                supabase.from('orders')
-                    .select('created_at, total_amount, status, total_cost, shipping_cost')
-                    .eq('business_id', activeBusiness.id)
-                    .gte('created_at', start)
-                    .lte('created_at', end)
+                fetchAll((from, to) =>
+                    supabase.from('ads_expenses')
+                        .select('ad_date, amount')
+                        .eq('business_id', activeBusiness.id)
+                        .gte('ad_date', dateOnlyStart)
+                        .lte('ad_date', dateOnlyEnd)
+                        .range(from, to)
+                ),
+                fetchAll((from, to) =>
+                    supabase.from('orders')
+                        .select('created_at, total_amount, status, total_cost, shipping_cost')
+                        .eq('business_id', activeBusiness.id)
+                        .gte('created_at', start)
+                        .lte('created_at', end)
+                        .range(from, to)
+                )
             ]);
+
 
             const adsExpensesArr = rawAdsExpenses || [];
             const ordersArr = rawOrders || [];
@@ -208,14 +216,20 @@ function InsightsContent() {
 
 
             // --- 3. BUSINESS INSIGHTS ---
-            const { data: rawTransactions, error: busError } = await supabase
-                .from('transactions')
-                .select('type, category, amount, transaction_date')
-                .eq('business_id', activeBusiness.id)
-                .gte('transaction_date', dateOnlyStart)
-                .lte('transaction_date', dateOnlyEnd);
+            let rawTransactions: any[] = [];
 
-            if (busError) throw busError;
+            try {
+                rawTransactions = await fetchAll((from, to) =>
+                    supabase.from('transactions')
+                        .select('type, category, amount, transaction_date')
+                        .eq('business_id', activeBusiness.id)
+                        .gte('transaction_date', dateOnlyStart)
+                        .lte('transaction_date', dateOnlyEnd)
+                        .range(from, to)
+                );
+            } catch (busError) {
+                console.error("Error fetching transactions", busError);
+            }
 
             let busRev = 0;
             let busExp = 0;
@@ -255,25 +269,48 @@ function InsightsContent() {
             // --- 4. BUSINESS VALUE (SNAPSHOT) ---
             // Fetch these in parallel
             const [
-                { data: investData },
-                { data: pendingData },
+                investData,
+                pendingData,
                 { data: balancesData },
                 { data: accountsData },
-                { data: stockData },
-                { data: supplierInvoicesData }
+                stockData,
+                supplierInvoicesData
             ] = await Promise.all([
                 // 1. Total Investment
-                supabase.from('transactions').select('amount').eq('business_id', activeBusiness.id).eq('type', 'investment'),
+                fetchAll((from, to) =>
+                    supabase.from('transactions')
+                        .select('amount')
+                        .eq('business_id', activeBusiness.id)
+                        .eq('type', 'investment')
+                        .range(from, to)
+                ),
                 // 2. Pending Orders (Prepared + Shipped Only)
-                supabase.from('orders').select('total_amount').eq('business_id', activeBusiness.id).in('status', ['Prepared', 'Shipped']),
+                fetchAll((from, to) =>
+                    supabase.from('orders')
+                        .select('total_amount')
+                        .eq('business_id', activeBusiness.id)
+                        .in('status', ['Prepared', 'Shipped'])
+                        .range(from, to)
+                ),
                 // 3. Treasury Balances (using same RPC as accounting page)
                 supabase.rpc('get_treasury_balances', { p_business_id: activeBusiness.id }),
                 supabase.from('financial_accounts').select('name').eq('business_id', activeBusiness.id),
                 // 4. Stock Value
-                supabase.from('variants').select('cost_price, stock_qty'),
+                fetchAll((from, to) =>
+                    supabase.from('variants')
+                        .select('cost_price, stock_qty')
+                        .range(from, to)
+                ),
                 // 5. Total Debts
-                supabase.from('supplier_invoices').select('total_amount, paid_amount').eq('business_id', activeBusiness.id).neq('status', 'Fully Paid')
+                fetchAll((from, to) =>
+                    supabase.from('supplier_invoices')
+                        .select('total_amount, paid_amount')
+                        .eq('business_id', activeBusiness.id)
+                        .neq('status', 'Fully Paid')
+                        .range(from, to)
+                )
             ]);
+
 
             const investVal = investData?.reduce((sum, row) => sum + (Number(row.amount) || 0), 0) || 0;
             const pendingVal = pendingData?.reduce((sum, row) => sum + (Number(row.total_amount) || 0), 0) || 0;

@@ -17,3 +17,31 @@ if (supabaseUrl.includes("placeholder")) {
 }
 
 export const supabase = createBrowserClient(supabaseUrl, supabaseAnonKey)
+
+export async function fetchAll<T = any>(
+    fetchFn: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: any }>
+): Promise<T[]> {
+    let allData: T[] = [];
+    let from = 0;
+    const step = 1000;
+
+    while (true) {
+        const { data, error } = await fetchFn(from, from + step - 1);
+        if (error) {
+            console.error("Error fetching records in fetchAll:", error);
+            throw error;
+        }
+        if (data && data.length > 0) {
+            allData.push(...data);
+            if (data.length < step) {
+                break;
+            }
+            from += step;
+        } else {
+            break;
+        }
+    }
+    return allData;
+}
+
+
