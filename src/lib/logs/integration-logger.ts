@@ -8,7 +8,7 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 
 export async function logIntegrationActivity(
     businessId: string,
-    integrationName: "Telegraph" | "VROBO" | "EasyOrders" | "Auto-Sync",
+    integrationName: "Telegraph" | "Bosta" | "VROBO" | "EasyOrders" | "Auto-Sync",
     status: "success" | "error" | "info",
     message: string,
     details?: any
