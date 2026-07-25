@@ -6,6 +6,7 @@ import { ExpirationBanner } from "@/components/layout/expiration-banner";
 import { PermissionGuard } from "@/components/layout/permission-guard";
 import { SubscriptionGuard } from "@/components/layout/subscription-guard";
 import { AutoSyncProvider } from "@/components/providers/AutoSyncProvider";
+import { FloatingChatWidget } from "@/components/support/floating-chat-widget";
 
 export default function DashboardLayout({
   children,
@@ -34,6 +35,8 @@ export default function DashboardLayout({
           </AutoSyncProvider>
         </main>
       </div>
+      <FloatingChatWidget />
     </div>
   );
 }
+

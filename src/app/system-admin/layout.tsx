@@ -5,7 +5,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import Image from "next/image";
 import { Button } from "@/components/ui/button";
-import { LayoutDashboard, Store, Ticket, ShieldCheck, LogOut, Menu, Users, Banknote, Tag, Settings } from "lucide-react";
+import { LayoutDashboard, Store, Ticket, ShieldCheck, LogOut, Menu, Users, Banknote, Tag, Settings, MessageSquare } from "lucide-react";
+
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { supabase } from "@/lib/supabase";
 
@@ -91,6 +92,15 @@ function AdminSidebar({ pathname }: { pathname: string }) {
                             Accounting
                         </Button>
                     </Link>
+                    <Link href="/system-admin/chat">
+                        <Button
+                            variant={pathname.startsWith("/system-admin/chat") ? "secondary" : "ghost"}
+                            className="w-full justify-start text-primary font-medium"
+                        >
+                            <MessageSquare className="mr-2 h-4 w-4 text-primary" />
+                            Live Chat Support
+                        </Button>
+                    </Link>
                     <Link href="/system-admin/tickets">
                         <Button
                             variant={pathname.startsWith("/system-admin/tickets") ? "secondary" : "ghost"}
@@ -100,6 +110,7 @@ function AdminSidebar({ pathname }: { pathname: string }) {
                             Support Tickets
                         </Button>
                     </Link>
+
                 </div>
             </div>
             <div className="mt-auto px-3 py-2 absolute bottom-4 w-64">
