@@ -1,6 +1,7 @@
 "use client";
 
-import Image from "next/image";
+import { toast } from "sonner";
+import { playNotificationSound, requestNotificationPermission, showBrowserNotification } from "@/lib/notifications";
 import { useState, useEffect, useRef } from "react";
 import { supabase } from "@/lib/supabase";
 import { useBusiness } from "@/contexts/BusinessContext";
@@ -13,6 +14,7 @@ import {
 } from "lucide-react";
 import { format } from "date-fns";
 import { ar } from "date-fns/locale";
+
 
 
 interface ChatMessage {
@@ -45,7 +47,9 @@ export function FloatingChatWidget() {
     };
 
     // Get active user email
+    // Request notification permissions on mount
     useEffect(() => {
+        requestNotificationPermission();
         async function getUser() {
             const { data: { user } } = await supabase.auth.getUser();
             if (user?.email) {
@@ -91,7 +95,6 @@ export function FloatingChatWidget() {
 
                     if (!msgsErr && msgs) {
                         setMessages(msgs);
-                        // Calculate unread admin messages
                         const unread = msgs.filter(m => m.sender_type === 'admin' && !m.is_read).length;
                         setUnreadCount(unread);
                     }
@@ -105,7 +108,7 @@ export function FloatingChatWidget() {
 
         loadChatData();
 
-        // 3. Polling fallback every 3 seconds for instant updates
+        // 3. Polling fallback every 3 seconds
         intervalId = setInterval(() => {
             fetchLatestMessages();
         }, 3000);
@@ -125,11 +128,21 @@ export function FloatingChatWidget() {
                     const newMsg = payload.new as ChatMessage;
                     setMessages((prev) => {
                         if (prev.some(m => m.id === newMsg.id)) return prev;
+                        
+                        if (newMsg.sender_type === 'admin') {
+                            setUnreadCount((count) => count + 1);
+                            playNotificationSound();
+                            showBrowserNotification("رسالة جديدة من دعم eCommerx 💬", newMsg.message);
+                            toast.info("رسالة جديدة من دعم eCommerx 💬", {
+                                description: newMsg.message,
+                                action: {
+                                    label: "فتح المحادثة",
+                                    onClick: () => setIsOpen(true)
+                                }
+                            });
+                        }
                         return [...prev, newMsg];
                     });
-                    if (newMsg.sender_type === 'admin') {
-                        setUnreadCount((prev) => prev + 1);
-                    }
                 }
             )
             .subscribe();
@@ -139,15 +152,6 @@ export function FloatingChatWidget() {
             supabase.removeChannel(channel);
         };
     }, [activeBusiness, conversationId]);
-
-
-    // Scroll to bottom when messages change or chat is opened
-    useEffect(() => {
-        if (isOpen) {
-            scrollToBottom();
-            markMessagesAsRead();
-        }
-    }, [isOpen, messages.length]);
 
     async function fetchLatestMessages() {
         if (!activeBusiness) return;
@@ -172,8 +176,26 @@ export function FloatingChatWidget() {
                     .eq('conversation_id', convId)
                     .order('created_at', { ascending: true });
 
-                if (msgs) {
-                    setMessages(msgs);
+                if (msgs && msgs.length > 0) {
+                    setMessages((prev) => {
+                        const newAdminMsgs = msgs.filter(m => 
+                            m.sender_type === 'admin' && 
+                            !prev.some(p => p.id === m.id)
+                        );
+                        if (newAdminMsgs.length > 0) {
+                            playNotificationSound();
+                            const latest = newAdminMsgs[newAdminMsgs.length - 1];
+                            showBrowserNotification("رسالة جديدة من دعم eCommerx 💬", latest.message);
+                            toast.info("رسالة جديدة من دعم eCommerx 💬", {
+                                description: latest.message,
+                                action: {
+                                    label: "فتح المحادثة",
+                                    onClick: () => setIsOpen(true)
+                                }
+                            });
+                        }
+                        return msgs;
+                    });
                 }
             }
         } catch (e) {
@@ -182,6 +204,7 @@ export function FloatingChatWidget() {
     }
 
     async function markMessagesAsRead() {
+
         if (!conversationId || unreadCount === 0) return;
         try {
             setUnreadCount(0);
@@ -309,8 +332,9 @@ export function FloatingChatWidget() {
                         <div className="flex items-center gap-3">
                             <div className="relative">
                                 <div className="h-10 w-10 rounded-full bg-white p-1 flex items-center justify-center border border-white/40 shadow-md overflow-hidden shrink-0">
-                                    <Image src="/logo.png" alt="eCommerx" width={32} height={32} className="object-contain" />
+                                    <img src="/logo.png" alt="eCommerx" className="h-8 w-8 object-contain" />
                                 </div>
+
                                 <span className="absolute bottom-0 right-0 h-3 w-3 rounded-full bg-emerald-400 border-2 border-primary animate-pulse" />
                             </div>
                             <div>

@@ -1,5 +1,8 @@
 "use client";
 
+import { toast } from "sonner";
+
+import { playNotificationSound, requestNotificationPermission, showBrowserNotification } from "@/lib/notifications";
 import { useState, useEffect, useRef } from "react";
 import { supabase } from "@/lib/supabase";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
@@ -13,6 +16,7 @@ import {
 } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
 import { ar } from "date-fns/locale";
+
 
 type SupportConversation = {
     id: string;
@@ -98,6 +102,7 @@ export default function AdminLiveChatPage() {
     };
 
     useEffect(() => {
+        requestNotificationPermission();
         fetchConversations();
 
         // Interval polling for contacts list
@@ -167,6 +172,14 @@ export default function AdminLiveChatPage() {
                     const newMsg = payload.new as ChatMessage;
                     setMessages((prev) => {
                         if (prev.some(m => m.id === newMsg.id)) return prev;
+
+                        if (newMsg.sender_type === 'tenant') {
+                            playNotificationSound();
+                            showBrowserNotification("رسالة دعم جديدة 💬", `${newMsg.sender_name || 'متجر'}: ${newMsg.message}`);
+                            toast.info(`رسالة جديدة من ${newMsg.sender_name || 'عميل'}`, {
+                                description: newMsg.message
+                            });
+                        }
                         return [...prev, newMsg];
                     });
                     setTimeout(scrollToBottom, 100);
@@ -178,6 +191,7 @@ export default function AdminLiveChatPage() {
             supabase.removeChannel(msgChannel);
         };
     }, [selectedConv?.id]);
+
 
 
     const markAsRead = async (convId: string) => {
