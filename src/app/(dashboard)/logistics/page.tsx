@@ -99,10 +99,12 @@ function LogisticsDashboard() {
 
 import { useBusiness } from "@/contexts/BusinessContext";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { useActionFeedback } from "@/contexts/ActionFeedbackContext";
 
 function LogisticsContent() {
     const { activeBusiness } = useBusiness();
     const { t } = useLanguage();
+    const { startAction, completeAction, failAction } = useActionFeedback();
     const searchParams = useSearchParams();
     const router = useRouter();
     const [orders, setOrders] = useState<any[]>([]);
@@ -249,6 +251,7 @@ function LogisticsContent() {
 
     const executeStatusUpdate = async (orderIds: string[], newStatus: string, companyId?: string) => {
         try {
+            startAction(`Updating ${orderIds.length} orders...`);
             const payload: any = { status: newStatus };
             if (companyId) payload.shipping_company_id = companyId;
 
@@ -327,7 +330,7 @@ function LogisticsContent() {
                 }
             }
 
-            toast.success("Orders updated successfully");
+            completeAction("Orders updated successfully");
             setOrders(prev => prev.map(o => orderIds.includes(o.id) ? { ...o, status: newStatus, shipping_company_id: companyId || o.shipping_company_id } : o));
 
             // Clear selection and dialogs
@@ -338,7 +341,7 @@ function LogisticsContent() {
 
         } catch (error) {
             console.error("Failed to update status", error);
-            toast.error("Failed to update orders");
+            failAction("Failed to update orders");
         }
     };
 
@@ -388,6 +391,7 @@ function LogisticsContent() {
 
     const updateShippingCompany = async (orderId: string, companyId: string) => {
         try {
+            startAction("Assigning shipping company...");
             const { error } = await supabase
                 .from("orders")
                 .update({ shipping_company_id: companyId || null }) // null if empty string
@@ -395,11 +399,11 @@ function LogisticsContent() {
 
             if (error) throw error;
 
-            toast.success("Shipping company updated");
+            completeAction("Shipping company updated");
             setOrders(prev => prev.map(o => o.id === orderId ? { ...o, shipping_company_id: companyId || null } : o));
         } catch (error) {
             console.error("Failed to update shipping company", error);
-            toast.error("Failed to update shipping company");
+            failAction("Failed to update shipping company");
         }
     };
 

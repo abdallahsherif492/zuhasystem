@@ -7,6 +7,8 @@ import { DynamicThemeProvider } from "@/components/dynamic-theme-provider";
 import { BusinessProvider } from "@/contexts/BusinessContext";
 import { LanguageProvider } from "@/contexts/LanguageContext";
 
+import { ActionFeedbackProvider } from "@/contexts/ActionFeedbackContext";
+
 const geistSans = Geist({
   variable: "--font-geist-sans",
   subsets: ["latin"],
@@ -41,9 +43,11 @@ export default function RootLayout({
         >
           <BusinessProvider>
             <LanguageProvider>
-              <DynamicThemeProvider>
-                {children}
-              </DynamicThemeProvider>
+              <ActionFeedbackProvider>
+                <DynamicThemeProvider>
+                  {children}
+                </DynamicThemeProvider>
+              </ActionFeedbackProvider>
             </LanguageProvider>
           </BusinessProvider>
         </ThemeProvider>
