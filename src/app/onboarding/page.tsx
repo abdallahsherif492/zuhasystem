@@ -79,12 +79,18 @@ export default function OnboardingPage() {
                 return;
             }
 
-            // 1. Create the business
+            // 1. Create the business with 1-Month Free Trial (subscription_end_date & trial_ends_at = 1 month from now)
+            const now = new Date();
+            const oneMonthFromNow = new Date(now);
+            oneMonthFromNow.setMonth(oneMonthFromNow.getMonth() + 1);
+
             const insertData: any = {
                 name: businessName,
-                subscription_status: "trialing",
-                trial_ends_at: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(),
+                subscription_status: "trial",
+                subscription_end_date: oneMonthFromNow.toISOString(),
+                trial_ends_at: oneMonthFromNow.toISOString(),
             };
+
             if (planId) {
                 insertData.plan_id = planId;
             }
