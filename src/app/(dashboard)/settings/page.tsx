@@ -627,8 +627,8 @@ export default function SettingsPage() {
                         <CardContent className="space-y-6">
                             <div className="space-y-4 border rounded-md p-4 bg-muted/20">
                                 <div className="flex items-center justify-between">
-                                    <h3 className="text-lg font-medium flex items-center">
-                                        EasyOrders Integration
+                                    <h3 className="text-lg font-medium flex items-center gap-3">
+                                        <img src="/easyorders.png" alt="EasyOrders" className="h-8 w-auto object-contain" />
                                         {integrations.platforms.easyorders.enabled && (
                                             <Badge variant="outline" className="ml-3 bg-green-50 text-green-700 border-green-200">Active</Badge>
                                         )}
@@ -711,8 +711,8 @@ export default function SettingsPage() {
                         <CardContent className="space-y-6">
                             <div className="space-y-4 border rounded-md p-4 bg-muted/20">
                                 <div className="flex items-center justify-between">
-                                    <h3 className="text-lg font-medium flex items-center">
-                                        VROBO Verification
+                                    <h3 className="text-lg font-medium flex items-center gap-3">
+                                        <img src="/vrobo.png" alt="vRobo" className="h-8 w-auto object-contain" />
                                         {integrations.tools.vrobo.enabled && (
                                             <Badge variant="outline" className="ml-3 bg-green-50 text-green-700 border-green-200">Active</Badge>
                                         )}
