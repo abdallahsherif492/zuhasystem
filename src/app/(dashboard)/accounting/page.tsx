@@ -45,8 +45,12 @@ import {
     AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 
+import { logBusinessAction } from "@/lib/logs/actions-logger";
+
+
 function AccountingContent() {
-    const { activeBusiness } = useBusiness();
+    const { activeBusiness, currentUser } = useBusiness();
+
     const { t } = useLanguage();
     const searchParams = useSearchParams();
     const [transactions, setTransactions] = useState<any[]>([]);
@@ -138,18 +142,35 @@ function AccountingContent() {
     async function deleteTransaction(id: string) {
         if (!activeBusiness) return;
         try {
+            const targetTx = transactions.find(t => t.id === id);
             const { error } = await supabase
                 .from("transactions")
                 .delete()
                 .eq("id", id)
                 .eq("business_id", activeBusiness.id);
             if (error) throw error;
+
+            if (targetTx) {
+                logBusinessAction({
+                    businessId: activeBusiness.id,
+                    userEmail: currentUser?.email || "Staff",
+                    actionType: "delete",
+                    entityType: "transaction",
+                    entityId: id,
+                    entityName: `${targetTx.type ? targetTx.type.toUpperCase() : "TRANSACTION"}: ${targetTx.amount} EGP (${targetTx.category || "General"})`,
+                    changes: [
+                        { field: "Transaction", old_value: `${targetTx.type} - ${targetTx.amount} EGP (${targetTx.account_name})`, new_value: "Deleted" }
+                    ]
+                });
+            }
+
             refresh();
         } catch (error) {
             console.error("Error deleting transaction:", error);
             alert("Failed to delete transaction");
         }
     }
+
 
 
     const refresh = () => {
