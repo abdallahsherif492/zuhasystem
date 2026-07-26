@@ -14,9 +14,10 @@ export interface SyncPreviewItem {
     oldStatus: string;
     newStatus: string;
     accurateStatusName: string;
+    provider?: string;
 }
 
-export async function previewShippingSyncAction(businessId: string): Promise<{ updates: SyncPreviewItem[], debugInfo?: any, error?: string }> {
+export async function previewTelegraphShippingSyncInternal(businessId: string): Promise<{ updates: SyncPreviewItem[], debugInfo?: any, error?: string }> {
     try {
         const cookieStore = await cookies();
         const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://telkkknuygjejmqcvyev.supabase.co";
@@ -73,8 +74,6 @@ export async function previewShippingSyncAction(businessId: string): Promise<{ u
 
         for (const order of orders) {
             const shortId = order.id.substring(0, 8);
-            // We added zuhaRef in accurate.ts to explicitly tell us which ecommerx ref the shipment matched
-            // fallback to refNumber if zuhaRef isn't present
             const accurateMatch = accurateShipments.find(s => {
                 const matchRef = s.zuhaRef ? s.zuhaRef : s.refNumber;
                 return matchRef && matchRef.toLowerCase() === shortId.toLowerCase();
@@ -88,7 +87,8 @@ export async function previewShippingSyncAction(businessId: string): Promise<{ u
                         customerName: (order.customer_info as any)?.name || "N/A",
                         oldStatus: order.status,
                         newStatus: newStatus,
-                        accurateStatusName: accurateMatch.status.name
+                        accurateStatusName: accurateMatch.status.name,
+                        provider: "Telegraph"
                     });
                 }
             }
@@ -96,10 +96,45 @@ export async function previewShippingSyncAction(businessId: string): Promise<{ u
 
         return { updates, debugInfo };
     } catch (error: any) {
-        console.error("Preview sync error:", error);
+        console.error("Preview sync error (Telegraph):", error);
         return { updates: [], error: error.message };
     }
 }
+
+export async function previewShippingSyncAction(businessId: string): Promise<{ updates: SyncPreviewItem[], debugInfo?: any, error?: string }> {
+    try {
+        const [telegraphResult, bostaResult] = await Promise.all([
+            previewTelegraphShippingSyncInternal(businessId),
+            previewBostaShippingSyncAction(businessId)
+        ]);
+
+        const allUpdates: SyncPreviewItem[] = [];
+
+        if (telegraphResult.updates && telegraphResult.updates.length > 0) {
+            allUpdates.push(...telegraphResult.updates);
+        }
+
+        if (bostaResult.updates && bostaResult.updates.length > 0) {
+            for (const bItem of bostaResult.updates) {
+                if (!allUpdates.some(u => u.orderId === bItem.orderId)) {
+                    allUpdates.push({ ...bItem, provider: "Bosta" });
+                }
+            }
+        }
+
+        return {
+            updates: allUpdates,
+            debugInfo: {
+                telegraph: telegraphResult.debugInfo,
+                bosta: bostaResult.debugInfo
+            }
+        };
+    } catch (error: any) {
+        console.error("Unified preview shipping sync error:", error);
+        return { updates: [], error: error.message };
+    }
+}
+
 
 export async function previewBostaShippingSyncAction(businessId: string): Promise<{ updates: SyncPreviewItem[], debugInfo?: any, error?: string }> {
     try {

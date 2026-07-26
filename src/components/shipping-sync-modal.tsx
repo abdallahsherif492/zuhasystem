@@ -195,7 +195,8 @@ export function ShippingSyncModal({ businessId, onSyncComplete }: ShippingSyncMo
                                     <TableHeader>
                                         <TableRow>
                                             <TableHead>{t("Customer")}</TableHead>
-                                            <TableHead>{t("Accurate Status")}</TableHead>
+                                            <TableHead>{t("Provider")}</TableHead>
+                                            <TableHead>{t("Tracking Status")}</TableHead>
                                             <TableHead>{t("Old Status")}</TableHead>
                                             <TableHead>{t("New Status")}</TableHead>
                                         </TableRow>
@@ -206,6 +207,11 @@ export function ShippingSyncModal({ businessId, onSyncComplete }: ShippingSyncMo
                                                 <TableCell className="font-medium">
                                                     {item.customerName || t("Unknown")}
                                                     <div className="text-xs text-muted-foreground font-mono">{item.orderId.substring(0,8)}</div>
+                                                </TableCell>
+                                                <TableCell>
+                                                    <Badge variant="outline" className="text-[10px] uppercase font-bold text-primary border-primary/20 bg-primary/5">
+                                                        {item.provider || "Telegraph"}
+                                                    </Badge>
                                                 </TableCell>
                                                 <TableCell>
                                                     <span className="text-xs">{item.accurateStatusName}</span>
