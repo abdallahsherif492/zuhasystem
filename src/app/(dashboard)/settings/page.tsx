@@ -94,8 +94,14 @@ export default function SettingsPage() {
                         enabled: savedIntegrations.platforms?.easyorders?.enabled || !!legacyWebhook,
                         apiKey: savedIntegrations.platforms?.easyorders?.apiKey || legacyApiKey,
                         webhookToken: savedIntegrations.platforms?.easyorders?.webhookToken || legacyWebhook
+                    },
+                    shopify: {
+                        enabled: savedIntegrations.platforms?.shopify?.enabled || false,
+                        storeDomain: savedIntegrations.platforms?.shopify?.storeDomain || "",
+                        accessToken: savedIntegrations.platforms?.shopify?.accessToken || ""
                     }
                 },
+
                 tools: {
                     vrobo: {
                         enabled: savedIntegrations.tools?.vrobo?.enabled || false,
@@ -689,7 +695,72 @@ export default function SettingsPage() {
                                     </div>
                                 )}
                             </div>
+
+                            {/* Shopify Platform Integration */}
+                            <div className="space-y-4 border rounded-md p-4 bg-muted/20">
+                                <div className="flex items-center justify-between">
+                                    <h3 className="text-lg font-medium flex items-center gap-3">
+                                        <img src="/shopify.png" alt="Shopify" className="h-8 w-auto object-contain" />
+                                        {integrations.platforms.shopify?.enabled && (
+                                            <Badge variant="outline" className="ml-3 bg-green-50 text-green-700 border-green-200">Active</Badge>
+                                        )}
+                                    </h3>
+                                    <Switch 
+                                        checked={integrations.platforms.shopify?.enabled || false} 
+                                        onCheckedChange={(c) => handleIntegrationChange('platforms', 'shopify', 'enabled', c)}
+                                    />
+                                </div>
+                                <p className="text-sm text-muted-foreground">
+                                    {t("Connect your Shopify store to sync orders and inventory automatically.")}
+                                </p>
+                                
+                                {integrations.platforms.shopify?.enabled && (
+                                    <div className="space-y-4 pt-4 border-t">
+                                        <div className="space-y-2">
+                                            <Label>{t("Shopify Store Domain (e.g. mystore.myshopify.com)")}</Label>
+                                            <Input 
+                                                placeholder="mystore.myshopify.com" 
+                                                value={integrations.platforms.shopify?.storeDomain || ""}
+                                                onChange={(e) => handleIntegrationChange('platforms', 'shopify', 'storeDomain', e.target.value)}
+                                            />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Label>{t("Shopify Admin Access Token")}</Label>
+                                            <Input 
+                                                placeholder="shpat_xxxxxxxxxxxxxxxxxxxx" 
+                                                value={integrations.platforms.shopify?.accessToken || ""}
+                                                onChange={(e) => handleIntegrationChange('platforms', 'shopify', 'accessToken', e.target.value)}
+                                                type="password"
+                                            />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Label>{t("Webhook Notification URL")}</Label>
+                                            <div className="flex gap-2">
+                                                <Input 
+                                                    readOnly 
+                                                    value={`${typeof window !== 'undefined' ? window.location.origin : ''}/api/webhooks/shopify`} 
+                                                    className="font-mono text-xs bg-muted"
+                                                />
+                                                <Button 
+                                                    variant="outline"
+                                                    onClick={() => {
+                                                        const url = `${window.location.origin}/api/webhooks/shopify`;
+                                                        navigator.clipboard.writeText(url);
+                                                        toast.success(t("URL copied to clipboard"));
+                                                    }}
+                                                >
+                                                    Copy
+                                                </Button>
+                                            </div>
+                                            <p className="text-xs text-muted-foreground">
+                                                {t("Paste this Webhook URL in your Shopify Admin -> Settings -> Notifications -> Webhooks (orders/create).")}
+                                            </p>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
                         </CardContent>
+
                         <CardFooter className="border-t p-6">
                             <Button onClick={handleSaveTheme} disabled={saving}>
                                 {saving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}

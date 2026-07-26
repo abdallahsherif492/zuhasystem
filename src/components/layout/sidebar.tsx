@@ -126,7 +126,7 @@ export function SidebarContent({ onLinkClick }: { onLinkClick?: () => void }) {
             title: t("Sales & Orders"),
             items: [
                 { title: t("Orders"), href: "/orders", icon: ShoppingCart, exactMatch: true },
-                { title: t("Easy Orders"), href: "/easy-orders", icon: Globe },
+                { title: t("Platform Orders"), href: "/platform-orders", icon: Globe },
                 { title: t("Customers"), href: "/customers", icon: Users },
                 { title: t("Support"), href: "/support", icon: Ticket },
             ]
@@ -166,7 +166,7 @@ export function SidebarContent({ onLinkClick }: { onLinkClick?: () => void }) {
                     icon: LineChart,
                     exactMatch: true,
                     subItems: [
-                        { title: t("EasyOrders"), href: "/insights/easyorders", icon: Globe },
+                        { title: t("Platform Orders"), href: "/insights/platform-orders", icon: Globe },
                         { title: t("Revenues"), href: "/insights/revenues", icon: DollarSign },
                         { title: t("Actual Returns"), href: "/insights/actual-returns", icon: DollarSign },
                         { title: t("Expenses"), href: "/insights/expenses", icon: Banknote },
@@ -176,6 +176,7 @@ export function SidebarContent({ onLinkClick }: { onLinkClick?: () => void }) {
                 },
             ]
         },
+
         {
             title: t("Administration"),
             items: [
