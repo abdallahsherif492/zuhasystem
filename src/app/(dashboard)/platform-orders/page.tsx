@@ -151,7 +151,7 @@ function PlatformOrdersContent() {
                 )
             `)
             .eq('business_id', activeBusiness.id)
-            .ilike('status', 'Waiting')
+            .ilike('status', 'waiting')
             .order('created_at', { ascending: false });
 
         if (error) {
@@ -159,12 +159,16 @@ function PlatformOrdersContent() {
             toast.error(t("Failed to load Platform Orders"));
         } else {
             const platformOrders = (data || []).filter(o => {
+                const isWaitingStatus = String(o.status || '').trim().toLowerCase() === 'waiting';
+                if (!isWaitingStatus) return false;
+
                 const isEasy = !!o.easyorders_id || (o.tags && JSON.stringify(o.tags).toLowerCase().includes("easyorders"));
                 const isShopify = (o.tags && JSON.stringify(o.tags).toLowerCase().includes("shopify"));
                 return isEasy || isShopify;
             });
             setOrders(platformOrders);
         }
+
         setLoading(false);
     };
 
