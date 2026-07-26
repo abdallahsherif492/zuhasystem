@@ -376,7 +376,8 @@ function DashboardContent() {
     );
   }
 
-  const maxSoldInTop = topProducts.length > 0 ? Math.max(...topProducts.map((p: any) => p.total_units || 1)) : 1;
+  const maxSoldInTop = topProducts.length > 0 ? Math.max(...topProducts.map((p: any) => Number(p.total_sold ?? p.total_units ?? p.quantity ?? 1))) : 1;
+
 
   return (
     <div className="flex flex-col space-y-6 pb-12 font-sans">
@@ -614,7 +615,8 @@ function DashboardContent() {
               <div className="text-xs text-muted-foreground py-8 text-center">{t("No sales recorded in this period.")}</div>
             ) : (
               topProducts.map((p: any, idx: number) => {
-                const percent = Math.min(100, Math.round(((p.total_units || 0) / maxSoldInTop) * 100));
+                const unitsCount = Number(p.total_sold ?? p.total_units ?? p.quantity ?? 0);
+                const percent = Math.min(100, Math.round((unitsCount / maxSoldInTop) * 100));
                 return (
                   <div key={idx} className="p-3 rounded-xl border bg-muted/20 space-y-2">
                     <div className="flex items-center justify-between gap-3 text-xs">
@@ -626,7 +628,7 @@ function DashboardContent() {
                       </div>
                       <div className="flex items-center gap-3">
                         <Badge variant="secondary" className="font-bold text-xs bg-primary/10 text-primary">
-                          {p.total_units || 0} {t("units")}
+                          {unitsCount} {t("units")}
                         </Badge>
                         <span className="font-bold text-xs text-foreground">{formatCurrency(p.total_revenue || 0)}</span>
                       </div>
@@ -636,6 +638,7 @@ function DashboardContent() {
                 );
               })
             )}
+
           </CardContent>
         </Card>
 
