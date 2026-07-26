@@ -204,15 +204,20 @@ function PlatformOrdersContent() {
 
             if (error) throw error;
 
-            // Only show orders with status 'Waiting' AND tags containing 'easyorders' or 'shopify' (or platform IDs)
-            const waitingPlatformOrders = (data as any[] || []).filter(o => {
-                if (o.status !== "Waiting") return false;
-                const isEasy = !!o.easyorders_id || (o.tags && JSON.stringify(o.tags).toLowerCase().includes("easyorders"));
-                const isShopify = !!o.shopify_id || (o.tags && JSON.stringify(o.tags).toLowerCase().includes("shopify"));
+            const checkTag = (tags: any, target: string) => {
+                if (!tags) return false;
+                if (Array.isArray(tags)) return tags.some(t => String(t).toLowerCase().trim() === target);
+                if (typeof tags === 'string') return tags.toLowerCase().includes(target);
+                return JSON.stringify(tags).toLowerCase().includes(target);
+            };
+
+            const platformOrders = (data as any[] || []).filter(o => {
+                const isEasy = !!o.easyorders_id || checkTag(o.tags, "easyorders");
+                const isShopify = !!o.shopify_id || checkTag(o.tags, "shopify");
                 return isEasy || isShopify;
             });
 
-            setOrders(waitingPlatformOrders as Order[]);
+            setOrders(platformOrders as Order[]);
         } catch (error: any) {
             console.error("Error fetching platform orders:", error);
             toast.error("Failed to load platform orders");
@@ -223,13 +228,20 @@ function PlatformOrdersContent() {
 
     // Filtered orders
     const filteredOrders = useMemo(() => {
+        const checkTag = (tags: any, target: string) => {
+            if (!tags) return false;
+            if (Array.isArray(tags)) return tags.some(t => String(t).toLowerCase().trim() === target);
+            if (typeof tags === 'string') return tags.toLowerCase().includes(target);
+            return JSON.stringify(tags).toLowerCase().includes(target);
+        };
+
         return orders.filter(o => {
             // Platform Filter
             if (platformFilter === "easyorders") {
-                const isEasy = !!o.easyorders_id || (o.tags && JSON.stringify(o.tags).toLowerCase().includes("easyorders"));
+                const isEasy = !!o.easyorders_id || checkTag(o.tags, "easyorders");
                 if (!isEasy) return false;
             } else if (platformFilter === "shopify") {
-                const isShopify = !!o.shopify_id || (o.tags && JSON.stringify(o.tags).toLowerCase().includes("shopify"));
+                const isShopify = !!o.shopify_id || checkTag(o.tags, "shopify");
                 if (!isShopify) return false;
             }
 
@@ -246,6 +258,7 @@ function PlatformOrdersContent() {
             return true;
         });
     }, [orders, platformFilter, searchQuery]);
+
 
 
 
@@ -397,9 +410,11 @@ function PlatformOrdersContent() {
             ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
                     {filteredOrders.map((order) => {
-                        const isWaiting = order.status === "Waiting";
-                        const isCancelled = order.status === "Cancelled";
+                        const statusStr = String(order.status || "").toLowerCase().trim();
+                        const isWaiting = !statusStr || statusStr === "waiting" || statusStr === "pending" || statusStr === "hold";
+                        const isCancelled = statusStr === "cancelled";
                         const isShopify = !!order.shopify_id || (order.tags && JSON.stringify(order.tags).toLowerCase().includes("shopify"));
+
 
 
 
