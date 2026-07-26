@@ -60,8 +60,10 @@ export default function TeamManagementPage() {
         { id: "/logistics", label: t("Logistics") },
         { id: "/payable", label: t("Accounts Payable") },
         { id: "/ads", label: t("Ads Spent") },
-        { id: "/insights", label: t("Insights") }
+        { id: "/insights", label: t("Insights") },
+        { id: "/actions-log", label: t("Actions Log") }
     ];
+
 
     const weekDays = [t("Saturday"), t("Sunday"), t("Monday"), t("Tuesday"), t("Wednesday"), t("Thursday"), t("Friday")];
 

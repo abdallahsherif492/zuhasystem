@@ -7,6 +7,8 @@ import { fetchBostaShipments, mapBostaStatusToZuha } from "@/lib/shipping/bosta"
 import { syncStatusToEasyOrders } from "@/lib/easyorders";
 import { processOrderForVrobo } from "@/lib/vrobo/api";
 import { logIntegrationActivity } from "@/lib/logs/integration-logger";
+import { logBusinessAction } from "@/lib/logs/actions-logger";
+
 
 export interface SyncPreviewItem {
     orderId: string;
@@ -241,7 +243,20 @@ export async function applyShippingUpdatesAction(updates: SyncPreviewItem[], bus
             if (error) {
                 console.error(`Failed to update order ${update.orderId}:`, error);
             } else {
+                logBusinessAction({
+                    businessId,
+                    userEmail: "System / Shipping Sync",
+                    actionType: "update_status",
+                    entityType: "order",
+                    entityId: update.orderId,
+                    entityName: `Order #${update.orderId.substring(0, 8)} (${update.customerName || "Customer"})`,
+                    changes: [
+                        { field: "Status", old_value: update.oldStatus, new_value: update.newStatus }
+                    ]
+                });
+
                 syncStatusToEasyOrders(update.orderId, update.newStatus, businessId).catch(err => {
+
                     console.error("Failed to sync status to EasyOrders:", err);
                 });
 

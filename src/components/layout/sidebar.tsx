@@ -11,8 +11,9 @@ import {
     LayoutDashboard, AlertTriangle, Package, ShoppingCart, Settings, Users, Truck, 
     Banknote, LineChart, ShoppingBag, Megaphone, Box, DollarSign, ShieldCheck, 
     FileText, Ticket, CreditCard, Clock, Inbox, Calendar, LogOut, Globe,
-    ChevronDown, ChevronRight, BarChart3, PieChart
+    ChevronDown, ChevronRight, BarChart3, PieChart, History
 } from "lucide-react";
+
 import Image from "next/image";
 import { useState, useEffect } from "react";
 
@@ -197,9 +198,11 @@ export function SidebarContent({ onLinkClick }: { onLinkClick?: () => void }) {
                         { title: t("Leave Requests"), href: "/team/requests", icon: Inbox },
                     ]
                 },
+                { title: t("Actions Log"), href: "/actions-log", icon: History, adminOnly: true },
                 { title: t("Settings"), href: "/settings", icon: Settings, adminOnly: true },
             ]
         }
+
     ];
 
     // Filter accessible groups and items

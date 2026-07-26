@@ -37,6 +37,8 @@ import { CalendarIcon, Loader2 } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { useBusiness } from "@/contexts/BusinessContext";
+import { logBusinessAction } from "@/lib/logs/actions-logger";
+
 
 const transactionSchema = z.object({
     date: z.date(),
@@ -60,7 +62,7 @@ const REVENUE_CATEGORIES = ["Orders Collection", "Deposit", "Other"];
 type TransactionFormValues = z.infer<typeof transactionSchema>;
 
 export function AddTransactionDialog({ type, onSuccess }: AddTransactionDialogProps) {
-    const { activeBusiness } = useBusiness();
+    const { activeBusiness, currentUser } = useBusiness();
     const [open, setOpen] = useState(false);
     const [submitting, setSubmitting] = useState(false);
     const [accounts, setAccounts] = useState<any[]>([]);
@@ -82,8 +84,6 @@ export function AddTransactionDialog({ type, onSuccess }: AddTransactionDialogPr
         }
     }
 
-    // Initializing form with relaxed types to avoid build errors
-
     const form = useForm({
         resolver: zodResolver(transactionSchema),
         defaultValues: {
@@ -92,7 +92,7 @@ export function AddTransactionDialog({ type, onSuccess }: AddTransactionDialogPr
             account: "",
             amount: 0,
             description: "",
-            category: type === "investment" ? "Investment" : "", // Default for investment
+            category: type === "investment" ? "Investment" : "",
         },
     });
 
@@ -109,7 +109,6 @@ export function AddTransactionDialog({ type, onSuccess }: AddTransactionDialogPr
             };
 
             if (values.type === "expense" && values.account === "Split") {
-                // Split logic: Create 2 transactions, half amount each
                 const halfAmount = finalAmount / 2;
                 const { error } = await supabase.from("transactions").insert([
                     { ...payload, amount: halfAmount, account_name: "Mohamed Adel" },
@@ -117,7 +116,6 @@ export function AddTransactionDialog({ type, onSuccess }: AddTransactionDialogPr
                 ]);
                 if (error) throw error;
             } else {
-                // Standard single transaction
                 const { error } = await supabase.from("transactions").insert({
                     ...payload,
                     amount: finalAmount,
@@ -126,10 +124,24 @@ export function AddTransactionDialog({ type, onSuccess }: AddTransactionDialogPr
                 if (error) throw error;
             }
 
+            logBusinessAction({
+                businessId: activeBusiness!.id,
+                userEmail: currentUser?.email || "Staff",
+                actionType: "create",
+                entityType: "transaction",
+                entityId: `tx-${Date.now()}`,
+                entityName: `${values.type.toUpperCase()}: ${values.amount} EGP (${values.category})`,
+                changes: [
+                    { field: "Amount", old_value: null, new_value: `${finalAmount} EGP` },
+                    { field: "Account", old_value: null, new_value: values.account }
+                ]
+            });
+
             setOpen(false);
             form.reset();
             onSuccess();
         } catch (error) {
+
             console.error("Error adding transaction:", error);
             alert("Failed to add transaction");
         } finally {

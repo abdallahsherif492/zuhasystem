@@ -7,6 +7,8 @@ import { formatCurrency } from "@/lib/utils";
 import { restockItems, deductStock, validateStock } from "@/lib/inventory";
 import { syncStatusToEasyOrders } from "@/lib/easyorders";
 import { processOrderForVrobo } from "@/lib/vrobo/api";
+import { logBusinessAction } from "@/lib/logs/actions-logger";
+
 import { Button } from "@/components/ui/button";
 import {
     Card,
@@ -102,7 +104,8 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { useActionFeedback } from "@/contexts/ActionFeedbackContext";
 
 function LogisticsContent() {
-    const { activeBusiness } = useBusiness();
+    const { activeBusiness, currentUser } = useBusiness();
+
     const { t } = useLanguage();
     const { startAction, completeAction, failAction } = useActionFeedback();
     const searchParams = useSearchParams();
@@ -314,7 +317,20 @@ function LogisticsContent() {
 
                 // Sync with EasyOrders if applicable
                 if (activeBusiness) {
+                    logBusinessAction({
+                        businessId: activeBusiness.id,
+                        userEmail: currentUser?.email || "Staff",
+                        actionType: "update_status",
+                        entityType: "order",
+                        entityId: oid,
+                        entityName: `Order #${oid.substring(0, 8)} (${(order.customer_info as any)?.name || "Customer"})`,
+                        changes: [
+                            { field: "Status", old_value: oldStatus, new_value: newStatus }
+                        ]
+                    });
+
                     syncStatusToEasyOrders(oid, newStatus, activeBusiness.id).catch(err => {
+
                         console.error("Failed to sync status to EasyOrders:", err);
                     });
                 }
