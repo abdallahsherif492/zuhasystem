@@ -108,8 +108,14 @@ export function SidebarContent({ onLinkClick }: { onLinkClick?: () => void }) {
         if (path === "/dashboard") return true;
         
         if (allowedPages && allowedPages.length > 0) {
-            return allowedPages.some(allowed => pathname.startsWith(allowed) || path.startsWith(allowed));
+            return allowedPages.some(allowed => 
+                pathname.startsWith(allowed) || 
+                path.startsWith(allowed) ||
+                (allowed === "/easy-orders" && path.startsWith("/platform-orders")) ||
+                (allowed === "/platform-orders" && path.startsWith("/easy-orders"))
+            );
         }
+
         return false;
     };
 

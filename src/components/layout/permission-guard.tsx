@@ -29,12 +29,17 @@ export function PermissionGuard({ children }: { children: React.ReactNode }) {
 
         // Check explicit permissions
         if (allowedPages && allowedPages.length > 0) {
-            const hasAccess = allowedPages.some(allowed => pathname.startsWith(allowed));
+            const hasAccess = allowedPages.some(allowed => 
+                pathname.startsWith(allowed) || 
+                (allowed === "/easy-orders" && pathname.startsWith("/platform-orders")) ||
+                (allowed === "/platform-orders" && pathname.startsWith("/easy-orders"))
+            );
             if (hasAccess) {
                 setAuthorized(true);
                 return;
             }
         }
+
 
         // Unauthorized
         setAuthorized(false);
