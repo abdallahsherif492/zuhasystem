@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState, useMemo, Suspense } from "react";
+import { useEffect, useState, useMemo, useRef, Suspense } from "react";
+
 import { supabase } from "@/lib/supabase";
 import { useBusiness } from "@/contexts/BusinessContext";
 import { useLanguage } from "@/contexts/LanguageContext";
@@ -260,6 +261,35 @@ function PlatformOrdersContent() {
         }
     };
 
+    const [saveStatus, setSaveStatus] = useState<Record<string, string>>({});
+    const saveTimeouts = useRef<Record<string, NodeJS.Timeout>>({});
+
+    const handleAutoSaveNotes = (order: Order, newNoteText: string) => {
+        const newInfo = { ...order.customer_info, internal_workbench_notes: newNoteText };
+        
+        // Update local React state instantly
+        setOrders(prev => prev.map(o => o.id === order.id ? { ...o, customer_info: newInfo } : o));
+        setSaveStatus(prev => ({ ...prev, [order.id]: "جاري الحفظ..." }));
+
+        // Clear existing debounce timer
+        if (saveTimeouts.current[order.id]) {
+            clearTimeout(saveTimeouts.current[order.id]);
+        }
+
+        // Set 600ms debounce timer for autosave
+        saveTimeouts.current[order.id] = setTimeout(async () => {
+            try {
+                await handleUpdateOrder(order.id, { customer_info: newInfo });
+                setSaveStatus(prev => ({ ...prev, [order.id]: "تم الحفظ تلقائياً ✓" }));
+                setTimeout(() => {
+                    setSaveStatus(prev => ({ ...prev, [order.id]: "" }));
+                }, 2000);
+            } catch (err) {
+                setSaveStatus(prev => ({ ...prev, [order.id]: "فشل الحفظ" }));
+            }
+        }, 600);
+    };
+
     const updateCustomerInfo = async (order: Order, field: string, value: string) => {
         const newInfo = { ...order.customer_info, [field]: value };
         setOrders(orders.map(o => o.id === order.id ? { ...o, customer_info: newInfo } : o));
@@ -269,6 +299,8 @@ function PlatformOrdersContent() {
             toast.error(t("Failed to save"));
         }
     };
+
+
     
     const updateOrderField = async (order: Order, field: string, value: any) => {
         setOrders(prev => prev.map(o => o.id === order.id ? { ...o, [field]: value } : o));
@@ -593,7 +625,29 @@ function PlatformOrdersContent() {
                                                 rows={2}
                                             />
                                         </div>
+
+                                        {/* Internal Workbench Notes (Autosave) */}
+                                        <div className="space-y-1.5 pt-3 border-t">
+                                            <div className="flex items-center justify-between">
+                                                <Label className="text-xs font-semibold text-primary flex items-center gap-1.5">
+                                                    📝 ملاحظات مراجعة الطلب (Internal Notes)
+                                                </Label>
+                                                {saveStatus[order.id] && (
+                                                    <span className="text-[10px] text-emerald-600 font-medium font-mono transition-all animate-pulse">
+                                                        {saveStatus[order.id]}
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <Textarea 
+                                                placeholder="أكتب ملاحظات المعاينة الداخلية هنا (حفظ تلقائي Auto-Save)..." 
+                                                value={order.customer_info?.internal_workbench_notes || ""} 
+                                                onChange={e => handleAutoSaveNotes(order, e.target.value)} 
+                                                rows={2}
+                                                className="text-xs bg-amber-50/30 dark:bg-amber-950/10 border-amber-200/80 dark:border-amber-900/40 focus:border-amber-400"
+                                            />
+                                        </div>
                                     </div>
+
 
                                     {/* Order Items Mapping */}
                                     <div className="space-y-4">
