@@ -206,8 +206,8 @@ function PlatformOrdersContent() {
         } else {
             // Filter to include orders with easyorders_id OR shopify_id OR tags
             const platformOrders = (data as any[] || []).filter(o => {
-                const isEasy = !!o.easyorders_id || (o.tags && o.tags.includes("easyorders")) || o.channel === "EasyOrders";
-                const isShopify = !!o.shopify_id || (o.tags && o.tags.includes("shopify")) || o.channel === "Shopify";
+                const isEasy = !!o.easyorders_id || (o.tags && Array.isArray(o.tags) && o.tags.includes("easyorders"));
+                const isShopify = !!o.shopify_id || (o.tags && Array.isArray(o.tags) && o.tags.includes("shopify"));
                 return isEasy || isShopify;
             });
             setOrders(platformOrders as Order[]);
@@ -229,10 +229,13 @@ function PlatformOrdersContent() {
 
             // 2. Platform Filter
             if (platformFilter === "easyorders") {
-                if (!o.easyorders_id && (!o.tags || !o.tags.includes("easyorders")) && o.channel !== "EasyOrders") return false;
+                const isEasy = !!o.easyorders_id || (o.tags && Array.isArray(o.tags) && o.tags.includes("easyorders"));
+                if (!isEasy) return false;
             } else if (platformFilter === "shopify") {
-                if (!o.shopify_id && (!o.tags || !o.tags.includes("shopify")) && o.channel !== "Shopify") return false;
+                const isShopify = !!o.shopify_id || (o.tags && Array.isArray(o.tags) && o.tags.includes("shopify"));
+                if (!isShopify) return false;
             }
+
 
             // 3. Search Query
             if (searchQuery.trim()) {

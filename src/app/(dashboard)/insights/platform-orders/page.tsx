@@ -119,15 +119,16 @@ function PlatformOrdersInsightsContent() {
                     .range(from, to)
             );
 
-            // Filter platform orders
+            // Filter platform orders by tags & platform IDs
             const platformOrders = (allOrdersData || []).filter(o => {
-                const isEasy = !!o.easyorders_id || (o.tags && o.tags.includes("easyorders")) || o.channel === "EasyOrders";
-                const isShopify = !!o.shopify_id || (o.tags && o.tags.includes("shopify")) || o.channel === "Shopify";
+                const isEasy = !!o.easyorders_id || (o.tags && Array.isArray(o.tags) && o.tags.includes("easyorders"));
+                const isShopify = !!o.shopify_id || (o.tags && Array.isArray(o.tags) && o.tags.includes("shopify"));
 
                 if (platformFilter === "easyorders") return isEasy;
                 if (platformFilter === "shopify") return isShopify;
                 return isEasy || isShopify;
             });
+
 
             setTotalPlatformOrders(platformOrders.length);
 
