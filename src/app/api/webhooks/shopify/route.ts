@@ -66,9 +66,10 @@ export async function POST(req: Request) {
                     subtotal: subtotal,
                     total_amount: totalAmount,
                     shipping_cost: shippingCost,
-                    channel: 'Shopify',
+                    channel: 'Website',
                     tags: ['shopify', orderName],
                     notes: body.note || ''
+
                 })
                 .select('id')
                 .single();
