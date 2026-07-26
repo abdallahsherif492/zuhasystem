@@ -21,8 +21,8 @@ import {
   Legend,
 } from "recharts";
 import { 
-  Loader2, DollarSign, Package, ShoppingBag, AlertTriangle, CheckCircle2, 
-  Clock, Plus, Globe, ArrowUpRight, Sparkles, X, Bell, TrendingUp, ChevronRight
+  Loader2, DollarSign, Package, AlertTriangle, CheckCircle2, 
+  Clock, Plus, Globe, ArrowUpRight, X, Bell, TrendingUp, Award, Layers
 } from "lucide-react";
 import { DateRangePicker } from "@/components/date-range-picker";
 import { AdvancedSearch } from "@/components/dashboard/advanced-search";
@@ -142,9 +142,8 @@ function DashboardContent() {
       const prevEndStr = prevEndDate.toISOString();
 
       // 1. Dashboard Stats (RPC)
-      const { data: statsData, error: statsError } = await supabase
+      const { data: statsData } = await supabase
         .rpc('get_dashboard_stats', { from_date: start, to_date: end, p_business_id: activeBusiness.id });
-      if (statsError) console.error("Stats RPC error:", statsError);
 
       const { data: prevStatsData } = await supabase
         .rpc('get_dashboard_stats', { from_date: prevStartStr, to_date: prevEndStr, p_business_id: activeBusiness.id });
@@ -369,10 +368,6 @@ function DashboardContent() {
     }
   }
 
-  // EasyOrders & Shopify connection flags
-  const isEasyOrdersEnabled = activeBusiness?.theme_config?.integrations?.platforms?.easyorders?.enabled || !!activeBusiness?.theme_config?.easyorders_token;
-  const isShopifyEnabled = activeBusiness?.theme_config?.integrations?.platforms?.shopify?.enabled;
-
   if (loading && !fromDate) {
     return (
       <div className="flex justify-center items-center h-96">
@@ -386,12 +381,12 @@ function DashboardContent() {
   return (
     <div className="flex flex-col space-y-6 pb-12 font-sans">
       
-      {/* Sleek Live Pending Order Notification Banner */}
+      {/* Real-Time Pending Order Notification Banner */}
       {pendingOrderAlert && (
         <div className="relative overflow-hidden p-4 rounded-xl border border-emerald-500/30 bg-gradient-to-r from-emerald-500/10 via-emerald-500/5 to-transparent backdrop-blur-md shadow-lg transition-all animate-in fade-in slide-in-from-top duration-300">
           <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-3">
-              <div className="p-2.5 rounded-full bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 animate-bounce">
+              <div className="p-2 rounded-full bg-emerald-500/20 text-emerald-600 dark:text-emerald-400">
                 <Bell className="h-5 w-5" />
               </div>
               <div>
@@ -420,7 +415,7 @@ function DashboardContent() {
         </div>
       )}
 
-      {/* Extended Search */}
+      {/* Spotlight Universal Search */}
       <div className="w-full">
         <AdvancedSearch />
       </div>
@@ -430,10 +425,10 @@ function DashboardContent() {
         <div>
           <h2 className="text-3xl font-extrabold tracking-tight flex items-center gap-2">
             {t("Dashboard")}
-            <Sparkles className="h-6 w-6 text-amber-500" />
+            <Layers className="h-6 w-6 text-primary" />
           </h2>
           <p className="text-xs text-muted-foreground mt-1">
-            مرحبًا بك في لوحة التحليلات والإدارة الحية لمنظومتك التجارية.
+            {t("Welcome to your live analytics & management dashboard.")}
           </p>
         </div>
         <div className="flex items-center space-x-2">
@@ -441,73 +436,50 @@ function DashboardContent() {
         </div>
       </div>
 
-      {/* Live Store Integrations & Quick Action Bar */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
-        {/* Quick Action Buttons */}
-        <div className="lg:col-span-3 grid grid-cols-2 sm:grid-cols-4 gap-2">
-          <Link href="/orders/new">
-            <Button variant="outline" className="w-full h-14 justify-start gap-2 text-xs font-semibold bg-gradient-to-br from-primary/10 to-primary/5 hover:bg-primary/20 border-primary/20 transition-all shadow-sm">
-              <Plus className="h-4 w-4 text-primary shrink-0" />
-              <div className="text-left">
-                <div>{t("New Order")}</div>
-                <div className="text-[10px] text-muted-foreground font-normal">إنشاء طلب محلي</div>
-              </div>
-            </Button>
-          </Link>
-
-          <Link href="/platform-orders">
-            <Button variant="outline" className="w-full h-14 justify-start gap-2 text-xs font-semibold bg-gradient-to-br from-amber-500/10 to-amber-500/5 hover:bg-amber-500/20 border-amber-500/20 transition-all shadow-sm relative">
-              <Globe className="h-4 w-4 text-amber-600 shrink-0" />
-              <div className="text-left">
-                <div>{t("Review Platform Orders")}</div>
-                <div className="text-[10px] text-muted-foreground font-normal">{stats.waitingCount} {t("Waiting")}</div>
-              </div>
-              {stats.waitingCount > 0 && (
-                <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-amber-500 animate-ping" />
-              )}
-            </Button>
-          </Link>
-
-          <Link href="/inventory/damages">
-            <Button variant="outline" className="w-full h-14 justify-start gap-2 text-xs font-semibold bg-gradient-to-br from-red-500/10 to-red-500/5 hover:bg-red-500/20 border-red-500/20 transition-all shadow-sm">
-              <AlertTriangle className="h-4 w-4 text-red-500 shrink-0" />
-              <div className="text-left">
-                <div>{t("Record Damage")}</div>
-                <div className="text-[10px] text-muted-foreground font-normal">تسجيل خسائر</div>
-              </div>
-            </Button>
-          </Link>
-
-          <Link href="/accounting">
-            <Button variant="outline" className="w-full h-14 justify-start gap-2 text-xs font-semibold bg-gradient-to-br from-emerald-500/10 to-emerald-500/5 hover:bg-emerald-500/20 border-emerald-500/20 transition-all shadow-sm">
-              <DollarSign className="h-4 w-4 text-emerald-600 shrink-0" />
-              <div className="text-left">
-                <div>{t("Add Expense / Transaction")}</div>
-                <div className="text-[10px] text-muted-foreground font-normal">الخزينة</div>
-              </div>
-            </Button>
-          </Link>
-        </div>
-
-        {/* Live Store Status Ticker */}
-        <div className="lg:col-span-2 flex items-center justify-between p-3 rounded-xl border border-border/60 bg-muted/20 text-xs">
-          <div className="space-y-1">
-            <span className="font-semibold text-muted-foreground block">{t("Store Integrations & Live Queues")}</span>
-            <div className="flex items-center gap-2 pt-0.5">
-              <Badge variant="outline" className={isEasyOrdersEnabled ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-muted text-muted-foreground"}>
-                EasyOrders: {isEasyOrdersEnabled ? t("Connected") : t("Not Configured")}
-              </Badge>
-              <Badge variant="outline" className={isShopifyEnabled ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-muted text-muted-foreground"}>
-                Shopify: {isShopifyEnabled ? t("Connected") : t("Not Configured")}
-              </Badge>
+      {/* Quick Action Buttons Bar - Expanded Full Width */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <Link href="/orders/new">
+          <Button variant="outline" className="w-full h-14 justify-start gap-3 text-xs font-semibold bg-gradient-to-br from-primary/10 via-primary/5 to-transparent hover:bg-primary/20 border-primary/20 transition-all shadow-sm">
+            <Plus className="h-4 w-4 text-primary shrink-0" />
+            <div className="text-left">
+              <div>{t("New Order")}</div>
+              <div className="text-[10px] text-muted-foreground font-normal">{t("Create Local Order")}</div>
             </div>
-          </div>
-          <Link href="/platform-orders">
-            <Button size="sm" variant="ghost" className="h-8 text-xs text-primary gap-1">
-              {stats.waitingCount} {t("Waiting")} <ChevronRight className="h-3.5 w-3.5" />
-            </Button>
-          </Link>
-        </div>
+          </Button>
+        </Link>
+
+        <Link href="/platform-orders">
+          <Button variant="outline" className="w-full h-14 justify-start gap-3 text-xs font-semibold bg-gradient-to-br from-amber-500/10 via-amber-500/5 to-transparent hover:bg-amber-500/20 border-amber-500/20 transition-all shadow-sm relative">
+            <Globe className="h-4 w-4 text-amber-600 shrink-0" />
+            <div className="text-left">
+              <div>{t("Review Platform Orders")}</div>
+              <div className="text-[10px] text-muted-foreground font-normal">{stats.waitingCount} {t("Pending Review")}</div>
+            </div>
+            {stats.waitingCount > 0 && (
+              <span className="absolute top-2 right-2 h-2 w-2 rounded-full bg-amber-500" />
+            )}
+          </Button>
+        </Link>
+
+        <Link href="/inventory/damages">
+          <Button variant="outline" className="w-full h-14 justify-start gap-3 text-xs font-semibold bg-gradient-to-br from-red-500/10 via-red-500/5 to-transparent hover:bg-red-500/20 border-red-500/20 transition-all shadow-sm">
+            <AlertTriangle className="h-4 w-4 text-red-500 shrink-0" />
+            <div className="text-left">
+              <div>{t("Record Damage")}</div>
+              <div className="text-[10px] text-muted-foreground font-normal">{t("Record Losses")}</div>
+            </div>
+          </Button>
+        </Link>
+
+        <Link href="/accounting">
+          <Button variant="outline" className="w-full h-14 justify-start gap-3 text-xs font-semibold bg-gradient-to-br from-emerald-500/10 via-emerald-500/5 to-transparent hover:bg-emerald-500/20 border-emerald-500/20 transition-all shadow-sm">
+            <DollarSign className="h-4 w-4 text-emerald-600 shrink-0" />
+            <div className="text-left">
+              <div>{t("Add Expense / Transaction")}</div>
+              <div className="text-[10px] text-muted-foreground font-normal">{t("Financial Treasury")}</div>
+            </div>
+          </Button>
+        </Link>
       </div>
 
       {/* KPI Cards */}
@@ -626,11 +598,16 @@ function DashboardContent() {
       {/* Secondary Grid (Top Products & Restock Predictor Alerts) */}
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-7">
 
-        {/* Top Selling Products */}
+        {/* Redesigned Top Selling Products */}
         <Card className="col-span-4 shadow-sm border border-border/60">
-          <CardHeader className="border-b pb-4">
-            <CardTitle className="text-base font-bold">{t("Top Selling Products")}</CardTitle>
-            <CardDescription className="text-xs">{t("Best performing variants by units sold")}</CardDescription>
+          <CardHeader className="border-b pb-4 flex flex-row items-center justify-between">
+            <div>
+              <CardTitle className="text-base font-bold flex items-center gap-2">
+                <Award className="h-5 w-5 text-amber-500" />
+                {t("Top Selling Products")}
+              </CardTitle>
+              <CardDescription className="text-xs">{t("Best performing variants by units sold")}</CardDescription>
+            </div>
           </CardHeader>
           <CardContent className="pt-4 space-y-4">
             {topProducts.length === 0 ? (
@@ -639,12 +616,22 @@ function DashboardContent() {
               topProducts.map((p: any, idx: number) => {
                 const percent = Math.min(100, Math.round(((p.total_units || 0) / maxSoldInTop) * 100));
                 return (
-                  <div key={idx} className="space-y-1.5">
-                    <div className="flex justify-between items-center text-xs">
-                      <span className="font-semibold">{p.product_name || p.name}</span>
-                      <span className="font-mono text-muted-foreground">{p.total_units} {t("units")} ({formatCurrency(p.total_revenue || 0)})</span>
+                  <div key={idx} className="p-3 rounded-xl border bg-muted/20 space-y-2">
+                    <div className="flex items-center justify-between gap-3 text-xs">
+                      <div className="flex items-center gap-2">
+                        <Badge variant="outline" className="h-6 px-2 bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/20 font-bold shrink-0">
+                          #{idx + 1}
+                        </Badge>
+                        <span className="font-bold text-foreground text-xs">{p.product_name || p.name}</span>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <Badge variant="secondary" className="font-bold text-xs bg-primary/10 text-primary">
+                          {p.total_units || 0} {t("units")}
+                        </Badge>
+                        <span className="font-bold text-xs text-foreground">{formatCurrency(p.total_revenue || 0)}</span>
+                      </div>
                     </div>
-                    <Progress value={percent} className="h-2" />
+                    <Progress value={percent} className="h-2 bg-muted/60" />
                   </div>
                 );
               })
@@ -652,7 +639,7 @@ function DashboardContent() {
           </CardContent>
         </Card>
 
-        {/* Restock Predictor Inventory Alerts (Exact logic from Purchases) */}
+        {/* Restock Predictor Inventory Alerts */}
         <Card className="col-span-3 shadow-sm border border-border/60">
           <CardHeader className="border-b pb-4 flex flex-row items-center justify-between">
             <div>
