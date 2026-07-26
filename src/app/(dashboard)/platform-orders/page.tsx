@@ -198,41 +198,34 @@ function PlatformOrdersContent() {
         if (error) throw error;
     };
 
-    const handleRecordDeposit = async (order: Order, accountName: string) => {
+    const handleRecordDepositAndMoveToPending = async (order: Order, accountName: string) => {
         setDepositLoading(true);
+        setSaving(order.id);
         try {
-            await supabase.from('transactions').insert({
-                business_id: activeBusiness?.id,
-                transaction_date: new Date().toISOString().split('T')[0],
-                type: 'revenue',
-                category: 'orders_collection',
-                amount: order.paid_amount,
-                description: `Payment collection for Platform Order ${order.easyorders_id || order.id.slice(0,8)}`,
-                account_name: accountName
-            });
-            toast.success(t("Deposit recorded successfully"));
+            if (order.paid_amount && order.paid_amount > 0) {
+                await supabase.from('transactions').insert({
+                    business_id: activeBusiness?.id,
+                    transaction_date: new Date().toISOString().split('T')[0],
+                    type: 'revenue',
+                    category: 'orders_collection',
+                    amount: order.paid_amount,
+                    description: `Payment collection for Platform Order ${order.easyorders_id || order.id.slice(0,8)}`,
+                    account_name: accountName
+                });
+            }
+
+            await handleUpdateOrder(order.id, { status: 'Pending' });
+
+            toast.success(t("Order moved to Pending successfully"));
             setDepositModalOpen(false);
             setDepositOrder(null);
             setTransactionAccount("");
-        } catch (e) {
-            console.error("Error recording deposit:", e);
-            toast.error(t("Failed to record deposit"));
-        } finally {
-            setDepositLoading(false);
-        }
-    };
-
-    const executeMoveToPending = async (order: Order) => {
-        setSaving(order.id);
-        try {
-            await handleUpdateOrder(order.id, { status: 'Pending' });
-            
-            toast.success(t("Order moved to Pending successfully"));
-            setOrders(orders.filter(o => o.id !== order.id));
-        } catch (error) {
-            console.error("Error moving to pending:", error);
+            setOrders(prev => prev.filter(o => o.id !== order.id));
+        } catch (e: any) {
+            console.error("Error moving order & recording deposit:", e);
             toast.error(t("Failed to move order"));
         } finally {
+            setDepositLoading(false);
             setSaving(null);
         }
     };
@@ -244,8 +237,25 @@ function PlatformOrdersContent() {
             return;
         }
 
-        executeMoveToPending(order);
+        const isPaidStatus = order.payment_status === 'Paid' || order.payment_status === 'Partially Paid' || order.payment_status === 'Partial';
+        if (isPaidStatus && order.paid_amount && order.paid_amount > 0) {
+            setDepositOrder(order);
+            setDepositModalOpen(true);
+        } else {
+            setSaving(order.id);
+            try {
+                await handleUpdateOrder(order.id, { status: 'Pending' });
+                toast.success(t("Order moved to Pending successfully"));
+                setOrders(prev => prev.filter(o => o.id !== order.id));
+            } catch (error) {
+                console.error("Error moving to pending:", error);
+                toast.error(t("Failed to move order"));
+            } finally {
+                setSaving(null);
+            }
+        }
     };
+
 
     const handleCancelOrder = async (orderId: string) => {
         setSaving(orderId);
@@ -469,14 +479,14 @@ function PlatformOrdersContent() {
             <div className="flex items-center justify-between">
                 <div>
                     <h2 className="text-3xl font-bold tracking-tight flex items-center">
-                        Platform Synced Orders (طلبات المنصات والمتاجر)
+                        {t("Platform Synced Orders")}
                         {!loading && orders.length > 0 && (
                             <Badge variant="secondary" className="ml-3 text-lg px-3 py-1 bg-primary/10 text-primary">
                                 {orders.length} {t("Waiting")}
                             </Badge>
                         )}
                     </h2>
-                    <p className="text-muted-foreground">إدارة وتأكيد وتوجيه طلبات EasyOrders و Shopify المزامنة تلقائياً.</p>
+                    <p className="text-muted-foreground">{t("Manage incoming orders from EasyOrders and Shopify waiting for review.")}</p>
                 </div>
             </div>
             
@@ -485,7 +495,7 @@ function PlatformOrdersContent() {
                     <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                     <Input
                         type="search"
-                        placeholder="Search by name, phone, or order ID..."
+                        placeholder={t("Search by name, phone, or order ID...")}
                         className="pl-8"
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
@@ -493,10 +503,10 @@ function PlatformOrdersContent() {
                 </div>
                 <Select value={platformFilter} onValueChange={setPlatformFilter}>
                     <SelectTrigger className="w-[180px] h-10">
-                        <SelectValue placeholder="تصفية بالمنصة" />
+                        <SelectValue placeholder={t("Filter by Platform")} />
                     </SelectTrigger>
                     <SelectContent>
-                        <SelectItem value="all">جميع المنصات (All)</SelectItem>
+                        <SelectItem value="all">{t("All Platforms")}</SelectItem>
                         <SelectItem value="easyorders">EasyOrders</SelectItem>
                         <SelectItem value="shopify">Shopify</SelectItem>
                     </SelectContent>
@@ -508,16 +518,16 @@ function PlatformOrdersContent() {
             <AlertDialog open={depositModalOpen} onOpenChange={setDepositModalOpen}>
                 <AlertDialogContent>
                     <AlertDialogHeader>
-                        <AlertDialogTitle>Record Deposit?</AlertDialogTitle>
+                        <AlertDialogTitle>{t("Record Deposit & Move to Pending")}</AlertDialogTitle>
                         <AlertDialogDescription>
-                            This order has a paid amount of {formatCurrency(depositOrder?.paid_amount || 0)}. Select the treasury account to deposit this amount into.
+                            {t("This order has a paid amount of")} {formatCurrency(depositOrder?.paid_amount || 0)}. {t("Select the treasury account to deposit this amount into.")}
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <div className="space-y-4 py-4">
                         <div className="space-y-2">
-                            <Label>Select Account</Label>
+                            <Label>{t("Select Account")}</Label>
                             <Select value={transactionAccount} onValueChange={setTransactionAccount}>
-                                <SelectTrigger><SelectValue placeholder="Choose Account" /></SelectTrigger>
+                                <SelectTrigger><SelectValue placeholder={t("Choose Treasury Account")} /></SelectTrigger>
                                 <SelectContent>
                                     {accounts.map(acc => (
                                         <SelectItem key={acc.id} value={acc.name}>{acc.name}</SelectItem>
@@ -528,13 +538,13 @@ function PlatformOrdersContent() {
                     </div>
 
                     <AlertDialogFooter>
-                        <AlertDialogCancel onClick={() => { setDepositOrder(null); setTransactionAccount(""); }}>Cancel</AlertDialogCancel>
+                        <AlertDialogCancel onClick={() => { setDepositOrder(null); setTransactionAccount(""); }}>{t("Cancel")}</AlertDialogCancel>
                         <AlertDialogAction 
                             disabled={!transactionAccount || depositLoading}
-                            onClick={() => depositOrder && handleRecordDeposit(depositOrder, transactionAccount)}
+                            onClick={() => depositOrder && handleRecordDepositAndMoveToPending(depositOrder, transactionAccount)}
                         >
                             {depositLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                            Confirm & Deposit
+                            {t("Confirm & Deposit")}
                         </AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>
@@ -543,10 +553,11 @@ function PlatformOrdersContent() {
             {filteredOrders.length === 0 ? (
                 <div className="flex flex-col items-center justify-center p-20 text-muted-foreground bg-muted/20 rounded-lg border border-dashed">
                     <PackageSearch className="h-12 w-12 mb-4 opacity-20" />
-                    <p className="text-lg font-medium">لا توجد طلبات معلقة من المنصات (No waiting platform orders)</p>
-                    <p className="text-sm">ستظهر الطلبات هنا تلقائياً فور تسجيلها في EasyOrders أو Shopify.</p>
+                    <p className="text-lg font-medium">{t("No waiting platform orders")}</p>
+                    <p className="text-sm">{t("Orders will appear here automatically when they are placed on your EasyOrders or Shopify store.")}</p>
                 </div>
             ) : (
+
                 <div className="grid gap-6">
                     {filteredOrders.map(order => (
                         <Card key={order.id} className="border-2 border-primary/20 shadow-md">
@@ -630,7 +641,7 @@ function PlatformOrdersContent() {
                                         <div className="space-y-1.5 pt-3 border-t">
                                             <div className="flex items-center justify-between">
                                                 <Label className="text-xs font-semibold text-primary flex items-center gap-1.5">
-                                                    📝 ملاحظات مراجعة الطلب (Internal Notes)
+                                                    📝 {t("Internal Review Notes")}
                                                 </Label>
                                                 {saveStatus[order.id] && (
                                                     <span className="text-[10px] text-emerald-600 font-medium font-mono transition-all animate-pulse">
@@ -639,7 +650,7 @@ function PlatformOrdersContent() {
                                                 )}
                                             </div>
                                             <Textarea 
-                                                placeholder="أكتب ملاحظات المعاينة الداخلية هنا (حفظ تلقائي Auto-Save)..." 
+                                                placeholder={t("Write internal review notes here (Auto-Save)...")} 
                                                 value={order.customer_info?.internal_workbench_notes || ""} 
                                                 onChange={e => handleAutoSaveNotes(order, e.target.value)} 
                                                 rows={2}
@@ -647,6 +658,7 @@ function PlatformOrdersContent() {
                                             />
                                         </div>
                                     </div>
+
 
 
                                     {/* Order Items Mapping */}
@@ -894,11 +906,7 @@ function PlatformOrdersContent() {
                                                 <Label>{t("Payment Status")}</Label>
                                                 <Select value={order.payment_status === 'Partial' ? 'Partially Paid' : (order.payment_status || "Not Paid")} onValueChange={(val) => {
                                                     updateOrderField(order, 'payment_status', val);
-                                                    if (val === 'Paid') {
-                                                        updateOrderField(order, 'paid_amount', order.total_amount);
-                                                        setDepositOrder({ ...order, paid_amount: order.total_amount, payment_status: 'Paid' });
-                                                        setDepositModalOpen(true);
-                                                    }
+                                                    if (val === 'Paid') updateOrderField(order, 'paid_amount', order.total_amount);
                                                     if (val === 'Not Paid') updateOrderField(order, 'paid_amount', 0);
                                                 }}>
                                                     <SelectTrigger className="w-[150px] h-8">
@@ -911,7 +919,7 @@ function PlatformOrdersContent() {
                                                     </SelectContent>
                                                 </Select>
                                             </div>
-                                            {order.payment_status === 'Partially Paid' && (
+                                            {(order.payment_status === 'Partially Paid' || order.payment_status === 'Partial') && (
                                                 <div className="flex justify-between items-center">
                                                     <Label>{t("Paid Amount")}</Label>
                                                     <Input 
@@ -922,20 +930,8 @@ function PlatformOrdersContent() {
                                                     />
                                                 </div>
                                             )}
-                                            {(order.payment_status === 'Paid' || order.payment_status === 'Partially Paid') && order.paid_amount > 0 && (
-                                                <Button 
-                                                    className="w-full mt-2" 
-                                                    variant="secondary"
-                                                    size="sm"
-                                                    onClick={() => {
-                                                        setDepositOrder(order);
-                                                        setDepositModalOpen(true);
-                                                    }}
-                                                >
-                                                    Record Deposit ({formatCurrency(order.paid_amount)})
-                                                </Button>
-                                            )}
                                         </div>
+
                                     </div>
                                 </div>
                             </CardContent>

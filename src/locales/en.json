@@ -234,5 +234,19 @@
   "Theme Appearance": "Theme Appearance",
   "System Default": "System Default",
   "Light Mode": "Light Mode",
-  "Dark Mode": "Dark Mode"
+  "Dark Mode": "Dark Mode",
+  "Platform Synced Orders": "Platform Synced Orders",
+  "Manage incoming orders from EasyOrders and Shopify waiting for review.": "Manage incoming orders from EasyOrders and Shopify waiting for review.",
+  "All Platforms": "All Platforms",
+  "Filter by Platform": "Filter by Platform",
+  "Internal Review Notes": "Internal Review Notes",
+  "Write internal review notes here (Auto-Save)...": "Write internal review notes here (Auto-Save)...",
+  "Auto-saving...": "Auto-saving...",
+  "Auto-saved ✓": "Auto-saved ✓",
+  "Auto-save failed": "Auto-save failed",
+  "No waiting platform orders": "No waiting platform orders",
+  "Orders will appear here automatically when they are placed on your EasyOrders or Shopify store.": "Orders will appear here automatically when they are placed on your EasyOrders or Shopify store.",
+  "Choose Treasury Account": "Choose Treasury Account",
+  "Record Deposit & Move to Pending": "Record Deposit & Move to Pending",
+  "Confirm & Deposit": "Confirm & Deposit"
 }

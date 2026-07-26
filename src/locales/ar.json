@@ -234,5 +234,19 @@
   "Theme Appearance": "مظهر النظام",
   "System Default": "افتراضي النظام",
   "Light Mode": "الوضع الفاتح",
-  "Dark Mode": "الوضع الداكن"
+  "Dark Mode": "الوضع الداكن",
+  "Platform Synced Orders": "طلبات المنصات والمتاجر",
+  "Manage incoming orders from EasyOrders and Shopify waiting for review.": "إدارة وتأكيد وتوجيه طلبات EasyOrders و Shopify المزامنة تلقائياً.",
+  "All Platforms": "جميع المنصات",
+  "Filter by Platform": "تصفية حسب المنصة",
+  "Internal Review Notes": "ملاحظات المعاينة والمراجعة الداخلية",
+  "Write internal review notes here (Auto-Save)...": "أكتب ملاحظات المعاينة والمراجعة هنا (حفظ تلقائي Auto-Save)...",
+  "Auto-saving...": "جاري الحفظ...",
+  "Auto-saved ✓": "تم الحفظ تلقائياً ✓",
+  "Auto-save failed": "فشل الحفظ",
+  "No waiting platform orders": "لا توجد طلبات معلقة من المنصات",
+  "Orders will appear here automatically when they are placed on your EasyOrders or Shopify store.": "ستظهر الطلبات هنا تلقائياً فور تسجيلها في EasyOrders أو Shopify.",
+  "Choose Treasury Account": "اختر حساب الخزينة",
+  "Record Deposit & Move to Pending": "تسجيل الإيداع ونقل لـ Pending",
+  "Confirm & Deposit": "تأكيد وإيداع"
 }
