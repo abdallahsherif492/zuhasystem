@@ -92,6 +92,22 @@ const GOVERNORATES = [
     "Kafr Al Sheikh", "Matrouh", "Luxor", "Qena", "North Sinai", "Sohag"
 ];
 
+function checkIsEasy(o: any): boolean {
+    if (!!o.easyorders_id) return true;
+    if (o.channel && String(o.channel).toLowerCase().includes('easyorders')) return true;
+    if (!o.tags) return false;
+    const str = typeof o.tags === 'string' ? o.tags : JSON.stringify(o.tags);
+    return str.toLowerCase().includes('easyorders');
+}
+
+function checkIsShopify(o: any): boolean {
+    if (!!o.shopify_id) return true;
+    if (o.channel && String(o.channel).toLowerCase().includes('shopify')) return true;
+    if (!o.tags) return false;
+    const str = typeof o.tags === 'string' ? o.tags : JSON.stringify(o.tags);
+    return str.toLowerCase().includes('shopify');
+}
+
 function PlatformOrdersContent() {
     const { activeBusiness } = useBusiness();
     const { t } = useLanguage();
@@ -164,61 +180,62 @@ function PlatformOrdersContent() {
     const fetchOrders = async () => {
         setLoading(true);
         if (!activeBusiness) return;
-        const { data, error } = await supabase
-            .from('orders')
-            .select(`
-                id,
-                customer_info,
-                status,
-                subtotal,
-                total_amount,
-                shipping_cost,
-                easyorders_id,
-                shopify_id,
-                channel,
-                tags,
-                payment_status,
-                paid_amount,
-                created_at,
-                order_items (
+        try {
+            const { data, error } = await supabase
+                .from('orders')
+                .select(`
                     id,
-                    variant_id,
-                    quantity,
-                    price_at_sale,
-                    unmapped_name,
-                    unmapped_sku,
-                    variants (
-                        title,
-                        sku,
-                        product_id,
-                        products (
-                            name
+                    customer_info,
+                    status,
+                    subtotal,
+                    total_amount,
+                    shipping_cost,
+                    easyorders_id,
+                    shopify_id,
+                    channel,
+                    tags,
+                    payment_status,
+                    paid_amount,
+                    created_at,
+                    order_items (
+                        id,
+                        variant_id,
+                        quantity,
+                        price_at_sale,
+                        unmapped_name,
+                        unmapped_sku,
+                        variants (
+                            title,
+                            sku,
+                            product_id,
+                            products (
+                                name
+                            )
                         )
                     )
-                )
-            `)
-            .eq('business_id', activeBusiness.id)
-            .order('created_at', { ascending: false });
+                `)
+                .eq('business_id', activeBusiness.id)
+                .order('created_at', { ascending: false });
 
-        if (error) {
+            if (error) throw error;
+
+            const platformOrders = (data as any[] || []).filter(o => {
+                return checkIsEasy(o) || checkIsShopify(o);
+            });
+
+            setOrders(platformOrders as Order[]);
+        } catch (error: any) {
             console.error("Error fetching platform orders:", error);
             toast.error("Failed to load platform orders");
-        } else {
-            // Filter to include orders with easyorders_id OR shopify_id OR tags
-            const platformOrders = (data as any[] || []).filter(o => {
-                const isEasy = !!o.easyorders_id || (o.tags && Array.isArray(o.tags) && o.tags.includes("easyorders"));
-                const isShopify = !!o.shopify_id || (o.tags && Array.isArray(o.tags) && o.tags.includes("shopify"));
-                return isEasy || isShopify;
-            });
-            setOrders(platformOrders as Order[]);
+        } finally {
+            setLoading(false);
         }
-        setLoading(false);
     };
 
     // Filtered orders
     const filteredOrders = useMemo(() => {
         return orders.filter(o => {
-            // 1. Date Filter
+            // 1. Date Filter (only apply if both fromDate and toDate are present)
             if (fromDate && toDate) {
                 const orderDate = new Date(o.created_at);
                 const start = new Date(fromDate);
@@ -229,13 +246,10 @@ function PlatformOrdersContent() {
 
             // 2. Platform Filter
             if (platformFilter === "easyorders") {
-                const isEasy = !!o.easyorders_id || (o.tags && Array.isArray(o.tags) && o.tags.includes("easyorders"));
-                if (!isEasy) return false;
+                if (!checkIsEasy(o)) return false;
             } else if (platformFilter === "shopify") {
-                const isShopify = !!o.shopify_id || (o.tags && Array.isArray(o.tags) && o.tags.includes("shopify"));
-                if (!isShopify) return false;
+                if (!checkIsShopify(o)) return false;
             }
-
 
             // 3. Search Query
             if (searchQuery.trim()) {
@@ -250,6 +264,7 @@ function PlatformOrdersContent() {
             return true;
         });
     }, [orders, fromDate, toDate, platformFilter, searchQuery]);
+
 
     const handleConfirmOrder = async (order: Order) => {
         setSaving(order.id);
@@ -401,7 +416,8 @@ function PlatformOrdersContent() {
                     {filteredOrders.map((order) => {
                         const isWaiting = order.status === "Waiting";
                         const isCancelled = order.status === "Cancelled";
-                        const isShopify = !!order.shopify_id || (order.tags && order.tags.includes("shopify")) || order.channel === "Shopify";
+                        const isShopify = checkIsShopify(order);
+
 
                         return (
                             <Card key={order.id} className={`shadow-sm border transition-all rounded-2xl overflow-hidden ${
