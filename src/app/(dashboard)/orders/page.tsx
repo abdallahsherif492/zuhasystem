@@ -6,7 +6,8 @@ import { useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { useBusiness } from "@/contexts/BusinessContext";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, cn } from "@/lib/utils";
+
 import { Button } from "@/components/ui/button";
 import {
     Table,
@@ -557,19 +558,30 @@ function OrdersContent() {
                                 </Button>
                             )}
                             <Button
-                                variant="secondary"
+                                variant={selectedOrders.size > 0 ? "default" : "outline"}
                                 size="sm"
                                 onClick={handlePrintSelected}
                                 disabled={selectedOrders.size === 0}
-                                className="bg-white rounded-lg shadow-sm h-9"
+                                className={cn(
+                                    "rounded-lg shadow-sm h-9 gap-1.5 transition-all",
+                                    selectedOrders.size > 0 
+                                        ? "bg-primary text-primary-foreground hover:bg-primary/90 font-semibold" 
+                                        : "border-border text-muted-foreground bg-muted/40 opacity-60"
+                                )}
                             >
-                                <Printer className="mr-2 h-4 w-4" />
-                                {t("Print Selected")}
+                                <Printer className="h-4 w-4 shrink-0" />
+                                {t("Print Selected")} {selectedOrders.size > 0 ? `(${selectedOrders.size})` : ''}
                             </Button>
-                            <Button variant="outline" size="sm" onClick={handleExport} className="bg-white rounded-lg shadow-sm border-primary/20 text-primary hover:bg-primary/5 h-9">
-                                <Download className="mr-2 h-4 w-4" />
+                            <Button 
+                                variant="outline" 
+                                size="sm" 
+                                onClick={handleExport} 
+                                className="rounded-lg shadow-sm border-primary/20 text-primary hover:bg-primary/5 h-9 font-medium"
+                            >
+                                <Download className="mr-2 h-4 w-4 shrink-0" />
                                 {selectedOrders.size > 0 ? t("Export Selected") : t("Export All")}
                             </Button>
+
                         </div>
                     </div>
                 </div>
