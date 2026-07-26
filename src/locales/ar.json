@@ -336,5 +336,21 @@
   "Transactions": "المعاملات المالية",
   "No search results found": "لم يتم العثور على نتائج للبحث",
   "Rank": "الترتيب",
-  "Revenue": "الإيرادات"
+  "Revenue": "الإيرادات",
+  "Team Management": "إدارة فريق العمل",
+  "Manage your staff, cashiers, and managers.": "إدارة فريق العمل والموظفين وتحديد صلاحيات وساعات العمل.",
+  "Add Member": "إضافة عضو جديد",
+  "Total Members": "إجمالي الفريق",
+  "Owners & Admins": "الملاك والمدراء",
+  "Staff Members": "الموظفين",
+  "Shift Coverage": "ورديات العمل",
+  "All Pages Access": "صلاحيات شاملة",
+  "No pages assigned": "لا توجد صفحات مخصصة",
+  "Shift & Working Hours": "مواعيد وردية العمل",
+  "Weekend Days (Holidays)": "العطلات الأسبوعية",
+  "Current Team": "أعضاء الفريق الحاليين",
+  "Member": "العضو",
+  "Permitted Pages": "الصفحات المسموحة",
+  "Shift": "الوردية",
+  "Actions": "الإجراءات"
 }
