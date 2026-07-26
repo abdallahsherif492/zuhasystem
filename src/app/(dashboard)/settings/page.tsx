@@ -13,7 +13,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
-import { Loader2, Upload, Trash2, CheckCircle2 } from "lucide-react";
+import { Loader2, Upload, Trash2, CheckCircle2, BookOpen } from "lucide-react";
+
 import Image from "next/image";
 import { IntegrationLogs } from "@/components/settings/integration-logs";
 import { SubscriptionSettings } from "@/components/settings/subscription-settings";
@@ -692,6 +693,37 @@ export default function SettingsPage() {
                                                 type="password"
                                             />
                                         </div>
+
+                                        {/* Visual Instructions Card for EasyOrders */}
+                                        <div className="mt-4 p-4 rounded-xl border border-primary/20 bg-primary/5 space-y-3">
+                                            <h4 className="font-semibold text-xs text-primary flex items-center gap-2">
+                                                <BookOpen className="h-4 w-4" />
+                                                {t("EasyOrders Connection Steps")}
+                                            </h4>
+                                            <div className="grid gap-2 text-xs">
+                                                <div className="flex items-start gap-2 bg-background/80 p-2.5 rounded-lg border border-border/50">
+                                                    <Badge variant="outline" className="shrink-0 bg-primary/10 text-primary border-primary/20 font-bold">1</Badge>
+                                                    <div>
+                                                        <p className="font-semibold">{t("Step 1: Generate Webhook URL")}</p>
+                                                        <p className="text-muted-foreground mt-0.5">{t("Click Generate above to get your store's unique webhook receiver URL.")}</p>
+                                                    </div>
+                                                </div>
+                                                <div className="flex items-start gap-2 bg-background/80 p-2.5 rounded-lg border border-border/50">
+                                                    <Badge variant="outline" className="shrink-0 bg-primary/10 text-primary border-primary/20 font-bold">2</Badge>
+                                                    <div>
+                                                        <p className="font-semibold">{t("Step 2: Add Webhook in EasyOrders")}</p>
+                                                        <p className="text-muted-foreground mt-0.5">{t("Go to EasyOrders Dashboard -> Settings -> Webhooks, and add the URL to receive order creation notifications.")}</p>
+                                                    </div>
+                                                </div>
+                                                <div className="flex items-start gap-2 bg-background/80 p-2.5 rounded-lg border border-border/50">
+                                                    <Badge variant="outline" className="shrink-0 bg-primary/10 text-primary border-primary/20 font-bold">3</Badge>
+                                                    <div>
+                                                        <p className="font-semibold">{t("Step 3: Enter API Key")}</p>
+                                                        <p className="text-muted-foreground mt-0.5">{t("Generate an API Key from EasyOrders settings and paste it above to sync order updates back automatically.")}</p>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
                                     </div>
                                 )}
                             </div>
@@ -756,9 +788,41 @@ export default function SettingsPage() {
                                                 {t("Paste this Webhook URL in your Shopify Admin -> Settings -> Notifications -> Webhooks (orders/create).")}
                                             </p>
                                         </div>
+
+                                        {/* Visual Instructions Card for Shopify */}
+                                        <div className="mt-4 p-4 rounded-xl border border-emerald-500/20 bg-emerald-500/5 space-y-3">
+                                            <h4 className="font-semibold text-xs text-emerald-700 dark:text-emerald-400 flex items-center gap-2">
+                                                <BookOpen className="h-4 w-4" />
+                                                {t("Shopify Connection Steps")}
+                                            </h4>
+                                            <div className="grid gap-2 text-xs">
+                                                <div className="flex items-start gap-2 bg-background/80 p-2.5 rounded-lg border border-border/50">
+                                                    <Badge variant="outline" className="shrink-0 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/20 font-bold">1</Badge>
+                                                    <div>
+                                                        <p className="font-semibold">{t("Step 1: Store Domain")}</p>
+                                                        <p className="text-muted-foreground mt-0.5">{t("Enter your myshopify.com domain (e.g. mybrand.myshopify.com) in the field above.")}</p>
+                                                    </div>
+                                                </div>
+                                                <div className="flex items-start gap-2 bg-background/80 p-2.5 rounded-lg border border-border/50">
+                                                    <Badge variant="outline" className="shrink-0 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/20 font-bold">2</Badge>
+                                                    <div>
+                                                        <p className="font-semibold">{t("Step 2: Create Admin App & Access Token")}</p>
+                                                        <p className="text-muted-foreground mt-0.5">{t("In Shopify Admin -> Apps -> Develop apps -> Create an app. Enable Admin API permissions: read_orders, write_orders, read_products. Click Install App and copy the Admin API Access Token.")}</p>
+                                                    </div>
+                                                </div>
+                                                <div className="flex items-start gap-2 bg-background/80 p-2.5 rounded-lg border border-border/50">
+                                                    <Badge variant="outline" className="shrink-0 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/20 font-bold">3</Badge>
+                                                    <div>
+                                                        <p className="font-semibold">{t("Step 3: Register Order Creation Webhook")}</p>
+                                                        <p className="text-muted-foreground mt-0.5">{t("Copy the Webhook URL above. In Shopify Admin -> Settings -> Notifications -> Webhooks -> Create Webhook. Select Event: Order creation, Format: JSON, URL: paste the Webhook URL.")}</p>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
                                     </div>
                                 )}
                             </div>
+
                         </CardContent>
 
                         <CardFooter className="border-t p-6">

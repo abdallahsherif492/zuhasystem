@@ -275,5 +275,20 @@
   "Platform Orders": "Platform Orders",
   "Support": "Support",
   "Damages": "Damages",
-  "Settings & Administration": "Settings & Administration"
+  "Settings & Administration": "Settings & Administration",
+  "Connection Guide & Instructions": "Connection Guide & Instructions",
+  "EasyOrders Connection Steps": "EasyOrders Connection Steps",
+  "Step 1: Generate Webhook URL": "Step 1: Generate Webhook URL",
+  "Click Generate above to get your store's unique webhook receiver URL.": "Click Generate above to get your store's unique webhook receiver URL.",
+  "Step 2: Add Webhook in EasyOrders": "Step 2: Add Webhook in EasyOrders",
+  "Go to EasyOrders Dashboard -> Settings -> Webhooks, and add the URL to receive order creation notifications.": "Go to EasyOrders Dashboard -> Settings -> Webhooks, and add the URL to receive order creation notifications.",
+  "Step 3: Enter API Key": "Step 3: Enter API Key",
+  "Generate an API Key from EasyOrders settings and paste it above to sync order updates back automatically.": "Generate an API Key from EasyOrders settings and paste it above to sync order updates back automatically.",
+  "Shopify Connection Steps": "Shopify Connection Steps",
+  "Step 1: Store Domain": "Step 1: Store Domain",
+  "Enter your myshopify.com domain (e.g. mybrand.myshopify.com) in the field above.": "Enter your myshopify.com domain (e.g. mybrand.myshopify.com) in the field above.",
+  "Step 2: Create Admin App & Access Token": "Step 2: Create Admin App & Access Token",
+  "In Shopify Admin -> Apps -> Develop apps -> Create an app. Enable Admin API permissions: read_orders, write_orders, read_products. Click Install App and copy the Admin API Access Token.": "In Shopify Admin -> Apps -> Develop apps -> Create an app. Enable Admin API permissions: read_orders, write_orders, read_products. Click Install App and copy the Admin API Access Token.",
+  "Step 3: Register Order Creation Webhook": "Step 3: Register Order Creation Webhook",
+  "Copy the Webhook URL above. In Shopify Admin -> Settings -> Notifications -> Webhooks -> Create Webhook. Select Event: Order creation, Format: JSON, URL: paste the Webhook URL.": "Copy the Webhook URL above. In Shopify Admin -> Settings -> Notifications -> Webhooks -> Create Webhook. Select Event: Order creation, Format: JSON, URL: paste the Webhook URL."
 }

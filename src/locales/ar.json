@@ -275,5 +275,20 @@
   "Platform Orders": "طلبات المنصات",
   "Support": "الدعم",
   "Damages": "التلفيات",
-  "Settings & Administration": "الإعدادات والإدارة"
+  "Settings & Administration": "الإعدادات والإدارة",
+  "Connection Guide & Instructions": "دليل وخطوات الربط",
+  "EasyOrders Connection Steps": "خطوات ربط منصة EasyOrders",
+  "Step 1: Generate Webhook URL": "الخطوة 1: توليد رابط الـ Webhook",
+  "Click Generate above to get your store's unique webhook receiver URL.": "اضغط على زر Generate أعلاه للحصول على رابط الـ Webhook الخاص بمتجرك.",
+  "Step 2: Add Webhook in EasyOrders": "الخطوة 2: إضافة الـ Webhook في EasyOrders",
+  "Go to EasyOrders Dashboard -> Settings -> Webhooks, and add the URL to receive order creation notifications.": "انتقل إلى لوحة EasyOrders ➔ الإعدادات ➔ الـ Webhooks، وأضف الـ URL لاستقبال إشعارات الطلبات الجديدة.",
+  "Step 3: Enter API Key": "الخطوة 3: إضافة مفتاح الـ API Key",
+  "Generate an API Key from EasyOrders settings and paste it above to sync order updates back automatically.": "أنشئ مفتاح API من إعدادات EasyOrders والصقه أعلاه لتحديث حالات الطلبات تلقائياً.",
+  "Shopify Connection Steps": "خطوات ربط متجر Shopify",
+  "Step 1: Store Domain": "الخطوة 1: أدخل نطاق المتجر",
+  "Enter your myshopify.com domain (e.g. mybrand.myshopify.com) in the field above.": "أدخل رابط متجرك المباشر (مثل mybrand.myshopify.com) في الحقل أعلاه.",
+  "Step 2: Create Admin App & Access Token": "الخطوة 2: إنشاء Admin App واستخراج Access Token",
+  "In Shopify Admin -> Apps -> Develop apps -> Create an app. Enable Admin API permissions: read_orders, write_orders, read_products. Click Install App and copy the Admin API Access Token.": "من لوحة شوبيفاي ➔ Apps ➔ Develop apps ➔ أنشئ تطبيقاً باسم Zuha System. فعّل الصلاحيات التالية: read_orders, write_orders, read_products ثم اضغط Install App وانسخ Access Token.",
+  "Step 3: Register Order Creation Webhook": "الخطوة 3: تسجيل الـ Webhook لتلقي الطلبات",
+  "Copy the Webhook URL above. In Shopify Admin -> Settings -> Notifications -> Webhooks -> Create Webhook. Select Event: Order creation, Format: JSON, URL: paste the Webhook URL.": "انسخ رابط الـ Webhook أعلاه. في شوبيفاي ➔ Settings ➔ Notifications ➔ Webhooks ➔ Create Webhook. اختر Event: Order creation، التنسيق: JSON، والصق الـ URL."
 }
