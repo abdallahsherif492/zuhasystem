@@ -95,6 +95,8 @@ function PlatformOrdersContent() {
     const [depositOrder, setDepositOrder] = useState<Order | null>(null);
     const [transactionAccount, setTransactionAccount] = useState("");
     const [depositLoading, setDepositLoading] = useState(false);
+    const [accounts, setAccounts] = useState<{ id: string; name: string }[]>([]);
+    const [platformFilter, setPlatformFilter] = useState<string>("all");
     
     // Add Item state per order
     const [addItemOpen, setAddItemOpen] = useState<Record<string, boolean>>({});
@@ -112,8 +114,21 @@ function PlatformOrdersContent() {
             fetchOrders();
             fetchVariants();
             fetchProducts();
+            fetchAccounts();
         }
     }, [activeBusiness]);
+
+    const fetchAccounts = async () => {
+        if (!activeBusiness) return;
+        const { data } = await supabase
+            .from("financial_accounts")
+            .select("id, name")
+            .eq("business_id", activeBusiness.id)
+            .order("name");
+        if (data && data.length > 0) setAccounts(data);
+        else setAccounts([{ id: "default", name: "الخزينة الرئيسية" }]);
+    };
+
 
     const fetchVariants = async () => {
         if (!activeBusiness) return;
@@ -400,9 +415,18 @@ function PlatformOrdersContent() {
                 }
             }
             
-            return matchesSearch && matchesDate;
+            let matchesPlatform = true;
+            const tagsStr = JSON.stringify(order.tags || []).toLowerCase();
+            if (platformFilter === "easyorders") {
+                matchesPlatform = !!order.easyorders_id || tagsStr.includes("easyorders");
+            } else if (platformFilter === "shopify") {
+                matchesPlatform = tagsStr.includes("shopify");
+            }
+
+            return matchesSearch && matchesDate && matchesPlatform;
         });
-    }, [orders, searchQuery, fromDate, toDate]);
+    }, [orders, searchQuery, fromDate, toDate, platformFilter]);
+
 
     if (loading) {
         return <div className="flex justify-center p-20"><Loader2 className="h-8 w-8 animate-spin" /></div>;
@@ -424,7 +448,7 @@ function PlatformOrdersContent() {
                 </div>
             </div>
             
-            <div className="flex items-center gap-4 py-4">
+            <div className="flex flex-wrap items-center gap-4 py-4">
                 <div className="relative flex-1 max-w-sm">
                     <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                     <Input
@@ -435,6 +459,16 @@ function PlatformOrdersContent() {
                         onChange={(e) => setSearchQuery(e.target.value)}
                     />
                 </div>
+                <Select value={platformFilter} onValueChange={setPlatformFilter}>
+                    <SelectTrigger className="w-[180px] h-10">
+                        <SelectValue placeholder="تصفية بالمنصة" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="all">جميع المنصات (All)</SelectItem>
+                        <SelectItem value="easyorders">EasyOrders</SelectItem>
+                        <SelectItem value="shopify">Shopify</SelectItem>
+                    </SelectContent>
+                </Select>
                 <DateRangePicker />
             </div>
 
@@ -453,14 +487,14 @@ function PlatformOrdersContent() {
                             <Select value={transactionAccount} onValueChange={setTransactionAccount}>
                                 <SelectTrigger><SelectValue placeholder="Choose Account" /></SelectTrigger>
                                 <SelectContent>
-                                    <SelectItem value="الخزينة الرئيسية">الخزينة الرئيسية</SelectItem>
-                                    <SelectItem value="Mohamed Adel">Mohamed Adel</SelectItem>
-                                    <SelectItem value="Abdallah Sherif">Abdallah Sherif</SelectItem>
-                                    <SelectItem value="Split">Split (50/50)</SelectItem>
+                                    {accounts.map(acc => (
+                                        <SelectItem key={acc.id} value={acc.name}>{acc.name}</SelectItem>
+                                    ))}
                                 </SelectContent>
                             </Select>
                         </div>
                     </div>
+
                     <AlertDialogFooter>
                         <AlertDialogCancel onClick={() => { setDepositOrder(null); setTransactionAccount(""); }}>Cancel</AlertDialogCancel>
                         <AlertDialogAction 
