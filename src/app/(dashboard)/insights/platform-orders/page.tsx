@@ -219,20 +219,20 @@ function PlatformOrdersInsightsContent() {
                 <div>
                     <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
                         <Globe className="h-6 w-6 text-primary" />
-                        Platform Orders Confirmation Insights (نسبة تأكيدات المنصات)
+                        {t("Platform Orders Confirmation Insights")}
                     </h1>
                     <p className="text-sm text-muted-foreground mt-0.5">
-                        تحليل معدلات التأكيد والإلغاء للطلبات القادمة من منصات EasyOrders و Shopify.
+                        {t("Analysis of confirmation and cancellation rates for orders from EasyOrders and Shopify.")}
                     </p>
                 </div>
 
                 <div className="flex items-center gap-3">
                     <Select value={platformFilter} onValueChange={setPlatformFilter}>
                         <SelectTrigger className="w-[160px] h-9 text-xs">
-                            <SelectValue placeholder="المنصة" />
+                            <SelectValue placeholder={t("Filter by Platform")} />
                         </SelectTrigger>
                         <SelectContent>
-                            <SelectItem value="all">جميع المنصات (All)</SelectItem>
+                            <SelectItem value="all">{t("All Platforms")}</SelectItem>
                             <SelectItem value="easyorders">EasyOrders</SelectItem>
                             <SelectItem value="shopify">Shopify</SelectItem>
                         </SelectContent>
@@ -248,45 +248,45 @@ function PlatformOrdersInsightsContent() {
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
                 <Card className="shadow-sm border border-border/60">
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-xs font-semibold text-muted-foreground uppercase">إجمالي طلبات المنصات</CardTitle>
+                        <CardTitle className="text-xs font-semibold text-muted-foreground uppercase">{t("Total Platform Orders")}</CardTitle>
                         <Globe className="h-4 w-4 text-primary" />
                     </CardHeader>
                     <CardContent>
                         <div className="text-2xl font-bold">{totalPlatformOrders}</div>
-                        <p className="text-[11px] text-muted-foreground mt-1">المتزامنة خلال الفترة</p>
+                        <p className="text-[11px] text-muted-foreground mt-1">{t("Synced during the period")}</p>
                     </CardContent>
                 </Card>
 
                 <Card className="shadow-sm border border-border/60">
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-xs font-semibold text-muted-foreground uppercase">نسبة التأكيد الكلية</CardTitle>
+                        <CardTitle className="text-xs font-semibold text-muted-foreground uppercase">{t("Overall Confirmation Rate")}</CardTitle>
                         <CheckCircle2 className="h-4 w-4 text-emerald-500" />
                     </CardHeader>
                     <CardContent>
                         <div className="text-2xl font-bold text-emerald-600">{overallConfirmedRate.toFixed(1)}%</div>
-                        <p className="text-[11px] text-muted-foreground mt-1">{confirmedOrders} أوردر مؤكد</p>
+                        <p className="text-[11px] text-muted-foreground mt-1">{confirmedOrders} {t("confirmed orders")}</p>
                     </CardContent>
                 </Card>
 
                 <Card className="shadow-sm border border-border/60">
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-xs font-semibold text-muted-foreground uppercase">في انتظار التأكيد</CardTitle>
+                        <CardTitle className="text-xs font-semibold text-muted-foreground uppercase">{t("Waiting Confirmation")}</CardTitle>
                         <Clock className="h-4 w-4 text-amber-500" />
                     </CardHeader>
                     <CardContent>
                         <div className="text-2xl font-bold text-amber-600">{waitingOrders}</div>
-                        <p className="text-[11px] text-muted-foreground mt-1">تتطلب المراجعة</p>
+                        <p className="text-[11px] text-muted-foreground mt-1">{t("Requires Review")}</p>
                     </CardContent>
                 </Card>
 
                 <Card className="shadow-sm border border-border/60">
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-xs font-semibold text-muted-foreground uppercase">نسبة الإلغاء</CardTitle>
+                        <CardTitle className="text-xs font-semibold text-muted-foreground uppercase">{t("Cancellation Rate")}</CardTitle>
                         <XCircle className="h-4 w-4 text-red-500" />
                     </CardHeader>
                     <CardContent>
                         <div className="text-2xl font-bold text-red-600">{overallCancelledRate.toFixed(1)}%</div>
-                        <p className="text-[11px] text-muted-foreground mt-1">{cancelledOrders} أوردر ملغى</p>
+                        <p className="text-[11px] text-muted-foreground mt-1">{cancelledOrders} {t("cancelled orders")}</p>
                     </CardContent>
                 </Card>
             </div>
@@ -294,11 +294,11 @@ function PlatformOrdersInsightsContent() {
             {/* Table Section */}
             <Card className="shadow-sm border border-border/60">
                 <CardHeader className="p-4 flex flex-row items-center justify-between">
-                    <CardTitle className="text-base font-bold">تحليل التأكيد حسب المنتج</CardTitle>
+                    <CardTitle className="text-base font-bold">{t("Confirmation Analysis by Product")}</CardTitle>
                     <div className="relative w-64">
                         <Search className="absolute right-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
                         <Input
-                            placeholder="البحث باسم المنتج..."
+                            placeholder={t("Search by product name...")}
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
                             className="pr-8 h-8 text-xs rounded-xl"
@@ -309,28 +309,28 @@ function PlatformOrdersInsightsContent() {
                     {loading ? (
                         <div className="flex items-center justify-center p-12 gap-2 text-muted-foreground">
                             <Loader2 className="h-5 w-5 animate-spin text-primary" />
-                            <span className="text-xs">جاري تحليل البيانات...</span>
+                            <span className="text-xs">{t("Analyzing data...")}</span>
                         </div>
                     ) : filteredData.length === 0 ? (
                         <div className="p-12 text-center text-muted-foreground text-xs">
-                            لا توجد بيانات متاحة للمنتجات في هذه الفترة.
+                            {t("No product data available for this period.")}
                         </div>
                     ) : (
                         <Table>
                             <TableHeader>
                                 <TableRow>
-                                    <TableHead className="text-right">اسم المنتج</TableHead>
+                                    <TableHead className="text-right">{t("Product Name")}</TableHead>
                                     <TableHead className="text-center cursor-pointer" onClick={() => requestSort('total_orders')}>
-                                        <span className="flex items-center justify-center gap-1">إجمالي الطلبات <ArrowUpDown className="h-3 w-3" /></span>
+                                        <span className="flex items-center justify-center gap-1">{t("Total Orders")} <ArrowUpDown className="h-3 w-3" /></span>
                                     </TableHead>
                                     <TableHead className="text-center cursor-pointer" onClick={() => requestSort('confirmed_orders')}>
-                                        <span className="flex items-center justify-center gap-1">الطلبات المؤكدة <ArrowUpDown className="h-3 w-3" /></span>
+                                        <span className="flex items-center justify-center gap-1">{t("Confirmed Orders")} <ArrowUpDown className="h-3 w-3" /></span>
                                     </TableHead>
                                     <TableHead className="text-center cursor-pointer" onClick={() => requestSort('confirmed_rate')}>
-                                        <span className="flex items-center justify-center gap-1">نسبة التأكيد <ArrowUpDown className="h-3 w-3" /></span>
+                                        <span className="flex items-center justify-center gap-1">{t("Confirmation Rate")} <ArrowUpDown className="h-3 w-3" /></span>
                                     </TableHead>
                                     <TableHead className="text-center cursor-pointer" onClick={() => requestSort('cancelled_orders')}>
-                                        <span className="flex items-center justify-center gap-1">الطلبات الملغاة <ArrowUpDown className="h-3 w-3" /></span>
+                                        <span className="flex items-center justify-center gap-1">{t("Cancelled Orders")} <ArrowUpDown className="h-3 w-3" /></span>
                                     </TableHead>
                                 </TableRow>
                             </TableHeader>
@@ -353,6 +353,7 @@ function PlatformOrdersInsightsContent() {
             </Card>
         </div>
     );
+
 }
 
 export default function PlatformOrdersInsightsPage() {
