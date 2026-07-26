@@ -92,23 +92,8 @@ const GOVERNORATES = [
     "Kafr Al Sheikh", "Matrouh", "Luxor", "Qena", "North Sinai", "Sohag"
 ];
 
-function checkIsEasy(o: any): boolean {
-    if (!!o.easyorders_id) return true;
-    if (o.channel && String(o.channel).toLowerCase().includes('easyorders')) return true;
-    if (!o.tags) return false;
-    const str = typeof o.tags === 'string' ? o.tags : JSON.stringify(o.tags);
-    return str.toLowerCase().includes('easyorders');
-}
-
-function checkIsShopify(o: any): boolean {
-    if (!!o.shopify_id) return true;
-    if (o.channel && String(o.channel).toLowerCase().includes('shopify')) return true;
-    if (!o.tags) return false;
-    const str = typeof o.tags === 'string' ? o.tags : JSON.stringify(o.tags);
-    return str.toLowerCase().includes('shopify');
-}
-
 function PlatformOrdersContent() {
+
     const { activeBusiness } = useBusiness();
     const { t } = useLanguage();
 
@@ -219,11 +204,15 @@ function PlatformOrdersContent() {
 
             if (error) throw error;
 
-            const platformOrders = (data as any[] || []).filter(o => {
-                return checkIsEasy(o) || checkIsShopify(o);
+            // Only show orders with status 'Waiting' AND tags containing 'easyorders' or 'shopify' (or platform IDs)
+            const waitingPlatformOrders = (data as any[] || []).filter(o => {
+                if (o.status !== "Waiting") return false;
+                const isEasy = !!o.easyorders_id || (o.tags && JSON.stringify(o.tags).toLowerCase().includes("easyorders"));
+                const isShopify = !!o.shopify_id || (o.tags && JSON.stringify(o.tags).toLowerCase().includes("shopify"));
+                return isEasy || isShopify;
             });
 
-            setOrders(platformOrders as Order[]);
+            setOrders(waitingPlatformOrders as Order[]);
         } catch (error: any) {
             console.error("Error fetching platform orders:", error);
             toast.error("Failed to load platform orders");
@@ -235,23 +224,16 @@ function PlatformOrdersContent() {
     // Filtered orders
     const filteredOrders = useMemo(() => {
         return orders.filter(o => {
-            // 1. Date Filter (only apply if both fromDate and toDate are present)
-            if (fromDate && toDate) {
-                const orderDate = new Date(o.created_at);
-                const start = new Date(fromDate);
-                const end = new Date(toDate);
-                end.setHours(23, 59, 59, 999);
-                if (orderDate < start || orderDate > end) return false;
-            }
-
-            // 2. Platform Filter
+            // Platform Filter
             if (platformFilter === "easyorders") {
-                if (!checkIsEasy(o)) return false;
+                const isEasy = !!o.easyorders_id || (o.tags && JSON.stringify(o.tags).toLowerCase().includes("easyorders"));
+                if (!isEasy) return false;
             } else if (platformFilter === "shopify") {
-                if (!checkIsShopify(o)) return false;
+                const isShopify = !!o.shopify_id || (o.tags && JSON.stringify(o.tags).toLowerCase().includes("shopify"));
+                if (!isShopify) return false;
             }
 
-            // 3. Search Query
+            // Search Query
             if (searchQuery.trim()) {
                 const q = searchQuery.toLowerCase();
                 const nameMatch = o.customer_info?.name?.toLowerCase().includes(q);
@@ -263,7 +245,8 @@ function PlatformOrdersContent() {
 
             return true;
         });
-    }, [orders, fromDate, toDate, platformFilter, searchQuery]);
+    }, [orders, platformFilter, searchQuery]);
+
 
 
     const handleConfirmOrder = async (order: Order) => {
@@ -416,7 +399,8 @@ function PlatformOrdersContent() {
                     {filteredOrders.map((order) => {
                         const isWaiting = order.status === "Waiting";
                         const isCancelled = order.status === "Cancelled";
-                        const isShopify = checkIsShopify(order);
+                        const isShopify = !!order.shopify_id || (order.tags && JSON.stringify(order.tags).toLowerCase().includes("shopify"));
+
 
 
                         return (
