@@ -104,35 +104,54 @@ export function AdvancedSearch() {
       });
       const finalProducts = Object.values(mergedProductsMap);
 
-      // 2. Search Customers
+      // 2. Search Customers (Partial substring match on phone, name, city, governorate)
       const { data: custs } = await supabase
         .from("customers")
         .select("*")
         .eq("business_id", activeBusiness.id)
         .or(`name.ilike.${qLower},phone.ilike.${qLower},city.ilike.${qLower},governorate.ilike.${qLower}`)
-        .limit(6);
+        .limit(10);
 
       const customerIds = (custs || []).map(c => c.id);
 
-      // 3. Search Orders
-      let ordersQuery = supabase
+      // 3. Search Orders (Dual strategy: linked customer_id + direct customer_info phone/name substring search)
+      const allOrdersMap: Record<string, any> = {};
+
+      if (customerIds.length > 0) {
+        const { data: linkedOrders } = await supabase
+          .from("orders")
+          .select("*, order_items(*, variants(*))")
+          .eq("business_id", activeBusiness.id)
+          .in("customer_id", customerIds)
+          .order("created_at", { ascending: false })
+          .limit(10);
+
+        (linkedOrders || []).forEach(o => { allOrdersMap[o.id] = o; });
+      }
+
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cleanQuery);
+
+      let directOrdersQuery = supabase
         .from("orders")
         .select("*, order_items(*, variants(*))")
         .eq("business_id", activeBusiness.id)
         .order("created_at", { ascending: false })
-        .limit(8);
+        .limit(10);
 
-      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cleanQuery);
-
-      if (customerIds.length > 0) {
-        ordersQuery = ordersQuery.in("customer_id", customerIds);
-      } else if (isUuid) {
-        ordersQuery = ordersQuery.eq("id", cleanQuery);
+      if (isUuid) {
+        directOrdersQuery = directOrdersQuery.eq("id", cleanQuery);
       } else {
-        ordersQuery = ordersQuery.or(`status.ilike.${qLower},channel.ilike.${qLower}`);
+        directOrdersQuery = directOrdersQuery.or(
+          `customer_info->>phone.ilike.${qLower},customer_info->>name.ilike.${qLower},status.ilike.${qLower},channel.ilike.${qLower}`
+        );
       }
 
-      const { data: ords } = await ordersQuery;
+      const { data: directOrders } = await directOrdersQuery;
+      (directOrders || []).forEach(o => { allOrdersMap[o.id] = o; });
+
+      const finalOrders = Object.values(allOrdersMap).sort((a, b) => 
+        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      ).slice(0, 10);
 
       // 4. Search Financial Transactions
       const { data: txs } = await supabase
@@ -145,7 +164,7 @@ export function AdvancedSearch() {
 
       setResults({
         products: finalProducts,
-        orders: ords || [],
+        orders: finalOrders,
         customers: custs || [],
         transactions: txs || []
       });
@@ -154,6 +173,7 @@ export function AdvancedSearch() {
     } finally {
       setLoading(false);
     }
+
   }
 
   const totalResultsCount = 
