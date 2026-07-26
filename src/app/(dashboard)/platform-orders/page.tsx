@@ -176,9 +176,9 @@ function PlatformOrdersContent() {
                     total_amount,
                     shipping_cost,
                     easyorders_id,
-                    shopify_id,
                     channel,
                     tags,
+
                     payment_status,
                     paid_amount,
                     created_at,

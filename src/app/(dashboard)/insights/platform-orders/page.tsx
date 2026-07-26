@@ -101,9 +101,9 @@ function PlatformOrdersInsightsContent() {
                         id, 
                         status,
                         easyorders_id,
-                        shopify_id,
                         channel,
                         tags,
+
                         order_items (
                             variants (
                                 products (
@@ -122,7 +122,8 @@ function PlatformOrdersInsightsContent() {
             // Filter platform orders by tags & platform IDs
             const platformOrders = (allOrdersData || []).filter(o => {
                 const isEasy = !!o.easyorders_id || (o.tags && Array.isArray(o.tags) && o.tags.includes("easyorders"));
-                const isShopify = !!o.shopify_id || (o.tags && Array.isArray(o.tags) && o.tags.includes("shopify"));
+                const isShopify = !!(o as any).shopify_id || (o.tags && Array.isArray(o.tags) && o.tags.includes("shopify"));
+
 
                 if (platformFilter === "easyorders") return isEasy;
                 if (platformFilter === "shopify") return isShopify;
