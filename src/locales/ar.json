@@ -352,5 +352,21 @@
   "Member": "العضو",
   "Permitted Pages": "الصفحات المسموحة",
   "Shift": "الوردية",
-  "Actions": "الإجراءات"
+  "Actions": "الإجراءات",
+  "Attendance & Tracking": "متابعة الحضور والانصراف",
+  "Monitor staff attendance, delays, and absences.": "متابعة تسجيل حضور وانصراف الفريق، التأخيرات، والغياب اليومي.",
+  "Present Today": "الحاضرون اليوم",
+  "Absent": "الغائبون",
+  "Late Arrivals": "المتأخرون عن الوردية",
+  "Attendance Records": "سجلات الحضور اليومية",
+  "Staff Member": "الموظف",
+  "Expected Shift": "الوردية المتوقعة",
+  "Clock In": "تسجيل الدخول",
+  "Clock Out": "تسجيل الخروج",
+  "Delay": "التأخير",
+  "Present": "حاضر",
+  "Weekend/Off": "عطلة أسبوعية",
+  "No schedule": "بدون جدول",
+  "mins late": "دقيقة تأخير",
+  "On Time": "في الموعد"
 }

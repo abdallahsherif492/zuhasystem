@@ -352,5 +352,21 @@
   "Member": "Member",
   "Permitted Pages": "Permitted Pages",
   "Shift": "Shift",
-  "Actions": "Actions"
+  "Actions": "Actions",
+  "Attendance & Tracking": "Attendance & Tracking",
+  "Monitor staff attendance, delays, and absences.": "Monitor staff attendance, delays, and absences.",
+  "Present Today": "Present Today",
+  "Absent": "Absent",
+  "Late Arrivals": "Late Arrivals",
+  "Attendance Records": "Attendance Records",
+  "Staff Member": "Staff Member",
+  "Expected Shift": "Expected Shift",
+  "Clock In": "Clock In",
+  "Clock Out": "Clock Out",
+  "Delay": "Delay",
+  "Present": "Present",
+  "Weekend/Off": "Weekend/Off",
+  "No schedule": "No schedule",
+  "mins late": "mins late",
+  "On Time": "On Time"
 }
