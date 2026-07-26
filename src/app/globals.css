@@ -122,3 +122,11 @@
     @apply bg-background text-foreground;
   }
 }
+
+@media print {
+  .print\:hidden,
+  [data-chat-widget] {
+    display: none !important;
+  }
+}
+

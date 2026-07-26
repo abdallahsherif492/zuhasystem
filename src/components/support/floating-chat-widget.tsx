@@ -3,8 +3,10 @@
 import { toast } from "sonner";
 import { playNotificationSound, requestNotificationPermission, showBrowserNotification } from "@/lib/notifications";
 import { useState, useEffect, useRef } from "react";
+import { usePathname } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { useBusiness } from "@/contexts/BusinessContext";
+
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -320,10 +322,14 @@ export function FloatingChatWidget() {
         }
     }
 
+    const pathname = usePathname();
+
     if (!activeBusiness) return null;
+    if (pathname.includes('/print') || pathname.includes('/invoice')) return null;
 
     return (
-        <div className="fixed bottom-6 right-6 z-50 flex flex-col items-end gap-3 font-sans">
+        <div className="fixed bottom-6 right-6 z-50 flex flex-col items-end gap-3 font-sans print:hidden">
+
             {/* Chat Dialog Popup Window */}
             {isOpen && (
                 <Card className="w-[360px] sm:w-[410px] h-[540px] shadow-2xl border border-border/50 backdrop-blur-2xl bg-background/95 flex flex-col overflow-hidden rounded-3xl animate-in slide-in-from-bottom-5 duration-300">
