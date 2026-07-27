@@ -296,8 +296,9 @@ export async function POST(req: Request) {
                         variant_id: matchedVariantId,
                         quantity: quantity,
                         price_at_sale: itemPrice,
-                        unmapped_name: item.name || item.title || 'Shopify Product',
-                        unmapped_sku: sku
+                        cost_at_sale: 0,
+                        unmapped_name: !matchedVariantId ? (item.name || item.title || 'Shopify Product') : null,
+                        unmapped_sku: !matchedVariantId ? sku : null
                     });
 
                 if (itemError) {
