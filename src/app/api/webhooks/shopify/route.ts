@@ -187,9 +187,7 @@ export async function POST(req: Request) {
                         phone: phone,
                         phone2: '',
                         address: fullAddress,
-                        governorate: governorate,
-                        total_orders: 0,
-                        total_spent: 0
+                        governorate: governorate
                     })
                     .select('id')
                     .single();
@@ -247,6 +245,7 @@ export async function POST(req: Request) {
                     status: 'Waiting',
                     subtotal: subtotal,
                     total_amount: totalAmount,
+                    total_cost: 0,
                     shipping_cost: shippingCost,
                     channel: 'Shopify',
                     tags: ['shopify', orderName],

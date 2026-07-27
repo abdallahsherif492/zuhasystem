@@ -163,9 +163,7 @@ export async function POST(request: Request) {
                         phone: phone1,
                         phone2: phone2,
                         address: address,
-                        governorate: mappedGov,
-                        total_orders: 0,
-                        total_spent: 0
+                        governorate: mappedGov
                     })
                     .select('id')
                     .single();
