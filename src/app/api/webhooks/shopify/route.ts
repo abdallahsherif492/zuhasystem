@@ -40,6 +40,8 @@ export async function POST(req: Request) {
             payload: parsedPayloadForLog
         });
 
+        console.log(`[Shopify Webhook Debug] Received request. Topic: ${topic}, Shop: ${shopHeader}`);
+
         // HMAC Signature Verification if webhook secret is configured
         const webhookSecret = process.env.SHOPIFY_WEBHOOK_SECRET || process.env.SHOPIFY_API_SECRET;
         if (webhookSecret && hmacHeader) {
@@ -49,54 +51,64 @@ export async function POST(req: Request) {
                 .digest('base64');
 
             if (calculatedHmac !== hmacHeader) {
-                console.warn('[Shopify Webhook] Invalid HMAC signature for shop:', shopHeader);
+                console.warn('[Shopify Webhook Debug] Invalid HMAC signature for shop:', shopHeader);
                 return NextResponse.json({ error: 'Invalid HMAC signature' }, { status: 401 });
             }
+            console.log(`[Shopify Webhook Debug] HMAC signature verified.`);
+        } else {
+             console.log(`[Shopify Webhook Debug] No HMAC secret configured, skipping signature validation.`);
         }
 
         // Acknowledge non-order topics or pings with 200 OK so Shopify does not disable webhook
         if (topic && !topic.startsWith('orders/')) {
-            console.log(`[Shopify Webhook] Acknowledged ignored topic: ${topic}`);
+            console.log(`[Shopify Webhook Debug] Acknowledged ignored topic: ${topic}`);
             return NextResponse.json({ message: `Topic '${topic}' acknowledged` }, { status: 200 });
         }
 
         let body: any = {};
         try {
             body = JSON.parse(rawBody);
+            console.log(`[Shopify Webhook Debug] Successfully parsed JSON payload. Order ID: ${body.id}`);
         } catch (e) {
-            console.error('[Shopify Webhook] Failed to parse JSON body');
+            console.error('[Shopify Webhook Debug] Failed to parse JSON body');
             return NextResponse.json({ error: 'Invalid JSON payload' }, { status: 400 });
         }
 
         if (!body || !body.id) {
-            console.log('[Shopify Webhook] Empty payload or test ping received');
+            console.log('[Shopify Webhook Debug] Empty payload or test ping received');
             return NextResponse.json({ message: 'Payload received successfully' }, { status: 200 });
         }
 
         // Parse businessId from URL query parameter
         const { searchParams } = new URL(req.url);
         const queryBusinessId = searchParams.get('businessId') || searchParams.get('business');
+        console.log(`[Shopify Webhook Debug] queryBusinessId from URL: ${queryBusinessId}`);
 
         let businessId = '';
         if (queryBusinessId) {
-            const { data: b } = await supabase
+            const { data: b, error: bError } = await supabase
                 .from('businesses')
                 .select('id')
                 .eq('id', queryBusinessId)
                 .maybeSingle();
+            if (bError) console.error(`[Shopify Webhook Debug] Error querying business by ID: ${bError.message}`);
             if (b) {
                 businessId = b.id;
+                console.log(`[Shopify Webhook Debug] Business found by query ID: ${businessId}`);
+            } else {
+                 console.log(`[Shopify Webhook Debug] Business NOT found by query ID: ${queryBusinessId}`);
             }
         }
 
         if (!businessId) {
+            console.log(`[Shopify Webhook Debug] Falling back to domain matching...`);
             // Fallback: Find business by shopify_store_domain in theme_config
             const { data: businesses, error: bizError } = await supabase
                 .from('businesses')
                 .select('id, theme_config');
 
             if (bizError) {
-                console.error('[Shopify Webhook] Error fetching businesses:', bizError.message);
+                console.error('[Shopify Webhook Debug] Error fetching businesses:', bizError.message);
             }
 
             const matchedBiz = (businesses || []).find(b => {
@@ -107,16 +119,20 @@ export async function POST(req: Request) {
             });
 
             businessId = matchedBiz ? matchedBiz.id : '';
+            if (businessId) {
+                console.log(`[Shopify Webhook Debug] Business found by domain match: ${businessId}`);
+            }
         }
 
         if (!businessId) {
-            console.error('[Shopify Webhook] No business found for query ID:', queryBusinessId, 'or shop domain:', shopHeader);
+            console.error('[Shopify Webhook Debug] No business found for query ID:', queryBusinessId, 'or shop domain:', shopHeader);
             return NextResponse.json({ error: 'Business not found for Shopify store' }, { status: 404 });
         }
 
 
         const shopifyOrderId = String(body.id || '');
         const orderName = body.name || `#${body.order_number || body.id}`;
+        console.log(`[Shopify Webhook Debug] Processing Order: ${orderName}`);
 
         // Customer Info parsing across available address and customer objects
         const customerObj = body.customer || {};
@@ -142,22 +158,28 @@ export async function POST(req: Request) {
             city: city,
             governorate: governorate
         };
+        console.log(`[Shopify Webhook Debug] Customer Info parsed: ${JSON.stringify(customerInfo)}`);
 
         // Create or find customer based on phone number and business ID (matching easyorders logic)
         let customerId = null;
         if (phone) {
-            const { data: existingCustomers } = await supabase
+            console.log(`[Shopify Webhook Debug] Searching for existing customer with phone: ${phone}`);
+            const { data: existingCustomers, error: searchError } = await supabase
                 .from('customers')
                 .select('id')
                 .eq('phone', phone)
                 .eq('business_id', businessId)
                 .limit(1);
 
+            if (searchError) console.error(`[Shopify Webhook Debug] Error searching customers: ${searchError.message}`);
+
             if (existingCustomers && existingCustomers.length > 0) {
                 customerId = existingCustomers[0].id;
+                console.log(`[Shopify Webhook Debug] Existing customer found: ${customerId}`);
             } else {
+                console.log(`[Shopify Webhook Debug] Creating new customer...`);
                 // Create customer
-                const { data: newCustomer } = await supabase
+                const { data: newCustomer, error: createError } = await supabase
                     .from('customers')
                     .insert({
                         business_id: businessId,
@@ -172,10 +194,15 @@ export async function POST(req: Request) {
                     .select('id')
                     .single();
                 
+                if (createError) console.error(`[Shopify Webhook Debug] Error creating customer: ${createError.message}`);
+                
                 if (newCustomer) {
                     customerId = newCustomer.id;
+                    console.log(`[Shopify Webhook Debug] New customer created: ${customerId}`);
                 }
             }
+        } else {
+            console.log(`[Shopify Webhook Debug] No phone number provided, skipping customer creation.`);
         }
 
         const lineItems = body.line_items || [];
@@ -188,22 +215,28 @@ export async function POST(req: Request) {
         }
         const subtotal = totalAmount - shippingCost;
 
+        console.log(`[Shopify Webhook Debug] Financials: Total: ${totalAmount}, Subtotal: ${subtotal}, Shipping: ${shippingCost}`);
+
         // Hardcode payment status to Not Paid (ignoring Shopify financial_status as requested)
         const paymentStatus = 'Not Paid';
         const paidAmount = 0;
 
         // Check if order already exists
-        const { data: existingOrder } = await supabase
+        console.log(`[Shopify Webhook Debug] Checking if order ${shopifyOrderId} already exists...`);
+        const { data: existingOrder, error: existingError } = await supabase
             .from('orders')
             .select('id')
             .eq('shopify_id', shopifyOrderId)
             .maybeSingle();
+
+        if (existingError) console.error(`[Shopify Webhook Debug] Error checking existing order: ${existingError.message}`);
 
         let orderId = existingOrder?.id;
         let isNewOrder = false;
 
         if (!orderId) {
             isNewOrder = true;
+            console.log(`[Shopify Webhook Debug] Inserting new order into database...`);
             const { data: newOrder, error: insertError } = await supabase
                 .from('orders')
                 .insert({
@@ -226,14 +259,18 @@ export async function POST(req: Request) {
                 .single();
 
             if (insertError) {
-                console.error('[Shopify Webhook] Order Insert Error:', insertError);
+                console.error('[Shopify Webhook Debug] Order Insert Error:', insertError);
                 throw insertError;
             }
             orderId = newOrder.id;
+            console.log(`[Shopify Webhook Debug] Order successfully inserted with ID: ${orderId}`);
+        } else {
+             console.log(`[Shopify Webhook Debug] Order already exists with ID: ${orderId}, skipping insert.`);
         }
 
         // Process line items
         if (isNewOrder) {
+            console.log(`[Shopify Webhook Debug] Processing ${lineItems.length} line items...`);
             for (const item of lineItems) {
                 const sku = item.sku || '';
                 const itemPrice = Number(item.price || 0);
@@ -242,14 +279,16 @@ export async function POST(req: Request) {
                 // Try to match variant by SKU
                 let matchedVariantId: string | null = null;
                 if (sku) {
-                    const { data: v } = await supabase
+                    const { data: v, error: vError } = await supabase
                         .from('variants')
                         .select('id')
                         .eq('sku', sku)
                         .maybeSingle();
+                    if (vError) console.error(`[Shopify Webhook Debug] Error searching for variant sku ${sku}: ${vError.message}`);
                     if (v) matchedVariantId = v.id;
                 }
 
+                console.log(`[Shopify Webhook Debug] Inserting line item ${item.title} (SKU: ${sku}). Matched Variant: ${matchedVariantId}`);
                 const { error: itemError } = await supabase
                     .from('order_items')
                     .insert({
@@ -263,11 +302,12 @@ export async function POST(req: Request) {
                     });
 
                 if (itemError) {
-                    console.error('[Shopify Webhook] Order Item Insert Error:', itemError);
+                    console.error('[Shopify Webhook Debug] Order Item Insert Error:', itemError);
                 }
             }
 
             // Record in Actions Log Audit Trail
+            console.log(`[Shopify Webhook Debug] Logging action to Actions Log...`);
             logBusinessAction({
                 businessId: businessId,
                 userEmail: 'Shopify Webhook',
@@ -284,11 +324,12 @@ export async function POST(req: Request) {
             });
         }
 
-        console.log(`[Shopify Webhook] Successfully processed order ${orderName} (ID: ${orderId})`);
+        console.log(`[Shopify Webhook Debug] Successfully processed order ${orderName} (ID: ${orderId})`);
         return NextResponse.json({ success: true, order_id: orderId }, { status: 200 });
 
     } catch (error: any) {
-        console.error('[Shopify Webhook] Exception:', error);
+        console.error('[Shopify Webhook Debug] Exception caught in POST handler:', error);
         return NextResponse.json({ error: error.message || 'Internal Server Error' }, { status: 500 });
     }
+
 }
