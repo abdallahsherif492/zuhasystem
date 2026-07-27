@@ -54,27 +54,47 @@ export async function POST(req: Request) {
             return NextResponse.json({ message: 'Payload received successfully' }, { status: 200 });
         }
 
-        // Find business by shopify_store_domain in theme_config
-        const { data: businesses, error: bizError } = await supabase
-            .from('businesses')
-            .select('id, theme_config');
+        // Parse businessId from URL query parameter
+        const { searchParams } = new URL(req.url);
+        const queryBusinessId = searchParams.get('businessId') || searchParams.get('business');
 
-        if (bizError) {
-            console.error('[Shopify Webhook] Error fetching businesses:', bizError.message);
+        let businessId = '';
+        if (queryBusinessId) {
+            const { data: b } = await supabase
+                .from('businesses')
+                .select('id')
+                .eq('id', queryBusinessId)
+                .maybeSingle();
+            if (b) {
+                businessId = b.id;
+            }
         }
 
-        const matchedBiz = (businesses || []).find(b => {
-            const domain = b.theme_config?.integrations?.platforms?.shopify?.storeDomain || b.theme_config?.shopify_store_domain || '';
-            const normalizedDomain = domain.replace(/^https?:\/\//, '').replace(/\/$/, '').toLowerCase();
-            const normalizedShop = shopHeader.replace(/^https?:\/\//, '').replace(/\/$/, '').toLowerCase();
-            return normalizedDomain && (normalizedDomain.includes(normalizedShop) || normalizedShop.includes(normalizedDomain));
-        });
-
-        const businessId = matchedBiz ? matchedBiz.id : (businesses?.[0]?.id || '');
         if (!businessId) {
-            console.error('[Shopify Webhook] No business found for shop:', shopHeader);
+            // Fallback: Find business by shopify_store_domain in theme_config
+            const { data: businesses, error: bizError } = await supabase
+                .from('businesses')
+                .select('id, theme_config');
+
+            if (bizError) {
+                console.error('[Shopify Webhook] Error fetching businesses:', bizError.message);
+            }
+
+            const matchedBiz = (businesses || []).find(b => {
+                const domain = b.theme_config?.integrations?.platforms?.shopify?.storeDomain || b.theme_config?.shopify_store_domain || '';
+                const normalizedDomain = domain.replace(/^https?:\/\//, '').replace(/\/$/, '').toLowerCase();
+                const normalizedShop = shopHeader.replace(/^https?:\/\//, '').replace(/\/$/, '').toLowerCase();
+                return normalizedDomain && (normalizedDomain.includes(normalizedShop) || normalizedShop.includes(normalizedDomain));
+            });
+
+            businessId = matchedBiz ? matchedBiz.id : '';
+        }
+
+        if (!businessId) {
+            console.error('[Shopify Webhook] No business found for query ID:', queryBusinessId, 'or shop domain:', shopHeader);
             return NextResponse.json({ error: 'Business not found for Shopify store' }, { status: 404 });
         }
+
 
         const shopifyOrderId = String(body.id || '');
         const orderName = body.name || `#${body.order_number || body.id}`;

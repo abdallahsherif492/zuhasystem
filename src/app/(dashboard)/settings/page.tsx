@@ -770,19 +770,20 @@ export default function SettingsPage() {
                                             <div className="flex gap-2">
                                                 <Input 
                                                     readOnly 
-                                                    value={`${typeof window !== 'undefined' ? window.location.origin : ''}/api/webhooks/shopify`} 
+                                                    value={`${typeof window !== 'undefined' ? window.location.origin : ''}/api/webhooks/shopify?businessId=${activeBusiness?.id || ''}`} 
                                                     className="font-mono text-xs bg-muted"
                                                 />
                                                 <Button 
                                                     variant="outline"
                                                     onClick={() => {
-                                                        const url = `${window.location.origin}/api/webhooks/shopify`;
+                                                        const url = `${window.location.origin}/api/webhooks/shopify?businessId=${activeBusiness?.id || ''}`;
                                                         navigator.clipboard.writeText(url);
                                                         toast.success(t("URL copied to clipboard"));
                                                     }}
                                                 >
                                                     Copy
                                                 </Button>
+
                                             </div>
                                             <p className="text-xs text-muted-foreground">
                                                 {t("Paste this Webhook URL in your Shopify Admin -> Settings -> Notifications -> Webhooks (orders/create).")}
