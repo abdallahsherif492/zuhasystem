@@ -176,7 +176,7 @@ function DashboardContent() {
       while (vHasMore) {
         const { data: vData } = await supabase
           .from("variants")
-          .select("id, title, sku, stock_qty, products(name)")
+          .select("id, title, sku, stock_qty, cost_price, products(name)")
           .eq("business_id", activeBusiness.id)
           .range(vPage * 1000, (vPage + 1) * 1000 - 1);
         if (vData && vData.length > 0) {
