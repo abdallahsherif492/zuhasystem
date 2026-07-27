@@ -43,8 +43,8 @@ export default function SettingsPage() {
         shipping: {
             telegraph: { enabled: false, username: "", password: "", autoSync: false, autoSyncIntervalMinutes: 15, shippingCompanyId: "" },
             bosta: { enabled: false, apiKey: "", autoSync: false, autoSyncIntervalMinutes: 15, shippingCompanyId: "" },
-            jt: { enabled: false, apiKey: "", autoSync: false, autoSyncIntervalMinutes: 15, shippingCompanyId: "" },
-            aramex: { enabled: false, apiKey: "", apiSecret: "", accountId: "", autoSync: false, autoSyncIntervalMinutes: 15, shippingCompanyId: "" },
+            jt: { enabled: false, apiKey: "", eccompanyid: "", apiUrl: "https://api.jet.co.id/api/order/track", autoSync: false, autoSyncIntervalMinutes: 15, shippingCompanyId: "" },
+            aramex: { enabled: false, username: "", password: "", accountId: "", accountPin: "", accountEntity: "", accountCountryCode: "", apiUrl: "https://ws.aramex.net/ShippingAPI.V2/Tracking/Service_1_0.svc/json", autoSync: false, autoSyncIntervalMinutes: 15, shippingCompanyId: "" },
             filtareeq: { enabled: false, apiKey: "", autoSync: false, autoSyncIntervalMinutes: 15, shippingCompanyId: "" }
         },
         platforms: {
@@ -95,15 +95,21 @@ export default function SettingsPage() {
                     jt: {
                         enabled: savedIntegrations.shipping?.jt?.enabled || false,
                         apiKey: savedIntegrations.shipping?.jt?.apiKey || "",
+                        eccompanyid: savedIntegrations.shipping?.jt?.eccompanyid || "",
+                        apiUrl: savedIntegrations.shipping?.jt?.apiUrl || "https://api.jet.co.id/api/order/track",
                         autoSync: savedIntegrations.shipping?.jt?.autoSync || false,
                         autoSyncIntervalMinutes: savedIntegrations.shipping?.jt?.autoSyncIntervalMinutes || 15,
                         shippingCompanyId: savedIntegrations.shipping?.jt?.shippingCompanyId || ""
                     },
                     aramex: {
                         enabled: savedIntegrations.shipping?.aramex?.enabled || false,
-                        apiKey: savedIntegrations.shipping?.aramex?.apiKey || "",
-                        apiSecret: savedIntegrations.shipping?.aramex?.apiSecret || "",
+                        username: savedIntegrations.shipping?.aramex?.username || "",
+                        password: savedIntegrations.shipping?.aramex?.password || "",
                         accountId: savedIntegrations.shipping?.aramex?.accountId || "",
+                        accountPin: savedIntegrations.shipping?.aramex?.accountPin || "",
+                        accountEntity: savedIntegrations.shipping?.aramex?.accountEntity || "",
+                        accountCountryCode: savedIntegrations.shipping?.aramex?.accountCountryCode || "",
+                        apiUrl: savedIntegrations.shipping?.aramex?.apiUrl || "https://ws.aramex.net/ShippingAPI.V2/Tracking/Service_1_0.svc/json",
                         autoSync: savedIntegrations.shipping?.aramex?.autoSync || false,
                         autoSyncIntervalMinutes: savedIntegrations.shipping?.aramex?.autoSyncIntervalMinutes || 15,
                         shippingCompanyId: savedIntegrations.shipping?.aramex?.shippingCompanyId || ""
@@ -660,16 +666,33 @@ export default function SettingsPage() {
                                 
                                 {integrations.shipping.jt.enabled && (
                                     <div className="space-y-4 pt-4 border-t">
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            <div className="space-y-2">
+                                                <Label>{t("J&T API Key (Secret)")}</Label>
+                                                <Input 
+                                                    placeholder={t("Enter API Key")} 
+                                                    value={integrations.shipping.jt.apiKey}
+                                                    onChange={(e) => handleIntegrationChange('shipping', 'jt', 'apiKey', e.target.value)}
+                                                    type="password"
+                                                />
+                                            </div>
+                                            <div className="space-y-2">
+                                                <Label>{t("EC Company ID")}</Label>
+                                                <Input 
+                                                    placeholder={t("e.g. YOUR_COMPANY_ID")} 
+                                                    value={integrations.shipping.jt.eccompanyid}
+                                                    onChange={(e) => handleIntegrationChange('shipping', 'jt', 'eccompanyid', e.target.value)}
+                                                />
+                                            </div>
+                                        </div>
                                         <div className="space-y-2">
-                                            <Label>{t("J&T API Key")}</Label>
+                                            <Label>{t("J&T Tracking API URL")}</Label>
                                             <Input 
-                                                placeholder={t("Enter API Key")} 
-                                                value={integrations.shipping.jt.apiKey}
-                                                onChange={(e) => handleIntegrationChange('shipping', 'jt', 'apiKey', e.target.value)}
-                                                type="password"
+                                                placeholder={t("e.g. https://api.jet.co.id/api/order/track")} 
+                                                value={integrations.shipping.jt.apiUrl}
+                                                onChange={(e) => handleIntegrationChange('shipping', 'jt', 'apiUrl', e.target.value)}
                                             />
                                         </div>
-
                                         <div className="flex items-center space-x-2 pt-2">
                                             <Switch 
                                                 checked={integrations.shipping.jt.autoSync} 
@@ -732,29 +755,64 @@ export default function SettingsPage() {
                                 
                                 {integrations.shipping.aramex.enabled && (
                                     <div className="space-y-4 pt-4 border-t">
-                                        <div className="space-y-2">
-                                            <Label>{t("Aramex Account ID")}</Label>
-                                            <Input 
-                                                placeholder={t("Enter Account ID")} 
-                                                value={integrations.shipping.aramex.accountId || ""}
-                                                onChange={(e) => handleIntegrationChange('shipping', 'aramex', 'accountId', e.target.value)}
-                                            />
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            <div className="space-y-2">
+                                                <Label>{t("Aramex Account Number")}</Label>
+                                                <Input 
+                                                    placeholder={t("Enter Account Number")} 
+                                                    value={integrations.shipping.aramex.accountId || ""}
+                                                    onChange={(e) => handleIntegrationChange('shipping', 'aramex', 'accountId', e.target.value)}
+                                                />
+                                            </div>
+                                            <div className="space-y-2">
+                                                <Label>{t("Aramex Account PIN")}</Label>
+                                                <Input 
+                                                    placeholder={t("Enter Account PIN")} 
+                                                    value={integrations.shipping.aramex.accountPin || ""}
+                                                    onChange={(e) => handleIntegrationChange('shipping', 'aramex', 'accountPin', e.target.value)}
+                                                    type="password"
+                                                />
+                                            </div>
+                                            <div className="space-y-2">
+                                                <Label>{t("Aramex Account Entity")}</Label>
+                                                <Input 
+                                                    placeholder={t("e.g. LON, CAI, DXB")} 
+                                                    value={integrations.shipping.aramex.accountEntity || ""}
+                                                    onChange={(e) => handleIntegrationChange('shipping', 'aramex', 'accountEntity', e.target.value)}
+                                                />
+                                            </div>
+                                            <div className="space-y-2">
+                                                <Label>{t("Account Country Code")}</Label>
+                                                <Input 
+                                                    placeholder={t("e.g. EG, AE, GB")} 
+                                                    value={integrations.shipping.aramex.accountCountryCode || ""}
+                                                    onChange={(e) => handleIntegrationChange('shipping', 'aramex', 'accountCountryCode', e.target.value)}
+                                                />
+                                            </div>
+                                            <div className="space-y-2">
+                                                <Label>{t("API Username (Email)")}</Label>
+                                                <Input 
+                                                    placeholder={t("Enter Username")} 
+                                                    value={integrations.shipping.aramex.username || ""}
+                                                    onChange={(e) => handleIntegrationChange('shipping', 'aramex', 'username', e.target.value)}
+                                                />
+                                            </div>
+                                            <div className="space-y-2">
+                                                <Label>{t("API Password")}</Label>
+                                                <Input 
+                                                    placeholder={t("Enter Password")} 
+                                                    value={integrations.shipping.aramex.password || ""}
+                                                    onChange={(e) => handleIntegrationChange('shipping', 'aramex', 'password', e.target.value)}
+                                                    type="password"
+                                                />
+                                            </div>
                                         </div>
                                         <div className="space-y-2">
-                                            <Label>{t("Aramex API Key (Username)")}</Label>
+                                            <Label>{t("Aramex Tracking API URL")}</Label>
                                             <Input 
-                                                placeholder={t("Enter API Key")} 
-                                                value={integrations.shipping.aramex.apiKey}
-                                                onChange={(e) => handleIntegrationChange('shipping', 'aramex', 'apiKey', e.target.value)}
-                                            />
-                                        </div>
-                                        <div className="space-y-2">
-                                            <Label>{t("Aramex API Secret (Password/PIN)")}</Label>
-                                            <Input 
-                                                placeholder={t("Enter API Secret")} 
-                                                value={integrations.shipping.aramex.apiSecret || ""}
-                                                onChange={(e) => handleIntegrationChange('shipping', 'aramex', 'apiSecret', e.target.value)}
-                                                type="password"
+                                                placeholder={t("e.g. https://ws.aramex.net/ShippingAPI.V2/Tracking/Service_1_0.svc/json")} 
+                                                value={integrations.shipping.aramex.apiUrl || ""}
+                                                onChange={(e) => handleIntegrationChange('shipping', 'aramex', 'apiUrl', e.target.value)}
                                             />
                                         </div>
 
