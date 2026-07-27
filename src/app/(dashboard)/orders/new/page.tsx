@@ -81,9 +81,11 @@ const GOVERNORATES = [
 const CHANNELS = ["Facebook", "Instagram", "Tiktok", "Tiktok Website", "Website", "Whatsapp"];
 
 import { useBusiness } from "@/contexts/BusinessContext";
+import { logBusinessAction } from "@/lib/logs/actions-logger";
 
 export default function NewOrderPage() {
-    const { activeBusiness } = useBusiness();
+    const { activeBusiness, currentUser } = useBusiness();
+
     const router = useRouter();
     const [products, setProducts] = useState<ProductWithVariants[]>([]);
     const [loading, setLoading] = useState(true);
@@ -418,7 +420,23 @@ export default function NewOrderPage() {
 
             if (orderError) throw orderError;
 
+            logBusinessAction({
+                businessId: activeBusiness!.id,
+                userEmail: currentUser?.email || "Staff",
+                actionType: "create",
+                entityType: "order",
+                entityId: orderData.id,
+                entityName: `Order #${orderData.id.substring(0, 8)} (${customerName})`,
+                changes: [
+                    { field: "Total Amount", old_value: null, new_value: `${calculateTotal()} EGP` },
+                    { field: "Status", old_value: null, new_value: initialStatus },
+                    { field: "Channel", old_value: null, new_value: channel },
+                    { field: "Customer", old_value: null, new_value: `${customerName} (${customerPhone})` }
+                ]
+            });
+
             // 3. Create Order Items
+
             const itemsData = cart.map(item => ({
                 business_id: activeBusiness!.id,
                 order_id: orderData.id,

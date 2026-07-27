@@ -42,9 +42,11 @@ const formSchema = z.object({
 });
 
 import { useBusiness } from "@/contexts/BusinessContext";
+import { logBusinessAction } from "@/lib/logs/actions-logger";
 
 export default function NewProductPage() {
-    const { activeBusiness } = useBusiness();
+    const { activeBusiness, currentUser } = useBusiness();
+
     const router = useRouter();
     const [loading, setLoading] = useState(false);
 
@@ -88,6 +90,20 @@ export default function NewProductPage() {
                 .single();
 
             if (productError) throw productError;
+
+            logBusinessAction({
+                businessId: activeBusiness.id,
+                userEmail: currentUser?.email || "Staff",
+                actionType: "create",
+                entityType: "product",
+                entityId: productData.id,
+                entityName: productData.name,
+                changes: [
+                    { field: "Product Name", old_value: null, new_value: productData.name },
+                    { field: "Variants", old_value: null, new_value: `${values.variants.length} variants` }
+                ]
+            });
+
 
             // 2. Create Variants
             const variantsToInsert = values.variants.map((v) => ({

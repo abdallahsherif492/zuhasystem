@@ -51,10 +51,16 @@ const formSchema = z.object({
     variants: z.array(variantSchema).min(1, "At least one variant is required"),
 });
 
+import { useBusiness } from "@/contexts/BusinessContext";
+import { logBusinessAction, ActionDiff } from "@/lib/logs/actions-logger";
+
 export default function EditProductPage() {
+    const { activeBusiness, currentUser } = useBusiness();
     const router = useRouter();
     const params = useParams(); // Unwrap params
     const id = params?.id as string;
+    const [productName, setProductName] = useState("");
+
 
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
@@ -96,6 +102,7 @@ export default function EditProductPage() {
                 return;
             }
 
+            setProductName(product.name);
             form.reset({
                 name: product.name,
                 description: product.description || "",
@@ -113,7 +120,6 @@ export default function EditProductPage() {
             setInitialVariantIds(product.variants.map((v: any) => v.id));
         } catch (error) {
             console.error("Error fetching product:", error);
-            // alert("Error loading product"); // Silent fail or redirect often better UX for now
         } finally {
             setLoading(false);
         }
@@ -129,6 +135,21 @@ export default function EditProductPage() {
                 }
                 throw error;
             }
+
+            if (activeBusiness) {
+                logBusinessAction({
+                    businessId: activeBusiness.id,
+                    userEmail: currentUser?.email || "Staff",
+                    actionType: "delete",
+                    entityType: "product",
+                    entityId: id,
+                    entityName: productName || "Product",
+                    changes: [
+                        { field: "Product", old_value: productName || "Product", new_value: "Deleted" }
+                    ]
+                });
+            }
+
             toast.success("Product deleted successfully");
             router.push("/products");
             router.refresh();
@@ -139,6 +160,7 @@ export default function EditProductPage() {
             setDeleting(false);
         }
     }
+
 
     async function onSubmit(values: z.infer<typeof formSchema>) {
         try {
@@ -206,9 +228,24 @@ export default function EditProductPage() {
                 if (insertError) throw insertError;
             }
 
+            if (activeBusiness) {
+                logBusinessAction({
+                    businessId: activeBusiness.id,
+                    userEmail: currentUser?.email || "Staff",
+                    actionType: "edit",
+                    entityType: "product",
+                    entityId: id,
+                    entityName: values.name,
+                    changes: [
+                        { field: "Product Details", old_value: productName || "Previous Details", new_value: `${values.name} (${values.variants.length} variants)` }
+                    ]
+                });
+            }
+
             router.push("/products");
             router.refresh();
             toast.success("Product updated successfully");
+
         } catch (error: any) {
             console.error("Error updating product:", JSON.stringify(error, null, 2));
             toast.error(error.message || "Unknown error occurred while saving.");

@@ -65,9 +65,11 @@ const GOVERNORATES = [
 const CHANNELS = ["Facebook", "Instagram", "Tiktok", "Tiktok Website", "Website", "Whatsapp"];
 
 import { useBusiness } from "@/contexts/BusinessContext";
+import { logBusinessAction, ActionDiff } from "@/lib/logs/actions-logger";
 
 export default function OrderDetailsPage() {
-    const { activeBusiness } = useBusiness();
+    const { activeBusiness, currentUser } = useBusiness();
+
     const params = useParams();
     const router = useRouter();
     const orderId = params.id as string;
@@ -447,6 +449,34 @@ export default function OrderDetailsPage() {
             });
 
             if (rpcError) throw rpcError;
+
+            const auditChanges: ActionDiff[] = [];
+            if (order?.status !== editForm.status) {
+                auditChanges.push({ field: "Status", old_value: order?.status, new_value: editForm.status });
+            }
+            if (order?.total_amount !== newTotal) {
+                auditChanges.push({ field: "Total Amount", old_value: `${order?.total_amount} EGP`, new_value: `${newTotal} EGP` });
+            }
+            if (order?.customer_info?.phone !== editForm.customerPhone) {
+                auditChanges.push({ field: "Customer Phone", old_value: order?.customer_info?.phone, new_value: editForm.customerPhone });
+            }
+            if (order?.shipping_cost !== editForm.shippingCost) {
+                auditChanges.push({ field: "Shipping Cost", old_value: `${order?.shipping_cost} EGP`, new_value: `${editForm.shippingCost} EGP` });
+            }
+            if (auditChanges.length === 0) {
+                auditChanges.push({ field: "Order Details", old_value: "Previous Info", new_value: "Updated Order Info" });
+            }
+
+            logBusinessAction({
+                businessId: activeBusiness!.id,
+                userEmail: currentUser?.email || "Staff",
+                actionType: order?.status !== editForm.status ? "update_status" : "edit",
+                entityType: "order",
+                entityId: orderId,
+                entityName: `Order #${orderId.substring(0, 8)} (${editForm.customerName})`,
+                changes: auditChanges
+            });
+
 
             // 7. Status change logic is now handled in the state machine blocks above.
             // However, the "Returned" status implies the items *came back* to the warehouse physically.
