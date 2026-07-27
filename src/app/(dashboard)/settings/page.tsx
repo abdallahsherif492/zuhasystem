@@ -18,6 +18,7 @@ import { Loader2, Upload, Trash2, CheckCircle2, BookOpen } from "lucide-react";
 import Image from "next/image";
 import { IntegrationLogs } from "@/components/settings/integration-logs";
 import { SubscriptionSettings } from "@/components/settings/subscription-settings";
+import { IntegrationInstructions } from "@/components/settings/integration-instructions";
 
 export default function SettingsPage() {
     const { activeBusiness, userRole } = useBusiness();
@@ -488,15 +489,19 @@ export default function SettingsPage() {
                             <div className="space-y-4 border rounded-md p-4 bg-muted/20">
                                 <div className="flex items-center justify-between">
                                     <h3 className="text-lg font-medium flex items-center gap-3">
-                                        <img src="/telegraph.png" alt="Telegraph" className="h-8 w-auto object-contain" />
+                                        <div className="h-8 w-8 bg-indigo-600 text-white flex items-center justify-center font-bold rounded">T</div>
+                                        <span className="ml-2">Telegraph</span>
                                         {integrations.shipping.telegraph.enabled && (
                                             <Badge variant="outline" className="ml-3 bg-green-50 text-green-700 border-green-200">Active</Badge>
                                         )}
                                     </h3>
-                                    <Switch 
-                                        checked={integrations.shipping.telegraph.enabled} 
-                                        onCheckedChange={(c) => handleIntegrationChange('shipping', 'telegraph', 'enabled', c)}
-                                    />
+                                    <div className="flex items-center gap-2">
+                                        <IntegrationInstructions provider="telegraph" />
+                                        <Switch 
+                                            checked={integrations.shipping.telegraph.enabled} 
+                                            onCheckedChange={(c) => handleIntegrationChange('shipping', 'telegraph', 'enabled', c)}
+                                        />
+                                    </div>
                                 </div>
                                 <p className="text-sm text-muted-foreground">
                                     {t("Connect to Telegraph shipping to sync statuses and tracking.")}
@@ -577,10 +582,13 @@ export default function SettingsPage() {
                                             <Badge variant="outline" className="ml-3 bg-green-50 text-green-700 border-green-200">Active</Badge>
                                         )}
                                     </h3>
-                                    <Switch 
-                                        checked={integrations.shipping.bosta.enabled} 
-                                        onCheckedChange={(c) => handleIntegrationChange('shipping', 'bosta', 'enabled', c)}
-                                    />
+                                    <div className="flex items-center gap-2">
+                                        <IntegrationInstructions provider="bosta" />
+                                        <Switch 
+                                            checked={integrations.shipping.bosta.enabled} 
+                                            onCheckedChange={(c) => handleIntegrationChange('shipping', 'bosta', 'enabled', c)}
+                                        />
+                                    </div>
                                 </div>
                                 <p className="text-sm text-muted-foreground">
                                     {t("Connect to Bosta shipping to sync statuses and tracking.")}
@@ -650,15 +658,18 @@ export default function SettingsPage() {
                                 <div className="flex items-center justify-between">
                                     <h3 className="text-lg font-medium flex items-center gap-3">
                                         <div className="h-8 w-8 bg-red-600 text-white flex items-center justify-center font-bold rounded">J&T</div>
-                                        <span className="ml-2">J&T Egypt</span>
+                                        <span className="ml-2">J&T Express</span>
                                         {integrations.shipping.jt.enabled && (
                                             <Badge variant="outline" className="ml-3 bg-green-50 text-green-700 border-green-200">Active</Badge>
                                         )}
                                     </h3>
-                                    <Switch 
-                                        checked={integrations.shipping.jt.enabled} 
-                                        onCheckedChange={(c) => handleIntegrationChange('shipping', 'jt', 'enabled', c)}
-                                    />
+                                    <div className="flex items-center gap-2">
+                                        <IntegrationInstructions provider="jt" />
+                                        <Switch 
+                                            checked={integrations.shipping.jt.enabled} 
+                                            onCheckedChange={(c) => handleIntegrationChange('shipping', 'jt', 'enabled', c)}
+                                        />
+                                    </div>
                                 </div>
                                 <p className="text-sm text-muted-foreground">
                                     {t("Connect to J&T Egypt shipping to sync statuses and tracking.")}
@@ -744,10 +755,13 @@ export default function SettingsPage() {
                                             <Badge variant="outline" className="ml-3 bg-green-50 text-green-700 border-green-200">Active</Badge>
                                         )}
                                     </h3>
-                                    <Switch 
-                                        checked={integrations.shipping.aramex.enabled} 
-                                        onCheckedChange={(c) => handleIntegrationChange('shipping', 'aramex', 'enabled', c)}
-                                    />
+                                    <div className="flex items-center gap-2">
+                                        <IntegrationInstructions provider="aramex" />
+                                        <Switch 
+                                            checked={integrations.shipping.aramex.enabled} 
+                                            onCheckedChange={(c) => handleIntegrationChange('shipping', 'aramex', 'enabled', c)}
+                                        />
+                                    </div>
                                 </div>
                                 <p className="text-sm text-muted-foreground">
                                     {t("Connect to Aramex shipping to sync statuses and tracking.")}
@@ -861,16 +875,19 @@ export default function SettingsPage() {
                             <div className="space-y-4 border rounded-md p-4 bg-muted/20">
                                 <div className="flex items-center justify-between">
                                     <h3 className="text-lg font-medium flex items-center gap-3">
-                                        <div className="h-8 w-8 bg-blue-600 text-white flex items-center justify-center font-bold rounded">FT</div>
-                                        <span className="ml-2">Filtareeq</span>
+                                        <div className="h-8 w-8 bg-purple-600 text-white flex items-center justify-center font-bold rounded">FT</div>
+                                        <span className="ml-2">Fil-Tareeq</span>
                                         {integrations.shipping.filtareeq.enabled && (
                                             <Badge variant="outline" className="ml-3 bg-green-50 text-green-700 border-green-200">Active</Badge>
                                         )}
                                     </h3>
-                                    <Switch 
-                                        checked={integrations.shipping.filtareeq.enabled} 
-                                        onCheckedChange={(c) => handleIntegrationChange('shipping', 'filtareeq', 'enabled', c)}
-                                    />
+                                    <div className="flex items-center gap-2">
+                                        <IntegrationInstructions provider="filtareeq" />
+                                        <Switch 
+                                            checked={integrations.shipping.filtareeq.enabled} 
+                                            onCheckedChange={(c) => handleIntegrationChange('shipping', 'filtareeq', 'enabled', c)}
+                                        />
+                                    </div>
                                 </div>
                                 <p className="text-sm text-muted-foreground">
                                     {t("Connect to Filtareeq shipping to sync statuses and tracking.")}
