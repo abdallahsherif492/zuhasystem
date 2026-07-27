@@ -388,5 +388,9 @@
   "Entity": "Entity",
   "Details & Changes": "Details & Changes",
   "Timestamp": "Timestamp",
-  "No actions logged yet.": "No actions logged yet."
+  "No actions logged yet.": "No actions logged yet.",
+  "Change variant...": "Change variant...",
+  "Select matching product...": "Select matching product...",
+  "Search system products...": "Search system products...",
+  "No variant found.": "No variant found."
 }

@@ -407,6 +407,12 @@ function PlatformOrdersContent() {
         const variant = variants.find(v => v.id === variantId);
         if (!variant) return;
 
+        const targetOrder = orders.find(o => o.id === orderId);
+        const targetItem = targetOrder?.order_items?.find(i => i.id === itemId);
+        const oldVariantTitle = targetItem?.variants?.products?.name 
+            ? `${targetItem.variants.products.name} (${targetItem.variants.title})`
+            : targetItem?.unmapped_name || "Unmapped Item";
+
         setOrders(prev => prev.map(o => {
             if (o.id === orderId) {
                 const newItems = o.order_items.map(item => {
@@ -443,11 +449,31 @@ function PlatformOrdersContent() {
 
         try {
             await handleUpdateItem(itemId, { variant_id: variantId });
+
+            if (activeBusiness && targetOrder) {
+                logBusinessAction({
+                    businessId: activeBusiness.id,
+                    userEmail: currentUser?.email || "Staff",
+                    actionType: "edit",
+                    entityType: "order",
+                    entityId: orderId,
+                    entityName: `Platform Order #${targetOrder.easyorders_id || orderId.slice(0, 8)}`,
+                    changes: [
+                        { 
+                            field: "Item Variant", 
+                            old_value: oldVariantTitle, 
+                            new_value: `${variant.products?.name} (${variant.title})` 
+                        }
+                    ]
+                });
+            }
+
             toast.success(t("Product mapped successfully"));
         } catch(e) {
             toast.error(t("Failed to map product"));
         }
     };
+
 
     const deleteItemFromOrder = async (orderId: string, itemId: string) => {
         setOrders(prev => prev.map(o => {
@@ -861,42 +887,43 @@ function PlatformOrdersContent() {
                                                             </Button>
                                                         </div>
 
-                                                        {/* Mapping Selector if Unmapped or Override requested */}
-                                                        {isUnmapped && (
-                                                            <div className="pt-1">
-                                                                <Popover>
-                                                                    <PopoverTrigger asChild>
-                                                                        <Button variant="outline" size="sm" className="w-full justify-between text-xs h-8">
-                                                                            <span>Select matching product...</span>
-                                                                            <ChevronsUpDown className="h-3 w-3 opacity-50" />
-                                                                        </Button>
-                                                                    </PopoverTrigger>
-                                                                    <PopoverContent className="w-[300px] p-0" align="start">
-                                                                        <Command>
-                                                                            <CommandInput placeholder="Search system products..." />
-                                                                            <CommandEmpty>No variant found.</CommandEmpty>
-                                                                            <CommandGroup>
-                                                                                <CommandList className="max-h-60 overflow-y-auto">
-                                                                                {variants.map(v => (
-                                                                                    <CommandItem
-                                                                                        key={v.id}
-                                                                                        value={`${v.products?.name} ${v.title} ${v.sku}`}
-                                                                                        onSelect={() => mapVariantToItem(order.id, item.id, v.id)}
-                                                                                    >
-                                                                                        <Check className={cn("mr-2 h-4 w-4", item.variant_id === v.id ? "opacity-100" : "opacity-0")} />
-                                                                                        <div className="flex flex-col text-xs">
-                                                                                            <span className="font-medium">{v.products?.name} - {v.title}</span>
-                                                                                            <span className="text-muted-foreground font-mono">SKU: {v.sku} ({formatCurrency(v.sale_price)})</span>
-                                                                                        </div>
-                                                                                    </CommandItem>
-                                                                                ))}
-                                                                                </CommandList>
-                                                                            </CommandGroup>
-                                                                        </Command>
-                                                                    </PopoverContent>
-                                                                </Popover>
-                                                            </div>
-                                                        )}
+                                                        {/* Mapping / Variant Selector for both Unmapped and Mapped Items */}
+                                                        <div className="pt-1">
+                                                            <Popover>
+                                                                <PopoverTrigger asChild>
+                                                                    <Button variant={isUnmapped ? "outline" : "ghost"} size="sm" className="w-full justify-between text-xs h-8 border border-input bg-background/50 hover:bg-accent">
+                                                                        <span className="truncate font-normal">
+                                                                            {isUnmapped ? t("Select matching product...") : t("Change variant...")}
+                                                                        </span>
+                                                                        <ChevronsUpDown className="h-3 w-3 opacity-50 shrink-0 ml-1" />
+                                                                    </Button>
+                                                                </PopoverTrigger>
+                                                                <PopoverContent className="w-[320px] p-0" align="start">
+                                                                    <Command>
+                                                                        <CommandInput placeholder={t("Search system products...")} />
+                                                                        <CommandEmpty>{t("No variant found.")}</CommandEmpty>
+                                                                        <CommandGroup>
+                                                                            <CommandList className="max-h-60 overflow-y-auto">
+                                                                            {variants.map(v => (
+                                                                                <CommandItem
+                                                                                    key={v.id}
+                                                                                    value={`${v.products?.name} ${v.title} ${v.sku}`}
+                                                                                    onSelect={() => mapVariantToItem(order.id, item.id, v.id)}
+                                                                                >
+                                                                                    <Check className={cn("mr-2 h-4 w-4 shrink-0", item.variant_id === v.id ? "opacity-100" : "opacity-0")} />
+                                                                                    <div className="flex flex-col text-xs">
+                                                                                        <span className="font-medium">{v.products?.name} - {v.title}</span>
+                                                                                        <span className="text-muted-foreground font-mono">SKU: {v.sku} ({formatCurrency(v.sale_price)})</span>
+                                                                                    </div>
+                                                                                </CommandItem>
+                                                                            ))}
+                                                                            </CommandList>
+                                                                        </CommandGroup>
+                                                                    </Command>
+                                                                </PopoverContent>
+                                                            </Popover>
+                                                        </div>
+
 
                                                         <div className="flex items-center gap-3 pt-1 border-t text-xs">
                                                             <div className="flex items-center gap-1">

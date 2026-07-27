@@ -388,5 +388,9 @@
   "Entity": "العنصر",
   "Details & Changes": "التعديلات والتفاصيل",
   "Timestamp": "الوقت والتاريخ",
-  "No actions logged yet.": "لا توجد أنشطة مسجلة حتى الآن."
+  "No actions logged yet.": "لا توجد أنشطة مسجلة حتى الآن.",
+  "Change variant...": "تغيير المتغير (Variant)...",
+  "Select matching product...": "اختر منتج مطابق...",
+  "Search system products...": "ابحث في منتجات السيستم...",
+  "No variant found.": "لم يتم العثور على متغير مطابق."
 }
