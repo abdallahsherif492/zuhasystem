@@ -81,8 +81,12 @@ const GOVERNORATES = [
     "Kafr Al Sheikh", "Matrouh", "Luxor", "Qena", "North Sinai", "Sohag"
 ];
 
+import { logBusinessAction } from "@/lib/logs/actions-logger";
+
+
 function PlatformOrdersContent() {
-    const { activeBusiness } = useBusiness();
+    const { activeBusiness, currentUser } = useBusiness();
+
     const { t } = useLanguage();
     
     const [orders, setOrders] = useState<Order[]>([]);
@@ -216,6 +220,21 @@ function PlatformOrdersContent() {
 
             await handleUpdateOrder(order.id, { status: 'Pending' });
 
+            if (activeBusiness) {
+                logBusinessAction({
+                    businessId: activeBusiness.id,
+                    userEmail: currentUser?.email || "Staff",
+                    actionType: "update_status",
+                    entityType: "order",
+                    entityId: order.id,
+                    entityName: `Platform Order #${order.easyorders_id || order.id.slice(0,8)} (${(order.customer_info as any)?.name || "Customer"})`,
+                    changes: [
+                        { field: "Status", old_value: order.status, new_value: "Pending" },
+                        { field: "Deposit Payment", old_value: null, new_value: `${order.paid_amount || 0} EGP (${accountName})` }
+                    ]
+                });
+            }
+
             toast.success(t("Order moved to Pending successfully"));
             setDepositModalOpen(false);
             setDepositOrder(null);
@@ -245,6 +264,21 @@ function PlatformOrdersContent() {
             setSaving(order.id);
             try {
                 await handleUpdateOrder(order.id, { status: 'Pending' });
+
+                if (activeBusiness) {
+                    logBusinessAction({
+                        businessId: activeBusiness.id,
+                        userEmail: currentUser?.email || "Staff",
+                        actionType: "update_status",
+                        entityType: "order",
+                        entityId: order.id,
+                        entityName: `Platform Order #${order.easyorders_id || order.id.slice(0,8)} (${(order.customer_info as any)?.name || "Customer"})`,
+                        changes: [
+                            { field: "Status", old_value: order.status, new_value: "Pending" }
+                        ]
+                    });
+                }
+
                 toast.success(t("Order moved to Pending successfully"));
                 setOrders(prev => prev.filter(o => o.id !== order.id));
             } catch (error) {
@@ -256,14 +290,30 @@ function PlatformOrdersContent() {
         }
     };
 
-
     const handleCancelOrder = async (orderId: string) => {
         setSaving(orderId);
         try {
+            const targetOrder = orders.find(o => o.id === orderId);
             await handleUpdateOrder(orderId, { status: 'Cancelled' });
+
+            if (activeBusiness && targetOrder) {
+                logBusinessAction({
+                    businessId: activeBusiness.id,
+                    userEmail: currentUser?.email || "Staff",
+                    actionType: "update_status",
+                    entityType: "order",
+                    entityId: orderId,
+                    entityName: `Platform Order #${targetOrder.easyorders_id || orderId.slice(0,8)}`,
+                    changes: [
+                        { field: "Status", old_value: targetOrder.status, new_value: "Cancelled" }
+                    ]
+                });
+            }
+
             toast.success(t("Order cancelled"));
             setOrders(orders.filter(o => o.id !== orderId));
         } catch (error) {
+
             console.error("Error cancelling order:", error);
             toast.error(t("Failed to cancel order"));
         } finally {
