@@ -45,6 +45,7 @@ interface Order {
     total_amount: number;
     total_cost: number;
     profit: number;
+    order_type?: string;
     customer_info: any;
     channel?: string;
     shipping_cost?: number;
@@ -335,7 +336,8 @@ function OrdersContent() {
                 "الــكــمــيــة": 1,
                 "قــيــمــة الــشــحــنــة": collectAmount,
                 "شــحــن عــلــى": "المستلم",
-                "شـــحــنــة اســتــبدال": "لا",
+                "شـــحــنــة اســتــبدال": order.order_type === "replacement" ? "نعم" : order.order_type === "return" ? "استرجاع" : "لا",
+                "نوع الأوردر": order.order_type === "replacement" ? "استبدال" : order.order_type === "return" ? "استرجاع" : "عادي",
                 "مسموح بفتح الشحنة": "نعم",
                 "حالة الدفع": paymentStatus,
                 "المبلغ المدفوع": paidAmount
@@ -639,7 +641,13 @@ function OrdersContent() {
                                             onCheckedChange={(checked) => handleSelectRow(order.id, checked as boolean)}
                                         />
                                     </TableCell>
-                                    <TableCell className="font-mono text-xs">{order.id.slice(0, 8)}</TableCell>
+                                    <TableCell className="font-mono text-xs">
+                                        <div className="flex flex-col gap-1">
+                                            <span>{order.id.slice(0, 8)}</span>
+                                            {order.order_type === 'replacement' && <Badge variant="secondary" className="w-fit text-[10px] bg-green-100 text-green-800 hover:bg-green-100">استبدال</Badge>}
+                                            {order.order_type === 'return' && <Badge variant="destructive" className="w-fit text-[10px]">استرجاع</Badge>}
+                                        </div>
+                                    </TableCell>
                                     <TableCell>
                                         {new Date(order.created_at).toLocaleDateString()}
                                     </TableCell>

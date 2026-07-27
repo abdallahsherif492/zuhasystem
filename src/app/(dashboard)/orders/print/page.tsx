@@ -37,6 +37,7 @@ type InvoiceData = {
     }>;
     payment_status?: string;
     paid_amount?: number;
+    order_type?: string;
 };
 
 // Helper to chunk array
@@ -80,6 +81,16 @@ function InvoiceCard({ order, isFirstOnPage, business }: { order: InvoiceData, i
                 </div>
                 <div className="text-right">
                     <h2 className="text-lg font-bold uppercase leading-none">Waybill</h2>
+                    {order.order_type === 'replacement' && (
+                        <div className="border-4 border-black inline-block px-2 py-1 my-1 -rotate-6">
+                            <span className="font-black text-xl">استبدال</span>
+                        </div>
+                    )}
+                    {order.order_type === 'return' && (
+                        <div className="border-4 border-black inline-block px-2 py-1 my-1 -rotate-6">
+                            <span className="font-black text-xl">استرجاع</span>
+                        </div>
+                    )}
                     <div className="flex justify-end">
                         <Barcode value={order.id.slice(0, 8)} width={1} height={20} fontSize={9} displayValue={false} />
                     </div>
@@ -182,7 +193,8 @@ function PrintContent() {
                             product:products (name)
                         )
                     ),
-                    customer_info
+                    customer_info,
+                    order_type
                 `)
                 .in("id", ids);
 

@@ -109,6 +109,8 @@ export default function NewOrderPage() {
     const [transactionLoading, setTransactionLoading] = useState(false);
 
     // Order Details State
+    const [orderType, setOrderType] = useState<"new" | "replacement" | "return">("new");
+    const [shippingPayer, setShippingPayer] = useState<"customer" | "store">("customer");
     const [channel, setChannel] = useState("Facebook");
     const [shippingCost, setShippingCost] = useState(0);
     const [discount, setDiscount] = useState(0);
@@ -123,6 +125,7 @@ export default function NewOrderPage() {
     const [selectedVariant, setSelectedVariant] = useState<string>("");
     const [quantity, setQuantity] = useState<number>(1);
     const [customPrice, setCustomPrice] = useState<number>(0);
+    const [itemDirection, setItemDirection] = useState<"send" | "receive">("send");
 
     const activeProduct = products.find((p) => p.id === selectedProduct);
     const activeVariant = activeProduct?.variants.find(
@@ -238,20 +241,27 @@ export default function NewOrderPage() {
     const addItemToCart = () => {
         if (!activeProduct || !activeVariant) return;
 
-        if (activeVariant.track_inventory && activeVariant.stock_qty < quantity) {
+        let finalQuantity = quantity;
+        if (orderType === "return" || (orderType === "replacement" && itemDirection === "receive")) {
+            finalQuantity = -Math.abs(quantity);
+        } else {
+            finalQuantity = Math.abs(quantity);
+        }
+
+        if (activeVariant.track_inventory && activeVariant.stock_qty < finalQuantity && finalQuantity > 0) {
             alert(`Insufficient stock. Available: ${activeVariant.stock_qty}`);
             return;
         }
 
         const existingItemIndex = cart.findIndex(
-            (item) => item.variantId === activeVariant.id
+            (item) => item.variantId === activeVariant.id && Math.sign(item.quantity) === Math.sign(finalQuantity)
         );
 
         if (existingItemIndex >= 0) {
             const newCart = [...cart];
-            const newQuantity = newCart[existingItemIndex].quantity + quantity;
+            const newQuantity = newCart[existingItemIndex].quantity + finalQuantity;
 
-            if (activeVariant.track_inventory && activeVariant.stock_qty < newQuantity) {
+            if (activeVariant.track_inventory && activeVariant.stock_qty < newQuantity && newQuantity > 0) {
                 alert(`Insufficient stock. Available: ${activeVariant.stock_qty}`);
                 return;
             }
@@ -266,7 +276,7 @@ export default function NewOrderPage() {
                     variantTitle: activeVariant.title,
                     sale_price: customPrice,
                     cost_price: activeVariant.cost_price,
-                    quantity: quantity,
+                    quantity: finalQuantity,
                     maxStock: activeVariant.stock_qty,
                     trackInventory: activeVariant.track_inventory,
                 },
@@ -291,7 +301,14 @@ export default function NewOrderPage() {
     };
 
     const calculateTotal = () => {
-        return Math.max(0, calculateSubtotal() + shippingCost - discount);
+        let sub = calculateSubtotal() - discount;
+        if (shippingPayer === "customer") {
+            sub += shippingCost;
+        }
+        if (orderType === "new") {
+            return Math.max(0, sub);
+        }
+        return sub; // Return and Replacement can be negative
     };
 
     // ... existing imports
@@ -391,8 +408,12 @@ export default function NewOrderPage() {
 
             // 2. Create Order
             const subtotal = calculateSubtotal();
-            const totalCost = calculateTotalCost();
-            const profit = calculateTotal() - totalCost - actual_shipping_cost;
+            
+            // If store pays shipping, add to DB cost
+            const totalCost = calculateTotalCost() + (shippingPayer === "store" ? actual_shipping_cost : 0);
+            
+            // Calculate profit (Total amount charged to customer - total cost)
+            const profit = calculateTotal() - totalCost;
 
 
             const { data: orderData, error: orderError } = await supabase
@@ -405,6 +426,7 @@ export default function NewOrderPage() {
                     total_cost: totalCost,
                     subtotal: subtotal,
                     discount: discount,
+                    order_type: orderType,
                     shipping_cost: shippingCost,
                     actual_shipping_cost: actual_shipping_cost,
                     status: initialStatus,
@@ -475,6 +497,47 @@ export default function NewOrderPage() {
     return (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div className="lg:col-span-2 space-y-6">
+
+                {/* Order Type Selection */}
+                <Card>
+                    <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                            <ShoppingCart className="h-5 w-5" />
+                            Order Type
+                        </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                                <Label>Type</Label>
+                                <Select value={orderType} onValueChange={(val: any) => setOrderType(val)}>
+                                    <SelectTrigger>
+                                        <SelectValue placeholder="Select Type" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="new">New Order</SelectItem>
+                                        <SelectItem value="replacement">Replacement (استبدال)</SelectItem>
+                                        <SelectItem value="return">Return (استرجاع)</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                            {orderType !== "new" && (
+                                <div className="space-y-2">
+                                    <Label>Shipping Paid By</Label>
+                                    <Select value={shippingPayer} onValueChange={(val: any) => setShippingPayer(val)}>
+                                        <SelectTrigger>
+                                            <SelectValue placeholder="Select Payer" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="customer">Customer</SelectItem>
+                                            <SelectItem value="store">Store</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                            )}
+                        </div>
+                    </CardContent>
+                </Card>
 
                 {/* Customer Details */}
                 <Card>
@@ -676,6 +739,20 @@ export default function NewOrderPage() {
                             </div>
                         </div>
                         <div className="flex items-end gap-4">
+                            {orderType === "replacement" && (
+                                <div className="space-y-2">
+                                    <Label className="text-xs">Direction</Label>
+                                    <Select value={itemDirection} onValueChange={(val: any) => setItemDirection(val)}>
+                                        <SelectTrigger className="w-[140px]">
+                                            <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="send">Sending (New)</SelectItem>
+                                            <SelectItem value="receive">Receiving (Return)</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                            )}
                             <div className="w-32">
                                 <Label className="text-xs">Qty</Label>
                                 <Input
@@ -730,10 +807,20 @@ export default function NewOrderPage() {
                                             <TableCell>
                                                 <div className="font-medium">{item.productName}</div>
                                                 <div className="text-xs text-muted-foreground">{item.variantTitle}</div>
+                                                {item.quantity < 0 && (
+                                                    <Badge variant="destructive" className="mt-1 text-[10px]">Returned Product</Badge>
+                                                )}
+                                                {item.quantity > 0 && orderType === "replacement" && (
+                                                    <Badge variant="secondary" className="mt-1 text-[10px] bg-green-100 text-green-800 hover:bg-green-100">Replacement</Badge>
+                                                )}
                                             </TableCell>
                                             <TableCell>{formatCurrency(item.sale_price)}</TableCell>
-                                            <TableCell>{item.quantity}</TableCell>
-                                            <TableCell>{formatCurrency(item.sale_price * item.quantity)}</TableCell>
+                                            <TableCell className={item.quantity < 0 ? "text-red-500 font-bold" : ""}>
+                                                {item.quantity}
+                                            </TableCell>
+                                            <TableCell className={item.quantity < 0 ? "text-red-500 font-bold" : ""}>
+                                                {formatCurrency(item.sale_price * item.quantity)}
+                                            </TableCell>
                                             <TableCell>
                                                 <Button variant="ghost" size="sm" onClick={() => removeFromCart(index)}>
                                                     <Trash2 className="h-4 w-4 text-destructive" />
@@ -882,8 +969,8 @@ export default function NewOrderPage() {
                             <span>{formatCurrency(calculateSubtotal())}</span>
                         </div>
                         <div className="flex justify-between text-muted-foreground">
-                            <span>Shipping</span>
-                            <span>{formatCurrency(shippingCost)}</span>
+                            <span>Shipping {shippingPayer === "store" ? "(Paid by Store)" : ""}</span>
+                            <span>{shippingPayer === "store" ? 0 : formatCurrency(shippingCost)}</span>
                         </div>
                         <div className="flex justify-between text-green-600">
                             <span>Discount</span>
