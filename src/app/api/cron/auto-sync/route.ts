@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import { previewShippingSyncAction, previewBostaShippingSyncAction, applyShippingUpdatesAction } from '@/app/(dashboard)/orders/sync-actions';
+import { previewShippingSyncAction, previewBostaShippingSyncAction, applyShippingUpdatesAction, previewGenericShippingSyncAction } from '@/app/(dashboard)/orders/sync-actions';
 import { processOrderForVrobo } from '@/lib/vrobo/api';
 import { logIntegrationActivity } from '@/lib/logs/integration-logger';
 
@@ -86,6 +86,42 @@ export async function GET(request: Request) {
                     configChanged = true;
                 }
             }
+
+            const runGenericSync = async (providerKey: "jt" | "aramex" | "filtareeq", providerName: string) => {
+                const config = integrations.shipping?.[providerKey];
+                if (config?.enabled && config?.autoSync) {
+                    const lastSyncStr = config.lastSyncAt;
+                    const lastSync = lastSyncStr ? new Date(lastSyncStr) : new Date(0);
+                    const intervalMinutes = config.autoSyncIntervalMinutes || 15;
+                    
+                    const minutesSinceLastSync = (now.getTime() - lastSync.getTime()) / (1000 * 60);
+
+                    if (minutesSinceLastSync >= intervalMinutes) {
+                        console.log(`[Auto-Sync] Running ${providerName} sync for business: ${business.id}`);
+                        try {
+                            const { updates, error: syncError } = await previewGenericShippingSyncAction(business.id, providerKey);
+                            if (!syncError && updates && updates.length > 0) {
+                                await applyShippingUpdatesAction(updates, business.id, config.shippingCompanyId);
+                                logIntegrationActivity(business.id, "Auto-Sync", "info", `Auto-Synced ${providerName}: Found ${updates.length} updates.`, { results: updates });
+                            }
+                        } catch (e: any) {
+                            console.error(`[Auto-Sync] Error in ${providerName} sync for ${business.id}:`, e);
+                            logIntegrationActivity(business.id, "Auto-Sync", "error", `${providerName} Auto-Sync Error: ${e.message}`);
+                        }
+
+                        // Update lastSyncAt
+                        if (!integrations.shipping) integrations.shipping = {};
+                        if (!integrations.shipping[providerKey]) integrations.shipping[providerKey] = {};
+                        integrations.shipping[providerKey].lastSyncAt = now.toISOString();
+                        configChanged = true;
+                    }
+                }
+            };
+
+            await runGenericSync("jt", "J&T");
+            await runGenericSync("aramex", "Aramex");
+            await runGenericSync("filtareeq", "Filtareeq");
+
 
             // 3. VROBO Auto-Sync (retry logic for problematic orders)
             const vroboConfig = integrations.tools?.vrobo;

@@ -4,6 +4,9 @@ import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { loginAccurate, fetchAccurateShipments, mapAccurateStatusToZuha } from "@/lib/shipping/accurate";
 import { fetchBostaShipments, mapBostaStatusToZuha } from "@/lib/shipping/bosta";
+import { fetchJTShipments, mapJTStatusToZuha } from "@/lib/shipping/jt";
+import { fetchAramexShipments, mapAramexStatusToZuha } from "@/lib/shipping/aramex";
+import { fetchFiltareeqShipments, mapFiltareeqStatusToZuha } from "@/lib/shipping/filtareeq";
 import { syncStatusToEasyOrders } from "@/lib/easyorders";
 import { processOrderForVrobo } from "@/lib/vrobo/api";
 import { logIntegrationActivity } from "@/lib/logs/integration-logger";
@@ -105,9 +108,12 @@ export async function previewTelegraphShippingSyncInternal(businessId: string): 
 
 export async function previewShippingSyncAction(businessId: string): Promise<{ updates: SyncPreviewItem[], debugInfo?: any, error?: string }> {
     try {
-        const [telegraphResult, bostaResult] = await Promise.all([
+        const [telegraphResult, bostaResult, jtResult, aramexResult, filtareeqResult] = await Promise.all([
             previewTelegraphShippingSyncInternal(businessId),
-            previewBostaShippingSyncAction(businessId)
+            previewBostaShippingSyncAction(businessId),
+            previewGenericShippingSyncAction(businessId, "jt"),
+            previewGenericShippingSyncAction(businessId, "aramex"),
+            previewGenericShippingSyncAction(businessId, "filtareeq"),
         ]);
 
         const allUpdates: SyncPreviewItem[] = [];
@@ -116,19 +122,29 @@ export async function previewShippingSyncAction(businessId: string): Promise<{ u
             allUpdates.push(...telegraphResult.updates);
         }
 
-        if (bostaResult.updates && bostaResult.updates.length > 0) {
-            for (const bItem of bostaResult.updates) {
-                if (!allUpdates.some(u => u.orderId === bItem.orderId)) {
-                    allUpdates.push({ ...bItem, provider: "Bosta" });
+        const integrateResult = (result: any, providerName: string) => {
+            if (result.updates && result.updates.length > 0) {
+                for (const item of result.updates) {
+                    if (!allUpdates.some(u => u.orderId === item.orderId)) {
+                        allUpdates.push({ ...item, provider: providerName });
+                    }
                 }
             }
-        }
+        };
+
+        integrateResult(bostaResult, "Bosta");
+        integrateResult(jtResult, "J&T");
+        integrateResult(aramexResult, "Aramex");
+        integrateResult(filtareeqResult, "Filtareeq");
 
         return {
             updates: allUpdates,
             debugInfo: {
                 telegraph: telegraphResult.debugInfo,
-                bosta: bostaResult.debugInfo
+                bosta: bostaResult.debugInfo,
+                jt: jtResult.debugInfo,
+                aramex: aramexResult.debugInfo,
+                filtareeq: filtareeqResult.debugInfo
             }
         };
     } catch (error: any) {
@@ -345,5 +361,85 @@ export async function debugTelegraphSearch(businessId: string, refNumber: string
         return { data: json };
     } catch (error: any) {
         return { error: error.message };
+    }
+}
+
+export async function previewGenericShippingSyncAction(businessId: string, providerKey: "jt" | "aramex" | "filtareeq"): Promise<{ updates: SyncPreviewItem[], debugInfo?: any, error?: string }> {
+    try {
+        const cookieStore = await cookies();
+        const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://telkkknuygjejmqcvyev.supabase.co";
+        const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
+        
+        const supabase = createServerClient(supabaseUrl, supabaseKey, {
+            cookies: { get(name: string) { return cookieStore.get(name)?.value; }, },
+        });
+
+        const { data: business } = await supabase
+            .from("businesses")
+            .select("theme_config")
+            .eq("id", businessId)
+            .single();
+
+        const config = business?.theme_config?.integrations?.shipping?.[providerKey];
+        if (!config || !config.enabled || !config.apiKey) {
+            return { updates: [], error: `${providerKey} integration is not configured or disabled in settings.` };
+        }
+
+        const { data: orders, error: ordersError } = await supabase
+            .from("orders")
+            .select("id, customer_info, status, tags")
+            .eq("business_id", businessId)
+            .in("status", ["Prepared", "Hold To redeliver", "Shipped", "Returning"]);
+
+        if (ordersError) throw new Error(ordersError.message);
+        if (!orders || orders.length === 0) return { updates: [], debugInfo: { message: "No active orders found" } };
+
+        const refNumbers = orders.map(o => o.id.substring(0, 8));
+        let shipments: any[] = [];
+        let mapStatus: (v: string) => string | null = () => null;
+
+        if (providerKey === "jt") {
+            shipments = await fetchJTShipments(config, refNumbers);
+            mapStatus = mapJTStatusToZuha;
+        } else if (providerKey === "aramex") {
+            shipments = await fetchAramexShipments(config, refNumbers);
+            mapStatus = mapAramexStatusToZuha;
+        } else if (providerKey === "filtareeq") {
+            shipments = await fetchFiltareeqShipments(config, refNumbers);
+            mapStatus = mapFiltareeqStatusToZuha;
+        }
+
+        const debugInfo = {
+            activeRefNumbers: refNumbers,
+            fetchedShipments: shipments.map((s: any) => ({ ref: s.zuhaRef || s.trackingNumber, code: s.state?.code, value: s.state?.value }))
+        };
+
+        const updates: SyncPreviewItem[] = [];
+
+        for (const order of orders) {
+            const shortId = order.id.substring(0, 8);
+            const match = shipments.find((s: any) => {
+                const matchRef = s.zuhaRef ? s.zuhaRef : s.trackingNumber;
+                return matchRef && matchRef.toLowerCase() === shortId.toLowerCase();
+            });
+
+            if (match) {
+                const newStatus = mapStatus(match.state.value);
+                if (newStatus && newStatus !== order.status) {
+                    updates.push({
+                        orderId: order.id,
+                        customerName: (order.customer_info as any)?.name || "N/A",
+                        oldStatus: order.status,
+                        newStatus: newStatus,
+                        accurateStatusName: match.state.value
+                    });
+                }
+            }
+        }
+
+        return { updates, debugInfo };
+    } catch (error: any) {
+        console.error(`Preview sync error (${providerKey}):`, error);
+        return { updates: [], error: error.message };
     }
 }

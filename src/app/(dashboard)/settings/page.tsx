@@ -42,7 +42,10 @@ export default function SettingsPage() {
     const [integrations, setIntegrations] = useState<any>({
         shipping: {
             telegraph: { enabled: false, username: "", password: "", autoSync: false, autoSyncIntervalMinutes: 15, shippingCompanyId: "" },
-            bosta: { enabled: false, apiKey: "", autoSync: false, autoSyncIntervalMinutes: 15, shippingCompanyId: "" }
+            bosta: { enabled: false, apiKey: "", autoSync: false, autoSyncIntervalMinutes: 15, shippingCompanyId: "" },
+            jt: { enabled: false, apiKey: "", autoSync: false, autoSyncIntervalMinutes: 15, shippingCompanyId: "" },
+            aramex: { enabled: false, apiKey: "", apiSecret: "", accountId: "", autoSync: false, autoSyncIntervalMinutes: 15, shippingCompanyId: "" },
+            filtareeq: { enabled: false, apiKey: "", autoSync: false, autoSyncIntervalMinutes: 15, shippingCompanyId: "" }
         },
         platforms: {
             easyorders: { enabled: false, apiKey: "", webhookToken: "" }
@@ -88,6 +91,29 @@ export default function SettingsPage() {
                         autoSync: savedIntegrations.shipping?.bosta?.autoSync || false,
                         autoSyncIntervalMinutes: savedIntegrations.shipping?.bosta?.autoSyncIntervalMinutes || 15,
                         shippingCompanyId: savedIntegrations.shipping?.bosta?.shippingCompanyId || ""
+                    },
+                    jt: {
+                        enabled: savedIntegrations.shipping?.jt?.enabled || false,
+                        apiKey: savedIntegrations.shipping?.jt?.apiKey || "",
+                        autoSync: savedIntegrations.shipping?.jt?.autoSync || false,
+                        autoSyncIntervalMinutes: savedIntegrations.shipping?.jt?.autoSyncIntervalMinutes || 15,
+                        shippingCompanyId: savedIntegrations.shipping?.jt?.shippingCompanyId || ""
+                    },
+                    aramex: {
+                        enabled: savedIntegrations.shipping?.aramex?.enabled || false,
+                        apiKey: savedIntegrations.shipping?.aramex?.apiKey || "",
+                        apiSecret: savedIntegrations.shipping?.aramex?.apiSecret || "",
+                        accountId: savedIntegrations.shipping?.aramex?.accountId || "",
+                        autoSync: savedIntegrations.shipping?.aramex?.autoSync || false,
+                        autoSyncIntervalMinutes: savedIntegrations.shipping?.aramex?.autoSyncIntervalMinutes || 15,
+                        shippingCompanyId: savedIntegrations.shipping?.aramex?.shippingCompanyId || ""
+                    },
+                    filtareeq: {
+                        enabled: savedIntegrations.shipping?.filtareeq?.enabled || false,
+                        apiKey: savedIntegrations.shipping?.filtareeq?.apiKey || "",
+                        autoSync: savedIntegrations.shipping?.filtareeq?.autoSync || false,
+                        autoSyncIntervalMinutes: savedIntegrations.shipping?.filtareeq?.autoSyncIntervalMinutes || 15,
+                        shippingCompanyId: savedIntegrations.shipping?.filtareeq?.shippingCompanyId || ""
                     }
                 },
                 platforms: {
@@ -608,6 +634,238 @@ export default function SettingsPage() {
                                             <p className="text-xs text-muted-foreground">
                                                 {t("Select the system shipping company ID that will be applied to orders when auto-sync marks them as shipped.")}
                                             </p>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* J&T Egypt Integration */}
+                            <div className="space-y-4 border rounded-md p-4 bg-muted/20">
+                                <div className="flex items-center justify-between">
+                                    <h3 className="text-lg font-medium flex items-center gap-3">
+                                        <div className="h-8 w-8 bg-red-600 text-white flex items-center justify-center font-bold rounded">J&T</div>
+                                        <span className="ml-2">J&T Egypt</span>
+                                        {integrations.shipping.jt.enabled && (
+                                            <Badge variant="outline" className="ml-3 bg-green-50 text-green-700 border-green-200">Active</Badge>
+                                        )}
+                                    </h3>
+                                    <Switch 
+                                        checked={integrations.shipping.jt.enabled} 
+                                        onCheckedChange={(c) => handleIntegrationChange('shipping', 'jt', 'enabled', c)}
+                                    />
+                                </div>
+                                <p className="text-sm text-muted-foreground">
+                                    {t("Connect to J&T Egypt shipping to sync statuses and tracking.")}
+                                </p>
+                                
+                                {integrations.shipping.jt.enabled && (
+                                    <div className="space-y-4 pt-4 border-t">
+                                        <div className="space-y-2">
+                                            <Label>{t("J&T API Key")}</Label>
+                                            <Input 
+                                                placeholder={t("Enter API Key")} 
+                                                value={integrations.shipping.jt.apiKey}
+                                                onChange={(e) => handleIntegrationChange('shipping', 'jt', 'apiKey', e.target.value)}
+                                                type="password"
+                                            />
+                                        </div>
+
+                                        <div className="flex items-center space-x-2 pt-2">
+                                            <Switch 
+                                                checked={integrations.shipping.jt.autoSync} 
+                                                onCheckedChange={(c) => handleIntegrationChange('shipping', 'jt', 'autoSync', c)}
+                                            />
+                                            <Label>{t("Enable Auto Sync")}</Label>
+                                        </div>
+                                        
+                                        {integrations.shipping.jt.autoSync && (
+                                            <div className="space-y-2">
+                                                <Label>{t("Auto Sync Interval (Minutes)")}</Label>
+                                                <Input 
+                                                    type="number"
+                                                    min="1"
+                                                    max="1440"
+                                                    value={integrations.shipping.jt.autoSyncIntervalMinutes}
+                                                    onChange={(e) => handleIntegrationChange('shipping', 'jt', 'autoSyncIntervalMinutes', parseInt(e.target.value) || 15)}
+                                                />
+                                            </div>
+                                        )}
+                                        
+                                        <div className="space-y-2">
+                                            <Label>{t("Linked Shipping Company")}</Label>
+                                            <Select
+                                                value={integrations.shipping.jt.shippingCompanyId}
+                                                onValueChange={(val) => handleIntegrationChange('shipping', 'jt', 'shippingCompanyId', val)}
+                                            >
+                                                <SelectTrigger>
+                                                    <SelectValue placeholder={t("Select a shipping company")} />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    {shippingCompanies.map(sc => (
+                                                        <SelectItem key={sc.id} value={sc.id}>{sc.name}</SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Aramex Integration */}
+                            <div className="space-y-4 border rounded-md p-4 bg-muted/20">
+                                <div className="flex items-center justify-between">
+                                    <h3 className="text-lg font-medium flex items-center gap-3">
+                                        <div className="h-8 w-8 bg-red-700 text-white flex items-center justify-center font-bold rounded">AR</div>
+                                        <span className="ml-2">Aramex</span>
+                                        {integrations.shipping.aramex.enabled && (
+                                            <Badge variant="outline" className="ml-3 bg-green-50 text-green-700 border-green-200">Active</Badge>
+                                        )}
+                                    </h3>
+                                    <Switch 
+                                        checked={integrations.shipping.aramex.enabled} 
+                                        onCheckedChange={(c) => handleIntegrationChange('shipping', 'aramex', 'enabled', c)}
+                                    />
+                                </div>
+                                <p className="text-sm text-muted-foreground">
+                                    {t("Connect to Aramex shipping to sync statuses and tracking.")}
+                                </p>
+                                
+                                {integrations.shipping.aramex.enabled && (
+                                    <div className="space-y-4 pt-4 border-t">
+                                        <div className="space-y-2">
+                                            <Label>{t("Aramex Account ID")}</Label>
+                                            <Input 
+                                                placeholder={t("Enter Account ID")} 
+                                                value={integrations.shipping.aramex.accountId || ""}
+                                                onChange={(e) => handleIntegrationChange('shipping', 'aramex', 'accountId', e.target.value)}
+                                            />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Label>{t("Aramex API Key (Username)")}</Label>
+                                            <Input 
+                                                placeholder={t("Enter API Key")} 
+                                                value={integrations.shipping.aramex.apiKey}
+                                                onChange={(e) => handleIntegrationChange('shipping', 'aramex', 'apiKey', e.target.value)}
+                                            />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Label>{t("Aramex API Secret (Password/PIN)")}</Label>
+                                            <Input 
+                                                placeholder={t("Enter API Secret")} 
+                                                value={integrations.shipping.aramex.apiSecret || ""}
+                                                onChange={(e) => handleIntegrationChange('shipping', 'aramex', 'apiSecret', e.target.value)}
+                                                type="password"
+                                            />
+                                        </div>
+
+                                        <div className="flex items-center space-x-2 pt-2">
+                                            <Switch 
+                                                checked={integrations.shipping.aramex.autoSync} 
+                                                onCheckedChange={(c) => handleIntegrationChange('shipping', 'aramex', 'autoSync', c)}
+                                            />
+                                            <Label>{t("Enable Auto Sync")}</Label>
+                                        </div>
+                                        
+                                        {integrations.shipping.aramex.autoSync && (
+                                            <div className="space-y-2">
+                                                <Label>{t("Auto Sync Interval (Minutes)")}</Label>
+                                                <Input 
+                                                    type="number"
+                                                    min="1"
+                                                    max="1440"
+                                                    value={integrations.shipping.aramex.autoSyncIntervalMinutes}
+                                                    onChange={(e) => handleIntegrationChange('shipping', 'aramex', 'autoSyncIntervalMinutes', parseInt(e.target.value) || 15)}
+                                                />
+                                            </div>
+                                        )}
+                                        
+                                        <div className="space-y-2">
+                                            <Label>{t("Linked Shipping Company")}</Label>
+                                            <Select
+                                                value={integrations.shipping.aramex.shippingCompanyId}
+                                                onValueChange={(val) => handleIntegrationChange('shipping', 'aramex', 'shippingCompanyId', val)}
+                                            >
+                                                <SelectTrigger>
+                                                    <SelectValue placeholder={t("Select a shipping company")} />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    {shippingCompanies.map(sc => (
+                                                        <SelectItem key={sc.id} value={sc.id}>{sc.name}</SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Filtareeq Integration */}
+                            <div className="space-y-4 border rounded-md p-4 bg-muted/20">
+                                <div className="flex items-center justify-between">
+                                    <h3 className="text-lg font-medium flex items-center gap-3">
+                                        <div className="h-8 w-8 bg-blue-600 text-white flex items-center justify-center font-bold rounded">FT</div>
+                                        <span className="ml-2">Filtareeq</span>
+                                        {integrations.shipping.filtareeq.enabled && (
+                                            <Badge variant="outline" className="ml-3 bg-green-50 text-green-700 border-green-200">Active</Badge>
+                                        )}
+                                    </h3>
+                                    <Switch 
+                                        checked={integrations.shipping.filtareeq.enabled} 
+                                        onCheckedChange={(c) => handleIntegrationChange('shipping', 'filtareeq', 'enabled', c)}
+                                    />
+                                </div>
+                                <p className="text-sm text-muted-foreground">
+                                    {t("Connect to Filtareeq shipping to sync statuses and tracking.")}
+                                </p>
+                                
+                                {integrations.shipping.filtareeq.enabled && (
+                                    <div className="space-y-4 pt-4 border-t">
+                                        <div className="space-y-2">
+                                            <Label>{t("Filtareeq API Key")}</Label>
+                                            <Input 
+                                                placeholder={t("Enter API Key")} 
+                                                value={integrations.shipping.filtareeq.apiKey}
+                                                onChange={(e) => handleIntegrationChange('shipping', 'filtareeq', 'apiKey', e.target.value)}
+                                                type="password"
+                                            />
+                                        </div>
+
+                                        <div className="flex items-center space-x-2 pt-2">
+                                            <Switch 
+                                                checked={integrations.shipping.filtareeq.autoSync} 
+                                                onCheckedChange={(c) => handleIntegrationChange('shipping', 'filtareeq', 'autoSync', c)}
+                                            />
+                                            <Label>{t("Enable Auto Sync")}</Label>
+                                        </div>
+                                        
+                                        {integrations.shipping.filtareeq.autoSync && (
+                                            <div className="space-y-2">
+                                                <Label>{t("Auto Sync Interval (Minutes)")}</Label>
+                                                <Input 
+                                                    type="number"
+                                                    min="1"
+                                                    max="1440"
+                                                    value={integrations.shipping.filtareeq.autoSyncIntervalMinutes}
+                                                    onChange={(e) => handleIntegrationChange('shipping', 'filtareeq', 'autoSyncIntervalMinutes', parseInt(e.target.value) || 15)}
+                                                />
+                                            </div>
+                                        )}
+                                        
+                                        <div className="space-y-2">
+                                            <Label>{t("Linked Shipping Company")}</Label>
+                                            <Select
+                                                value={integrations.shipping.filtareeq.shippingCompanyId}
+                                                onValueChange={(val) => handleIntegrationChange('shipping', 'filtareeq', 'shippingCompanyId', val)}
+                                            >
+                                                <SelectTrigger>
+                                                    <SelectValue placeholder={t("Select a shipping company")} />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    {shippingCompanies.map(sc => (
+                                                        <SelectItem key={sc.id} value={sc.id}>{sc.name}</SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
                                         </div>
                                     </div>
                                 )}
