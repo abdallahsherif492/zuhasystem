@@ -13,13 +13,32 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
+    let requestHeaders: Record<string, string> = {};
+    
     try {
         const topic = req.headers.get('x-shopify-topic') || '';
         const shopHeader = req.headers.get('x-shopify-shop-domain') || '';
         const hmacHeader = req.headers.get('x-shopify-hmac-sha256') || '';
 
+        req.headers.forEach((value, key) => {
+            requestHeaders[key] = value;
+        });
+
         // Read raw body text for HMAC validation and parsing
         const rawBody = await req.text();
+
+        // 1. Log incoming request to database (best effort)
+        let parsedPayloadForLog = null;
+        try {
+            parsedPayloadForLog = rawBody ? JSON.parse(rawBody) : null;
+        } catch(e) {
+            parsedPayloadForLog = { raw: rawBody };
+        }
+
+        await supabase.from('webhook_logs').insert({
+            headers: requestHeaders,
+            payload: parsedPayloadForLog
+        });
 
         // HMAC Signature Verification if webhook secret is configured
         const webhookSecret = process.env.SHOPIFY_WEBHOOK_SECRET || process.env.SHOPIFY_API_SECRET;
@@ -124,6 +143,41 @@ export async function POST(req: Request) {
             governorate: governorate
         };
 
+        // Create or find customer based on phone number and business ID (matching easyorders logic)
+        let customerId = null;
+        if (phone) {
+            const { data: existingCustomers } = await supabase
+                .from('customers')
+                .select('id')
+                .eq('phone', phone)
+                .eq('business_id', businessId)
+                .limit(1);
+
+            if (existingCustomers && existingCustomers.length > 0) {
+                customerId = existingCustomers[0].id;
+            } else {
+                // Create customer
+                const { data: newCustomer } = await supabase
+                    .from('customers')
+                    .insert({
+                        business_id: businessId,
+                        name: customerName,
+                        phone: phone,
+                        phone2: '',
+                        address: fullAddress,
+                        governorate: governorate,
+                        total_orders: 0,
+                        total_spent: 0
+                    })
+                    .select('id')
+                    .single();
+                
+                if (newCustomer) {
+                    customerId = newCustomer.id;
+                }
+            }
+        }
+
         const lineItems = body.line_items || [];
         const totalAmount = Number(body.total_price || 0);
 
@@ -134,18 +188,9 @@ export async function POST(req: Request) {
         }
         const subtotal = totalAmount - shippingCost;
 
-        // Payment status mapping
-        const financialStatus = (body.financial_status || '').toLowerCase();
-        let paymentStatus = 'Not Paid';
-        let paidAmount = 0;
-
-        if (financialStatus === 'paid') {
-            paymentStatus = 'Paid';
-            paidAmount = totalAmount;
-        } else if (financialStatus === 'partially_paid') {
-            paymentStatus = 'Partially Paid';
-            paidAmount = Number(body.total_outstanding ? totalAmount - Number(body.total_outstanding) : 0);
-        }
+        // Hardcode payment status to Not Paid (ignoring Shopify financial_status as requested)
+        const paymentStatus = 'Not Paid';
+        const paidAmount = 0;
 
         // Check if order already exists
         const { data: existingOrder } = await supabase
@@ -163,6 +208,7 @@ export async function POST(req: Request) {
                 .from('orders')
                 .insert({
                     business_id: businessId,
+                    customer_id: customerId,
                     shopify_id: shopifyOrderId,
                     customer_info: customerInfo,
                     status: 'Waiting',
