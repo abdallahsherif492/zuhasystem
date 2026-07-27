@@ -103,11 +103,12 @@ function PlatformOrdersContent() {
     const [accounts, setAccounts] = useState<{ id: string; name: string }[]>([]);
     const [platformFilter, setPlatformFilter] = useState<string>("all");
     
-    // Add Item state per order
     const [addItemOpen, setAddItemOpen] = useState<Record<string, boolean>>({});
     const [selectedProductForAdd, setSelectedProductForAdd] = useState<Record<string, string>>({});
     const [selectedVariantForAdd, setSelectedVariantForAdd] = useState<Record<string, string>>({});
     const [selectedProductOverride, setSelectedProductOverride] = useState<Record<string, string>>({});
+    const [selectedItemProduct, setSelectedItemProduct] = useState<Record<string, string>>({});
+
     
     const searchParams = useSearchParams();
     const fromDate = searchParams.get("from");
@@ -859,6 +860,12 @@ function PlatformOrdersContent() {
                                         <div className="space-y-3 max-h-[300px] overflow-y-auto pr-1">
                                             {order.order_items?.map(item => {
                                                 const isUnmapped = !item.variant_id;
+                                                const defaultProd = item.variant_id 
+                                                    ? products.find(p => p.variants?.some((v: any) => v.id === item.variant_id))
+                                                    : null;
+                                                const chosenProdId = selectedItemProduct[item.id] || defaultProd?.id;
+                                                const activeProd = products.find(p => p.id === chosenProdId);
+
                                                 return (
                                                     <div key={item.id} className={cn("p-3 rounded-lg border space-y-2", isUnmapped ? "bg-red-50/50 border-red-200" : "bg-muted/30")}>
                                                         <div className="flex justify-between items-start gap-2">
@@ -887,42 +894,87 @@ function PlatformOrdersContent() {
                                                             </Button>
                                                         </div>
 
-                                                        {/* Mapping / Variant Selector for both Unmapped and Mapped Items */}
-                                                        <div className="pt-1">
-                                                            <Popover>
-                                                                <PopoverTrigger asChild>
-                                                                    <Button variant={isUnmapped ? "outline" : "ghost"} size="sm" className="w-full justify-between text-xs h-8 border border-input bg-background/50 hover:bg-accent">
-                                                                        <span className="truncate font-normal">
-                                                                            {isUnmapped ? t("Select matching product...") : t("Change variant...")}
-                                                                        </span>
-                                                                        <ChevronsUpDown className="h-3 w-3 opacity-50 shrink-0 ml-1" />
-                                                                    </Button>
-                                                                </PopoverTrigger>
-                                                                <PopoverContent className="w-[320px] p-0" align="start">
-                                                                    <Command>
-                                                                        <CommandInput placeholder={t("Search system products...")} />
-                                                                        <CommandEmpty>{t("No variant found.")}</CommandEmpty>
-                                                                        <CommandGroup>
-                                                                            <CommandList className="max-h-60 overflow-y-auto">
-                                                                            {variants.map(v => (
-                                                                                <CommandItem
-                                                                                    key={v.id}
-                                                                                    value={`${v.products?.name} ${v.title} ${v.sku}`}
-                                                                                    onSelect={() => mapVariantToItem(order.id, item.id, v.id)}
-                                                                                >
-                                                                                    <Check className={cn("mr-2 h-4 w-4 shrink-0", item.variant_id === v.id ? "opacity-100" : "opacity-0")} />
-                                                                                    <div className="flex flex-col text-xs">
-                                                                                        <span className="font-medium">{v.products?.name} - {v.title}</span>
-                                                                                        <span className="text-muted-foreground font-mono">SKU: {v.sku} ({formatCurrency(v.sale_price)})</span>
-                                                                                    </div>
-                                                                                </CommandItem>
-                                                                            ))}
-                                                                            </CommandList>
-                                                                        </CommandGroup>
-                                                                    </Command>
-                                                                </PopoverContent>
-                                                            </Popover>
+                                                        {/* 2-Step Product & Variant Menus */}
+                                                        <div className="pt-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                                            {/* Step 1: Product Selection Menu */}
+                                                            <div>
+                                                                <Label className="text-[10px] font-medium text-muted-foreground block mb-1">{t("Select Product")}:</Label>
+                                                                <Popover>
+                                                                    <PopoverTrigger asChild>
+                                                                        <Button variant="outline" size="sm" className="w-full justify-between text-xs h-8 truncate bg-background/50">
+                                                                            <span className="truncate">{activeProd?.name || t("Select Product")}</span>
+                                                                            <ChevronsUpDown className="h-3 w-3 opacity-50 shrink-0 ml-1" />
+                                                                        </Button>
+                                                                    </PopoverTrigger>
+                                                                    <PopoverContent className="w-[240px] p-0" align="start">
+                                                                        <Command>
+                                                                            <CommandInput placeholder={t("Search system products...")} />
+                                                                            <CommandEmpty>{t("No product found.")}</CommandEmpty>
+                                                                            <CommandGroup>
+                                                                                <CommandList className="max-h-60 overflow-y-auto">
+                                                                                    {products.map(p => (
+                                                                                        <CommandItem
+                                                                                            key={p.id}
+                                                                                            value={p.name}
+                                                                                            onSelect={() => {
+                                                                                                setSelectedItemProduct(prev => ({ ...prev, [item.id]: p.id }));
+                                                                                            }}
+                                                                                        >
+                                                                                            <Check className={cn("mr-2 h-4 w-4 shrink-0", activeProd?.id === p.id ? "opacity-100" : "opacity-0")} />
+                                                                                            <span className="text-xs font-medium">{p.name}</span>
+                                                                                        </CommandItem>
+                                                                                    ))}
+                                                                                </CommandList>
+                                                                            </CommandGroup>
+                                                                        </Command>
+                                                                    </PopoverContent>
+                                                                </Popover>
+                                                            </div>
+
+                                                            {/* Step 2: Variant Selection Menu (Filtered to activeProd) */}
+                                                            <div>
+                                                                <Label className="text-[10px] font-medium text-muted-foreground block mb-1">{t("Select Variant")}:</Label>
+                                                                <Popover>
+                                                                    <PopoverTrigger asChild>
+                                                                        <Button 
+                                                                            variant={isUnmapped ? "outline" : "ghost"} 
+                                                                            size="sm" 
+                                                                            disabled={!activeProd}
+                                                                            className="w-full justify-between text-xs h-8 border border-input bg-background/50 hover:bg-accent truncate"
+                                                                        >
+                                                                            <span className="truncate">
+                                                                                {item.variants?.title ? item.variants.title : t("Select Variant")}
+                                                                            </span>
+                                                                            <ChevronsUpDown className="h-3 w-3 opacity-50 shrink-0 ml-1" />
+                                                                        </Button>
+                                                                    </PopoverTrigger>
+                                                                    <PopoverContent className="w-[260px] p-0" align="start">
+                                                                        <Command>
+                                                                            <CommandInput placeholder={t("Search variants...")} />
+                                                                            <CommandEmpty>{t("No variant found.")}</CommandEmpty>
+                                                                            <CommandGroup>
+                                                                                <CommandList className="max-h-60 overflow-y-auto">
+                                                                                    {activeProd?.variants?.map((v: any) => (
+                                                                                        <CommandItem
+                                                                                            key={v.id}
+                                                                                            value={`${v.title} ${v.sku}`}
+                                                                                            onSelect={() => mapVariantToItem(order.id, item.id, v.id)}
+                                                                                        >
+                                                                                            <Check className={cn("mr-2 h-4 w-4 shrink-0", item.variant_id === v.id ? "opacity-100" : "opacity-0")} />
+                                                                                            <div className="flex flex-col text-xs">
+                                                                                                <span className="font-medium">{v.title}</span>
+                                                                                                <span className="text-muted-foreground font-mono">SKU: {v.sku} ({formatCurrency(v.sale_price)})</span>
+                                                                                            </div>
+                                                                                        </CommandItem>
+                                                                                    ))}
+                                                                                </CommandList>
+                                                                            </CommandGroup>
+                                                                        </Command>
+                                                                    </PopoverContent>
+                                                                </Popover>
+                                                            </div>
                                                         </div>
+
 
 
                                                         <div className="flex items-center gap-3 pt-1 border-t text-xs">

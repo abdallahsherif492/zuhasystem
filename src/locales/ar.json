@@ -392,5 +392,9 @@
   "Change variant...": "تغيير المتغير (Variant)...",
   "Select matching product...": "اختر منتج مطابق...",
   "Search system products...": "ابحث في منتجات السيستم...",
-  "No variant found.": "لم يتم العثور على متغير مطابق."
+  "No variant found.": "لم يتم العثور على متغير مطابق.",
+  "Select Product": "اختر المنتج",
+  "Select Variant": "اختر المقاس / المتغير",
+  "No product found.": "لم يتم العثور على منتج.",
+  "Search variants...": "ابحث في المقاسات / المتغيرات..."
 }

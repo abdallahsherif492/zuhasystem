@@ -392,5 +392,9 @@
   "Change variant...": "Change variant...",
   "Select matching product...": "Select matching product...",
   "Search system products...": "Search system products...",
-  "No variant found.": "No variant found."
+  "No variant found.": "No variant found.",
+  "Select Product": "Select Product",
+  "Select Variant": "Select Variant",
+  "No product found.": "No product found.",
+  "Search variants...": "Search variants..."
 }
