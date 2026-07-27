@@ -247,7 +247,7 @@ export async function POST(req: Request) {
                     total_amount: totalAmount,
                     total_cost: 0,
                     shipping_cost: shippingCost,
-                    channel: 'Shopify',
+                    channel: 'Website',
                     tags: ['shopify', orderName],
                     notes: body.note || '',
                     payment_status: paymentStatus,
@@ -316,7 +316,7 @@ export async function POST(req: Request) {
                 entityId: orderId,
                 entityName: `Shopify Order ${orderName} (${customerName})`,
                 changes: [
-                    { field: 'Channel', old_value: null, new_value: 'Shopify' },
+                    { field: 'Channel', old_value: null, new_value: 'Website' },
                     { field: 'Total Amount', old_value: null, new_value: `${totalAmount} EGP` },
                     { field: 'Customer', old_value: null, new_value: `${customerName} (${phone})` },
                     { field: 'Status', old_value: null, new_value: 'Waiting' }
