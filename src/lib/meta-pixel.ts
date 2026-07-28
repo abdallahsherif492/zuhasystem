@@ -160,6 +160,20 @@ export const trackCompleteRegistration = (params?: Record<string, any>) =>
         ...params,
     });
 
+/**
+ * Fires an event, then gives the browser a moment to flush the beacon before
+ * the caller navigates.
+ *
+ * `window.location.href` unloads the document, which can cancel the in-flight
+ * request — silently dropping the conversion. Costs nothing when the pixel is
+ * off: there is no beacon to wait for, so the user is never delayed.
+ */
+export async function flushPixelEvent(fire: () => void, graceMs = 400) {
+    fire();
+    if (!isPixelActive()) return;
+    await new Promise((resolve) => setTimeout(resolve, graceMs));
+}
+
 /** The events the System Admin test button can fire. */
 export const TESTABLE_EVENTS = [
     PIXEL_EVENTS.PAGE_VIEW,

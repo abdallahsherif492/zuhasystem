@@ -11,7 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Loader2, ArrowLeft, Mail, Lock, User, Phone, Calendar } from "lucide-react";
 import { motion } from "framer-motion";
-import { trackCompleteRegistration } from "@/lib/meta-pixel";
+import { trackCompleteRegistration, flushPixelEvent } from "@/lib/meta-pixel";
 
 export default function RegisterPage() {
     const router = useRouter();
@@ -49,9 +49,10 @@ export default function RegisterPage() {
             // Redirect to onboarding after successful registration
             const planId = new URLSearchParams(window.location.search).get('plan');
 
-            // Report the sign-up to Meta before navigating away. No-op unless a
-            // System Admin has enabled the pixel in platform settings.
-            trackCompleteRegistration({ plan_id: planId || "none" });
+            // Report the sign-up to Meta and let the beacon leave before the
+            // full-page navigation below unloads the document. No-op (and no
+            // delay) unless a System Admin has enabled the pixel.
+            await flushPixelEvent(() => trackCompleteRegistration({ plan_id: planId || "none" }));
 
             const redirectUrl = planId ? `/onboarding?plan=${planId}` : "/onboarding";
             window.location.href = redirectUrl;
