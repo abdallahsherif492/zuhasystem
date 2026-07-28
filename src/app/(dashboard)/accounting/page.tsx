@@ -204,11 +204,15 @@ function AccountingContent() {
 
             {/* Actions */}
             <div className="flex flex-wrap gap-2">
-                <AddTransactionDialog type="investment" onSuccess={refresh} />
-                <AddTransactionDialog type="revenue" onSuccess={refresh} />
-                <AddTransactionDialog type="expense" onSuccess={refresh} />
-                <TransferDialog onSuccess={refresh} />
-                <ManageAccountsDialog onSuccess={refresh} />
+                <div id="add-transaction-btn" className="flex gap-2">
+                    <AddTransactionDialog type="investment" onSuccess={refresh} />
+                    <AddTransactionDialog type="revenue" onSuccess={refresh} />
+                    <AddTransactionDialog type="expense" onSuccess={refresh} />
+                    <TransferDialog onSuccess={refresh} />
+                </div>
+                <div id="add-treasury-btn">
+                    <ManageAccountsDialog onSuccess={refresh} />
+                </div>
             </div>
 
             {/* Filtering & Search */}

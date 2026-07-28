@@ -432,7 +432,7 @@ function DashboardContent() {
             {t("Welcome to your live analytics & management dashboard.")}
           </p>
         </div>
-        <div className="flex items-center space-x-2">
+        <div id="date-range-picker" className="flex items-center space-x-2">
           <DateRangePicker />
         </div>
       </div>
@@ -485,7 +485,7 @@ function DashboardContent() {
 
       {/* KPI Cards */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Card className="bg-gradient-to-br from-emerald-500/10 via-emerald-500/5 to-transparent dark:from-emerald-950/30 dark:to-transparent border-emerald-500/20 shadow-sm hover:shadow-md transition-all">
+        <Card id="kpi-total-sales" className="bg-gradient-to-br from-emerald-500/10 via-emerald-500/5 to-transparent dark:from-emerald-950/30 dark:to-transparent border-emerald-500/20 shadow-sm hover:shadow-md transition-all">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-xs font-bold text-emerald-800 dark:text-emerald-300 uppercase tracking-wider">{t("Total Sales & Orders")}</CardTitle>
             <div className="p-2 rounded-full bg-emerald-500/20 text-emerald-600">
@@ -507,7 +507,7 @@ function DashboardContent() {
           </CardContent>
         </Card>
         
-        <Card className="bg-gradient-to-br from-blue-500/10 via-blue-500/5 to-transparent dark:from-blue-950/30 dark:to-transparent border-blue-500/20 shadow-sm hover:shadow-md transition-all">
+        <Card id="kpi-confirmed" className="bg-gradient-to-br from-blue-500/10 via-blue-500/5 to-transparent dark:from-blue-950/30 dark:to-transparent border-blue-500/20 shadow-sm hover:shadow-md transition-all">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-xs font-bold text-blue-800 dark:text-blue-300 uppercase tracking-wider">{t("Confirmed Orders")}</CardTitle>
             <div className="p-2 rounded-full bg-blue-500/20 text-blue-600">
@@ -523,7 +523,7 @@ function DashboardContent() {
           </CardContent>
         </Card>
 
-        <Card className="bg-gradient-to-br from-amber-500/10 via-amber-500/5 to-transparent dark:from-amber-950/30 dark:to-transparent border-amber-500/20 shadow-sm hover:shadow-md transition-all">
+        <Card id="kpi-waiting" className="bg-gradient-to-br from-amber-500/10 via-amber-500/5 to-transparent dark:from-amber-950/30 dark:to-transparent border-amber-500/20 shadow-sm hover:shadow-md transition-all">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-xs font-bold text-amber-800 dark:text-amber-300 uppercase tracking-wider">{t("Waiting Orders")}</CardTitle>
             <div className="p-2 rounded-full bg-amber-500/20 text-amber-600">
@@ -539,7 +539,7 @@ function DashboardContent() {
           </CardContent>
         </Card>
 
-        <Card className="bg-gradient-to-br from-purple-500/10 via-purple-500/5 to-transparent dark:from-purple-950/30 dark:to-transparent border-purple-500/20 shadow-sm hover:shadow-md transition-all">
+        <Card id="kpi-stock-value" className="bg-gradient-to-br from-purple-500/10 via-purple-500/5 to-transparent dark:from-purple-950/30 dark:to-transparent border-purple-500/20 shadow-sm hover:shadow-md transition-all">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-xs font-bold text-purple-800 dark:text-purple-300 uppercase tracking-wider">{t("Stock Value")}</CardTitle>
             <div className="p-2 rounded-full bg-purple-500/20 text-purple-600">

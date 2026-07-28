@@ -11,7 +11,7 @@ import {
     LayoutDashboard, AlertTriangle, Package, ShoppingCart, Settings, Users, Truck, 
     Banknote, LineChart, ShoppingBag, Megaphone, Box, DollarSign, ShieldCheck, 
     FileText, Ticket, CreditCard, Clock, Inbox, Calendar, LogOut, Globe,
-    ChevronDown, ChevronRight, BarChart3, PieChart, History
+    ChevronDown, ChevronRight, BarChart3, PieChart, History, BookOpen
 } from "lucide-react";
 
 import Image from "next/image";
@@ -34,8 +34,8 @@ export function Sidebar({ className }: SidebarProps) {
                     <div className="flex items-center justify-center mb-8 px-2 flex-col gap-2">
                         <div className="relative h-20 w-40 transition-transform hover:scale-105 duration-300">
                             <Image
-                                src={activeBusiness?.logo_url || "/logo.png"}
-                                alt={activeBusiness?.name || "eCommerx Logo"}
+                                src="/logo.png"
+                                alt="eCommerx Logo"
                                 fill
                                 className="object-contain"
                                 priority
@@ -106,7 +106,7 @@ export function SidebarContent({ onLinkClick }: { onLinkClick?: () => void }) {
     const canAccess = (path: string) => {
         if (isSystemAdmin) return true;
         if (isAdminRole) return true;
-        if (path === "/dashboard") return true;
+        if (path === "/dashboard" || path === "/guide") return true;
         
         if (allowedPages && allowedPages.length > 0) {
             return allowedPages.some(allowed => 
@@ -126,6 +126,7 @@ export function SidebarContent({ onLinkClick }: { onLinkClick?: () => void }) {
             title: t("Overview"),
             items: [
                 { title: t("Dashboard"), href: "/dashboard", icon: LayoutDashboard, exactMatch: true },
+                { title: t("System Guide"), href: "/guide", icon: BookOpen },
                 { title: t("My HR"), href: "/my-hr", icon: Calendar },
             ]
         },
