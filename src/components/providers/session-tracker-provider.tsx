@@ -63,33 +63,31 @@ export function SessionTrackerProvider() {
         const report = async () => {
             if (stopped) return;
 
-            const row = {
-                session_id: sessionId,
-                user_email: currentUser?.email ?? null,
-                business_id: activeBusiness?.id ?? null,
-                business_name: activeBusiness?.name ?? null,
-                page_path: pathRef.current || "/",
-                page_title: typeof document !== "undefined" ? document.title : null,
-                page_entered_at: pageEnteredAt.current,
-                page_views: pageViews.current,
-                device_type: getDeviceType(),
-                browser: getBrowser(),
-                os: getOS(),
-                screen_size: getScreenSize(),
-                viewport: getViewport(),
-                language: navigator.language || null,
-                timezone: getTimezone(),
-                referrer: getExternalReferrer() || null,
-                entry_page: entryPage.current,
-                is_idle: isIdle.current,
-                last_seen_at: new Date().toISOString(),
-            };
-
-            // Upsert keeps started_at from the original insert (it is not in
-            // the payload) while refreshing everything else.
-            const { error } = await supabase
-                .from("live_sessions")
-                .upsert(row, { onConflict: "session_id" });
+            // Written through a SECURITY DEFINER function rather than the
+            // table: upserting directly needs a SELECT policy on the row, and
+            // only System Admins may read this table — so a direct write
+            // silently failed for everyone else, including every anonymous
+            // visitor on the marketing pages. The function also takes the
+            // signed-in identity from the JWT, so it cannot be spoofed here.
+            const { error } = await supabase.rpc("record_live_session", {
+                p_session_id: sessionId,
+                p_page_path: pathRef.current || "/",
+                p_business_id: activeBusiness?.id ?? null,
+                p_business_name: activeBusiness?.name ?? null,
+                p_page_title: typeof document !== "undefined" ? document.title : null,
+                p_page_entered_at: pageEnteredAt.current,
+                p_page_views: pageViews.current,
+                p_device_type: getDeviceType(),
+                p_browser: getBrowser(),
+                p_os: getOS(),
+                p_screen_size: getScreenSize(),
+                p_viewport: getViewport(),
+                p_language: navigator.language || null,
+                p_timezone: getTimezone(),
+                p_referrer: getExternalReferrer() || null,
+                p_entry_page: entryPage.current,
+                p_is_idle: isIdle.current,
+            });
 
             // Silent by design: analytics must never interrupt the app. The
             // most likely cause is the migration not having been run yet.
@@ -115,6 +113,9 @@ export function SessionTrackerProvider() {
             clearInterval(interval);
             document.removeEventListener("visibilitychange", onVisibility);
         };
+        // currentUser is not sent (the function reads it from the JWT) but is
+        // still a dependency: signing in or out has to re-report immediately
+        // so the session flips between anonymous and identified.
     }, [currentUser?.email, activeBusiness?.id, activeBusiness?.name]);
 
     return null;
