@@ -123,3 +123,51 @@ export const trackCompleteRegistration = (params?: Record<string, any>) =>
         status: "completed",
         ...params,
     });
+
+/** The events the System Admin test button can fire. */
+export const TESTABLE_EVENTS = [
+    PIXEL_EVENTS.PAGE_VIEW,
+    PIXEL_EVENTS.VIEW_CONTENT,
+    PIXEL_EVENTS.LEAD,
+    PIXEL_EVENTS.COMPLETE_REGISTRATION,
+] as const;
+
+export type TestableEvent = (typeof TESTABLE_EVENTS)[number];
+
+/**
+ * Fires sample events so a System Admin can confirm the pixel is wired up
+ * before any real traffic arrives.
+ *
+ * These are genuine pixel events — Meta has no "dry run" mode for the browser
+ * pixel — so each one is tagged with `test_event: true` and a distinct
+ * `content_name` to keep them separable from real funnel data in Events
+ * Manager. Uses the ID passed in rather than the saved one, so an admin can
+ * validate a new Pixel ID before committing to it.
+ */
+export function sendTestPixelEvents(pixelId: string, events: readonly string[]) {
+    const trimmedId = pixelId.trim();
+    if (!trimmedId) {
+        return { success: false as const, error: "Pixel ID is required.", sent: [] as string[] };
+    }
+    if (events.length === 0) {
+        return { success: false as const, error: "Select at least one event.", sent: [] as string[] };
+    }
+
+    try {
+        initMetaPixel(trimmedId);
+
+        const sentAt = new Date().toISOString();
+        events.forEach((event) => {
+            trackPixelEvent(event, {
+                content_name: `Test — ${event}`,
+                content_category: "System Admin Test",
+                test_event: true,
+                sent_at: sentAt,
+            });
+        });
+
+        return { success: true as const, error: null, sent: [...events] };
+    } catch (e: any) {
+        return { success: false as const, error: e?.message || "Failed to send test events.", sent: [] as string[] };
+    }
+}

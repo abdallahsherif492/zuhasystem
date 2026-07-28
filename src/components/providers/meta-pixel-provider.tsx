@@ -30,10 +30,19 @@ export function MetaPixelProvider() {
     const lastTrackedPath = useRef<string | null>(null);
 
     // Load (or tear down) the pixel based on the platform settings.
+    // Re-runs per navigation so the SDK itself — not just PageView — stays off
+    // the dashboard: loading fbevents.js drops Meta cookies on its own.
     useEffect(() => {
         let cancelled = false;
 
         const syncPixel = async () => {
+            if (!isTrackedRoute(pathname)) {
+                disableMetaPixel();
+                lastTrackedPath.current = null;
+                setActivePixelId(null);
+                return;
+            }
+
             const { data, error } = await supabase
                 .from("platform_settings")
                 .select("meta_pixel_enabled, meta_pixel_id")
@@ -64,7 +73,7 @@ export function MetaPixelProvider() {
         return () => {
             cancelled = true;
         };
-    }, []);
+    }, [pathname]);
 
     // Fire a PageView per marketing-page navigation, once the pixel is live.
     useEffect(() => {

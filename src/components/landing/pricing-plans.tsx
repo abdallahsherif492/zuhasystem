@@ -93,6 +93,10 @@ export function PricingPlans() {
                     <p className="text-lg md:text-xl font-bold text-slate-600 dark:text-slate-400 max-w-2xl mx-auto leading-relaxed">
                         كل الباقات فيها كل مميزات السيستم من غير أي حدود. الفرق بس في مدة الاشتراك — وكل ما المدة تطول، السعر الشهري يقل.
                     </p>
+                    <div className="inline-flex items-center gap-2 rounded-full bg-green-100 dark:bg-green-900/30 border-2 border-green-500 px-6 py-3 text-green-800 dark:text-green-300 font-black text-base md:text-lg">
+                        <CheckCircle2 className="h-5 w-5 shrink-0" />
+                        الأسعار دي بتبدأ بعد الشهر الأول — أول شهر مجاني بالكامل 🎁
+                    </div>
                 </motion.div>
 
                 <div className={cn(
@@ -154,6 +158,14 @@ export function PricingPlans() {
                                     </p>
                                 )}
 
+                                <p className={cn(
+                                    "mt-4 text-sm font-black flex items-center gap-2",
+                                    isBestValue ? "text-green-400" : "text-green-700 dark:text-green-400"
+                                )}>
+                                    <span>🎁</span>
+                                    مش هتدفع حاجة في أول شهر
+                                </p>
+
                                 <ul className="mt-8 space-y-3 flex-1">
                                     {[
                                         "كل مميزات السيستم من غير حدود",
@@ -206,7 +218,7 @@ export function PricingPlans() {
                 </div>
 
                 <p className="text-center mt-12 text-base font-bold text-slate-500 dark:text-slate-400">
-                    كل الأسعار بالجنيه المصري • ابدأ بشهر تجريبي مجاني من غير كريديت كارد
+                    كل الأسعار بالجنيه المصري • بتبدأ تدفع بعد ما الشهر المجاني يخلص • من غير كريديت كارد
                 </p>
             </div>
         </section>
