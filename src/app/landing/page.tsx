@@ -21,6 +21,8 @@ import {
 } from "lucide-react";
 import { useState, useRef } from "react";
 import { createBrowserClient } from "@supabase/ssr";
+import { trackLead, trackViewContent } from "@/lib/meta-pixel";
+import { PricingPlans } from "@/components/landing/pricing-plans";
 
 // Advanced animations
 const fadeInUp: Variants = {
@@ -58,6 +60,10 @@ export default function MarketingLandingPage() {
     setOpenFaq(openFaq === index ? null : index);
   };
 
+  // Meta Pixel reporting. Every helper is a no-op unless a System Admin has
+  // enabled the pixel in System Admin > Settings.
+  const handleCtaClick = (source: string) => trackLead(source, { content_category: "Landing Page" });
+
   return (
     <div className="flex flex-col min-h-screen bg-slate-50 dark:bg-slate-950 font-sans overflow-x-hidden" dir="rtl" ref={containerRef}>
       
@@ -88,9 +94,14 @@ export default function MarketingLandingPage() {
           </motion.div>
         </Link>
         <nav className="hidden md:flex gap-8 items-center text-slate-700 dark:text-slate-100">
-          {["المميزات", "ليه إحنا؟", "العرض"].map((item, idx) => (
-            <Link key={idx} className="text-base font-bold hover:text-primary transition-all hover:scale-105" href={idx === 0 ? "#features" : idx === 1 ? "#why-us" : "#pricing"}>
-              {item}
+          {[
+            { label: "المميزات", href: "#features" },
+            { label: "ليه إحنا؟", href: "#why-us" },
+            { label: "العرض", href: "#pricing" },
+            { label: "الأسعار", href: "#plans" },
+          ].map((item, idx) => (
+            <Link key={idx} className="text-base font-bold hover:text-primary transition-all hover:scale-105" href={item.href}>
+              {item.label}
             </Link>
           ))}
         </nav>
@@ -100,7 +111,7 @@ export default function MarketingLandingPage() {
           </Button>
           <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
             <Button className="bg-primary hover:bg-primary/90 text-white font-bold shadow-lg shadow-primary/25 rounded-full px-6 py-5 text-base" asChild>
-              <Link href="/register">ابدأ مجاناً</Link>
+              <Link href="/register" onClick={() => handleCtaClick("Header CTA")}>ابدأ مجاناً</Link>
             </Button>
           </motion.div>
         </div>
@@ -148,7 +159,7 @@ export default function MarketingLandingPage() {
                 <motion.div variants={fadeInUp} className="flex flex-col sm:flex-row gap-4 pt-6">
                   <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }} className="w-full sm:w-auto">
                     <Button size="lg" className="w-full h-16 sm:h-18 px-8 text-lg sm:text-xl font-bold rounded-full shadow-2xl shadow-primary/30 bg-primary hover:bg-primary/90 text-white flex items-center gap-3 group" asChild>
-                      <Link href="/register">
+                      <Link href="/register" onClick={() => handleCtaClick("Hero CTA")}>
                         👉 ابدأ شهرك التجريبي ببلاش دلوقتي!
                         <ArrowLeft className="w-6 h-6 group-hover:-translate-x-2 transition-transform" />
                       </Link>
@@ -462,6 +473,7 @@ export default function MarketingLandingPage() {
                 initial={{ opacity: 0, scale: 0.8, rotateY: 15 }}
                 whileInView={{ opacity: 1, scale: 1, rotateY: 0 }}
                 viewport={{ once: true }}
+                onViewportEnter={() => trackViewContent("Pricing Offer", { content_category: "Landing Page" })}
                 transition={{ duration: 0.8, type: "spring" }}
                 id="pricing"
                 className="perspective-1000"
@@ -516,7 +528,7 @@ export default function MarketingLandingPage() {
                     <div className="w-full pt-6">
                       <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
                         <Button size="lg" className="w-full h-20 text-xl md:text-2xl font-black rounded-2xl bg-gradient-to-r from-primary to-indigo-500 hover:from-primary/90 hover:to-indigo-500/90 text-white shadow-xl shadow-primary/40 border-b-4 border-primary-foreground/20" asChild>
-                          <Link href="/register">👉 يلا نظبط البزنس؟ حسابك مجاني الآن</Link>
+                          <Link href="/register" onClick={() => handleCtaClick("Pricing CTA")}>👉 يلا نظبط البزنس؟ حسابك مجاني الآن</Link>
                         </Button>
                       </motion.div>
                       <p className="mt-6 text-base md:text-lg font-black text-slate-300 flex items-center justify-center gap-3">
@@ -533,6 +545,9 @@ export default function MarketingLandingPage() {
             </div>
           </div>
         </section>
+
+        {/* Subscription Packages — sourced from System Admin > Pricing */}
+        <PricingPlans />
 
         {/* FAQ Section */}
         <section className="py-24 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800">
