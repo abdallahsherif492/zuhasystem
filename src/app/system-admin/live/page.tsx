@@ -10,7 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { describePath } from "@/lib/session-tracker";
 import {
     Activity, Users, Monitor, Smartphone, Tablet, Globe, Loader2,
-    Eye, Store, Pause, Play, Search, RefreshCw,
+    Eye, Store, Pause, Play, Search, RefreshCw, AlertTriangle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -63,6 +63,7 @@ export default function LiveAnalyticsPage() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [paused, setPaused] = useState(false);
+    const [setupIssue, setSetupIssue] = useState<string | null>(null);
     const [query, setQuery] = useState("");
     // Ticks every second so "time on page" counts up without refetching.
     const [now, setNow] = useState(() => Date.now());
@@ -93,6 +94,25 @@ export default function LiveAnalyticsPage() {
         // Opportunistic housekeeping so the table cannot grow unbounded even
         // without a scheduled job. Ignored if the function is not installed.
         supabase.rpc("prune_live_sessions").then(() => {}, () => {});
+
+        // Every visitor reports presence through record_live_session. If that
+        // function is missing, the page still renders — it just quietly shows
+        // nobody but the admins who could write before it existed. Detect it
+        // and say so, rather than looking like "no traffic".
+        // Null args make the function return before inserting anything, so
+        // this checks existence without leaving a phantom session behind.
+        supabase
+            .rpc("record_live_session", { p_session_id: null, p_page_path: null })
+            .then(({ error }) => {
+                if (error && /Could not find the function|PGRST202|does not exist/i.test(error.message)) {
+                    setSetupIssue(
+                        "record_live_session() is missing from the database, so visitor sessions are not being recorded. " +
+                        "Run supabase/migrations/20260729_live_sessions_rpc.sql in the Supabase SQL editor."
+                    );
+                } else {
+                    setSetupIssue(null);
+                }
+            }, () => {});
     }, [fetchSessions]);
 
     useEffect(() => {
@@ -204,6 +224,22 @@ export default function LiveAnalyticsPage() {
             {error && (
                 <Card className="border-red-300 bg-red-50 dark:bg-red-950/30">
                     <CardContent className="pt-6 text-sm text-red-800 dark:text-red-300">{error}</CardContent>
+                </Card>
+            )}
+
+            {setupIssue && (
+                <Card className="border-amber-400 bg-amber-50 dark:bg-amber-950/30">
+                    <CardContent className="pt-6 flex items-start gap-3">
+                        <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
+                        <div className="text-sm text-amber-900 dark:text-amber-200">
+                            <p className="font-semibold">Session recording is not installed</p>
+                            <p className="mt-1">{setupIssue}</p>
+                            <p className="mt-2 text-xs opacity-80">
+                                Until then this page can only show sessions written before the switch — it is not
+                                measuring real traffic.
+                            </p>
+                        </div>
+                    </CardContent>
                 </Card>
             )}
 
