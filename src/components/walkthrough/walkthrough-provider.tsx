@@ -268,8 +268,9 @@ export function WalkthroughProvider({ children }: { children: React.ReactNode })
         .ecommerx-walkthrough .driver-popover-close-btn:hover {
           color: white !important;
         }
-        .driver-overlay {
-          background: rgba(15, 23, 42, 0.7) !important;
+        .driver-overlay, .driver-overlay path {
+          fill: rgba(15, 23, 42, 0.35) !important;
+          background: rgba(15, 23, 42, 0.35) !important;
         }
       `}</style>
     </WalkthroughContext.Provider>

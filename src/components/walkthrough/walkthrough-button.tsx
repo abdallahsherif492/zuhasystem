@@ -9,7 +9,10 @@ function getPageIdFromPath(pathname: string): string | null {
   if (pathname === "/dashboard") return "dashboard";
   if (pathname === "/accounting") return "accounting";
   if (pathname === "/products") return "products";
-  if (pathname.startsWith("/orders")) return "orders";
+  if (pathname.startsWith("/orders")) {
+    if (pathname.includes("/print")) return null;
+    return "orders";
+  }
   if (pathname === "/shipping") return "shipping";
   if (pathname === "/settings") return "settings";
   if (pathname === "/logistics") return "logistics";
