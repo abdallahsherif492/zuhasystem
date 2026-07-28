@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2, Settings, ShieldAlert, Megaphone } from "lucide-react";
+import { Loader2, Settings, ShieldAlert, Megaphone, Activity } from "lucide-react";
 
 import { logAuditAction } from "@/lib/audit";
 
@@ -25,7 +25,10 @@ export default function PlatformSettingsPage() {
     const [announcementMessage, setAnnouncementMessage] = useState("");
     const [announcementType, setAnnouncementType] = useState("info");
     
-    const [defaultTrialDays, setDefaultTrialDays] = useState(14);
+    const [defaultTrialDays, setDefaultTrialDays] = useState(30);
+
+    const [metaPixelEnabled, setMetaPixelEnabled] = useState(false);
+    const [metaPixelId, setMetaPixelId] = useState("");
     const [instapayNumber, setInstapayNumber] = useState("");
     const [instapayName, setInstapayName] = useState("");
     const [ewalletNumber, setEwalletNumber] = useState("");
@@ -45,7 +48,9 @@ export default function PlatformSettingsPage() {
             setAnnouncementActive(data.announcement_active);
             setAnnouncementMessage(data.announcement_message);
             setAnnouncementType(data.announcement_type);
-            setDefaultTrialDays(data.default_trial_days || 14);
+            setDefaultTrialDays(data.default_trial_days || 30);
+            setMetaPixelEnabled(data.meta_pixel_enabled || false);
+            setMetaPixelId(data.meta_pixel_id || "");
             setInstapayNumber(data.instapay_number || "");
             setInstapayName(data.instapay_name || "");
             setEwalletNumber(data.ewallet_number || "");
@@ -72,7 +77,9 @@ export default function PlatformSettingsPage() {
                 instapay_number: instapayNumber,
                 instapay_name: instapayName,
                 ewallet_number: ewalletNumber,
-                ewallet_name: ewalletName
+                ewallet_name: ewalletName,
+                meta_pixel_enabled: metaPixelEnabled,
+                meta_pixel_id: metaPixelId.trim()
             })
             .eq("id", "global");
 
@@ -84,7 +91,8 @@ export default function PlatformSettingsPage() {
             await logAuditAction("SETTINGS_UPDATED", "Platform", "global", {
                 maintenance_mode: maintenanceMode,
                 announcement_active: announcementActive,
-                default_trial_days: defaultTrialDays
+                default_trial_days: defaultTrialDays,
+                meta_pixel_enabled: metaPixelEnabled
             });
             alert("Settings saved successfully!");
         }
@@ -174,6 +182,57 @@ export default function PlatformSettingsPage() {
                             <p className="text-xs text-muted-foreground mt-2">These details will be shown to clients when they want to pay for their subscription.</p>
                         </div>
                     </CardContent>
+                </Card>
+
+                {/* Meta Pixel */}
+                <Card className={metaPixelEnabled ? "border-blue-500 shadow-sm" : ""}>
+                    <CardHeader>
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <CardTitle className="flex items-center gap-2 text-blue-600">
+                                    <Activity className="h-5 w-5" />
+                                    Meta Pixel
+                                </CardTitle>
+                                <CardDescription>
+                                    Track marketing events (page views, CTA clicks, sign-ups) on the landing and register pages.
+                                </CardDescription>
+                            </div>
+                            <Switch
+                                checked={metaPixelEnabled}
+                                onCheckedChange={setMetaPixelEnabled}
+                            />
+                        </div>
+                    </CardHeader>
+                    {metaPixelEnabled && (
+                        <CardContent className="space-y-4">
+                            <div className="space-y-2 max-w-sm">
+                                <Label htmlFor="metaPixelId">Pixel ID</Label>
+                                <Input
+                                    id="metaPixelId"
+                                    value={metaPixelId}
+                                    onChange={e => setMetaPixelId(e.target.value)}
+                                    placeholder="e.g. 1234567890123456"
+                                    inputMode="numeric"
+                                />
+                                <p className="text-xs text-muted-foreground">
+                                    Found in Meta Events Manager under Data Sources. The pixel stays off until an ID is saved here.
+                                </p>
+                            </div>
+
+                            <div className="rounded-md border bg-muted/40 p-4 text-sm space-y-2">
+                                <p className="font-semibold">Events being sent</p>
+                                <ul className="text-muted-foreground space-y-1 text-xs">
+                                    <li><span className="font-mono font-medium">PageView</span> — landing, register and login pages</li>
+                                    <li><span className="font-mono font-medium">ViewContent</span> — visitor scrolls to the pricing section</li>
+                                    <li><span className="font-mono font-medium">Lead</span> — visitor clicks a "start free trial" CTA</li>
+                                    <li><span className="font-mono font-medium">CompleteRegistration</span> — visitor finishes signing up</li>
+                                </ul>
+                                <p className="text-xs text-muted-foreground pt-1">
+                                    Dashboard pages are never tracked, so tenant data stays out of Meta.
+                                </p>
+                            </div>
+                        </CardContent>
+                    )}
                 </Card>
 
                 {/* Maintenance Mode */}

@@ -31,6 +31,8 @@ export interface PlatformSettings {
   default_trial_days?: number;
   instapay_number?: string;
   instapay_name?: string;
+  meta_pixel_enabled?: boolean;
+  meta_pixel_id?: string;
 }
 
 interface BusinessContextType {

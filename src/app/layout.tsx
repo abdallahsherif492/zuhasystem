@@ -8,6 +8,7 @@ import { BusinessProvider } from "@/contexts/BusinessContext";
 import { LanguageProvider } from "@/contexts/LanguageContext";
 
 import { ActionFeedbackProvider } from "@/contexts/ActionFeedbackContext";
+import { MetaPixelProvider } from "@/components/providers/meta-pixel-provider";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -45,6 +46,7 @@ export default function RootLayout({
             <LanguageProvider>
               <ActionFeedbackProvider>
                 <DynamicThemeProvider>
+                  <MetaPixelProvider />
                   {children}
                 </DynamicThemeProvider>
               </ActionFeedbackProvider>

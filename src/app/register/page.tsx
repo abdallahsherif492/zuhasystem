@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Loader2, ArrowLeft, Mail, Lock, User, Phone, Calendar } from "lucide-react";
 import { motion } from "framer-motion";
+import { trackCompleteRegistration } from "@/lib/meta-pixel";
 
 export default function RegisterPage() {
     const router = useRouter();
@@ -44,9 +45,14 @@ export default function RegisterPage() {
             });
             
             if (error) throw error;
-            
+
             // Redirect to onboarding after successful registration
             const planId = new URLSearchParams(window.location.search).get('plan');
+
+            // Report the sign-up to Meta before navigating away. No-op unless a
+            // System Admin has enabled the pixel in platform settings.
+            trackCompleteRegistration({ plan_id: planId || "none" });
+
             const redirectUrl = planId ? `/onboarding?plan=${planId}` : "/onboarding";
             window.location.href = redirectUrl;
         } catch (err: any) {
@@ -80,7 +86,7 @@ export default function RegisterPage() {
                             أنشئ حسابك دلوقتي 🚀
                         </h2>
                         <p className="mt-3 text-base text-slate-500 font-medium">
-                            ابدأ تجربتك المجانية لمدة 14 يوم. بدون بطاقة ائتمان.
+                            ابدأ تجربتك المجانية لمدة 30 يوم. بدون بطاقة ائتمان.
                         </p>
                     </div>
 
