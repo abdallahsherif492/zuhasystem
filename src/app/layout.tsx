@@ -9,6 +9,7 @@ import { LanguageProvider } from "@/contexts/LanguageContext";
 
 import { ActionFeedbackProvider } from "@/contexts/ActionFeedbackContext";
 import { MetaPixelProvider } from "@/components/providers/meta-pixel-provider";
+import { Toaster } from "@/components/ui/sonner-toaster";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -48,6 +49,7 @@ export default function RootLayout({
                 <DynamicThemeProvider>
                   <MetaPixelProvider />
                   {children}
+                  <Toaster />
                 </DynamicThemeProvider>
               </ActionFeedbackProvider>
             </LanguageProvider>
