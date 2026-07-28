@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Loader2, Store, CheckCircle2, LogOut, ArrowRight, Package, Truck, BarChart3, Wallet, Link as LinkIcon } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
+import { safeLocal } from "@/lib/safe-storage";
 import { motion } from "framer-motion";
 
 const features = [
@@ -47,7 +48,7 @@ export default function OnboardingPage() {
     };
 
     const handleSkip = () => {
-        localStorage.setItem('skipOnboarding', 'true');
+        safeLocal.set('skipOnboarding', 'true');
         window.location.href = "/dashboard";
     };
 
@@ -124,7 +125,7 @@ export default function OnboardingPage() {
             if (linkError) throw linkError;
 
             // 3. Set Active Business ID in localStorage
-            localStorage.setItem("activeBusinessId", business.id);
+            safeLocal.set("activeBusinessId", business.id);
 
             // 4. Force a hard reload to the dashboard so Context picks it up
             window.location.href = "/";

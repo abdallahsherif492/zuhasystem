@@ -9,6 +9,7 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { supabase } from "@/lib/supabase";
 import { getPageSteps, getFullTourPages, WalkthroughStep } from "./walkthrough-steps";
 import { walkthroughCss } from "./walkthrough-styles";
+import { safeLocal } from "@/lib/safe-storage";
 
 interface WalkthroughContextType {
   startPageTour: (pageId: string) => void;
@@ -224,7 +225,7 @@ export function WalkthroughProvider({ children }: { children: React.ReactNode })
       console.error("[Walkthrough] Error marking tour completed:", e);
     }
 
-    localStorage.setItem(`walkthrough_completed_${activeBusiness.id}`, "true");
+    safeLocal.set(`walkthrough_completed_${activeBusiness.id}`, "true");
   };
 
   // Check if this is the first visit (trigger full tour)
@@ -232,7 +233,7 @@ export function WalkthroughProvider({ children }: { children: React.ReactNode })
     if (!activeBusiness || hasCheckedFirstVisit || pathname !== "/dashboard") return;
 
     const localKey = `walkthrough_completed_${activeBusiness.id}`;
-    const localCompleted = localStorage.getItem(localKey);
+    const localCompleted = safeLocal.get(localKey);
     const dbCompleted = activeBusiness.theme_config?.walkthrough_completed;
 
     if (!localCompleted && !dbCompleted) {

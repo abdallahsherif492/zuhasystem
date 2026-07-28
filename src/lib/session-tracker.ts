@@ -5,6 +5,8 @@
  * page — no probing, no third-party calls.
  */
 
+import { safeSession } from "./safe-storage";
+
 const SESSION_KEY = "ecommerx_session_id";
 
 /**
@@ -14,10 +16,10 @@ const SESSION_KEY = "ecommerx_session_id";
 export function getSessionId(): string {
     if (typeof window === "undefined") return "";
 
-    let id = sessionStorage.getItem(SESSION_KEY);
+    let id = safeSession.get(SESSION_KEY);
     if (!id) {
         id = `s_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
-        sessionStorage.setItem(SESSION_KEY, id);
+        safeSession.set(SESSION_KEY, id);
     }
     return id;
 }

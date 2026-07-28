@@ -3,6 +3,7 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useRouter, usePathname } from "next/navigation";
+import { safeLocal } from "@/lib/safe-storage";
 
 export interface Business {
   id: string;
@@ -87,10 +88,10 @@ export const BusinessProvider = ({ children }: { children: React.ReactNode }) =>
   useEffect(() => {
     const fetchBusinessContext = async () => {
       setLoading(true);
+
       const { data: { user } } = await supabase.auth.getUser();
-      
+
       if (!user) {
-        setLoading(false);
         return;
       }
       setCurrentUser(user);
@@ -141,7 +142,7 @@ export const BusinessProvider = ({ children }: { children: React.ReactNode }) =>
         setBusinesses(formatted);
 
         // Retrieve saved active business from localStorage, or default to the first one
-        const savedId = localStorage.getItem('activeBusinessId');
+        const savedId = safeLocal.get('activeBusinessId');
         let active = formatted.find((b: any) => b.business.id === savedId);
         
         // --- GOD MODE (Impersonation) ---
@@ -169,10 +170,10 @@ export const BusinessProvider = ({ children }: { children: React.ReactNode }) =>
         setShiftStart(active.shift_start);
         setShiftEnd(active.shift_end);
         setWeekendDays(active.weekend_days);
-        localStorage.setItem('activeBusinessId', active.business.id);
+        safeLocal.set('activeBusinessId', active.business.id);
       } else {
         // User has no businesses. Redirect to onboarding if not on onboarding page.
-        const skipped = typeof window !== 'undefined' ? localStorage.getItem('skipOnboarding') : null;
+        const skipped = safeLocal.get('skipOnboarding');
         if (pathname !== '/onboarding' && !pathname.startsWith('/system-admin') && !skipped) {
           router.push('/onboarding');
         }
@@ -188,11 +189,34 @@ export const BusinessProvider = ({ children }: { children: React.ReactNode }) =>
       if (settingsData) {
         setPlatformSettings(settingsData as PlatformSettings);
       }
+    };
 
+    // `loading` gates every dashboard page behind a spinner, so it must resolve
+    // no matter what happens above. Without this, a rejected request — or a
+    // browser that throws on storage access, which is common in the Facebook
+    // and Instagram in-app browsers and iOS Private Browsing — left the app
+    // spinning forever after login.
+    let settled = false;
+    const settle = () => {
+      if (settled) return;
+      settled = true;
       setLoading(false);
     };
 
-    fetchBusinessContext();
+    // A mobile request can hang without ever rejecting. Give up waiting and
+    // render: the guards below will still redirect if the user lacks access.
+    const watchdog = setTimeout(settle, 12_000);
+
+    fetchBusinessContext()
+      .catch((e) => {
+        console.error("[BusinessContext] Failed to load context:", e);
+      })
+      .finally(() => {
+        clearTimeout(watchdog);
+        settle();
+      });
+
+    return () => clearTimeout(watchdog);
   }, [pathname, router]);
 
   const setActiveBusiness = (businessId: string) => {
@@ -204,7 +228,7 @@ export const BusinessProvider = ({ children }: { children: React.ReactNode }) =>
       setShiftStart(selected.shift_start);
       setShiftEnd(selected.shift_end);
       setWeekendDays(selected.weekend_days);
-      localStorage.setItem('activeBusinessId', selected.business.id);
+      safeLocal.set('activeBusinessId', selected.business.id);
       // Reload to ensure all data is fetched correctly for the new context
       window.location.reload();
     }
@@ -212,7 +236,7 @@ export const BusinessProvider = ({ children }: { children: React.ReactNode }) =>
 
   const impersonateBusiness = (businessId: string) => {
     if (!isSystemAdmin) return;
-    localStorage.setItem('activeBusinessId', businessId);
+    safeLocal.set('activeBusinessId', businessId);
     window.location.href = '/dashboard';
   };
 
