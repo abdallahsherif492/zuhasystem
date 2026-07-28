@@ -40,13 +40,21 @@ export default function PlatformSettingsPage() {
         );
     };
 
-    const handleSendTestEvents = () => {
-        const result = sendTestPixelEvents(metaPixelId, testEvents);
-        setTestResult(
-            result.success
-                ? { ok: true, message: `Sent ${result.sent.length} test event(s): ${result.sent.join(", ")}. Open Events Manager > Test Events to confirm.` }
-                : { ok: false, message: result.error || "Failed to send test events." }
-        );
+    const [sendingTest, setSendingTest] = useState(false);
+
+    const handleSendTestEvents = async () => {
+        setSendingTest(true);
+        setTestResult(null);
+        try {
+            const result = await sendTestPixelEvents(metaPixelId, testEvents);
+            setTestResult(
+                result.success
+                    ? { ok: true, message: `Sent ${result.sent.length} event(s): ${result.sent.join(", ")}. They can take up to 20 minutes to appear under Events Manager > Overview. For an instant check, use the Meta Pixel Helper Chrome extension.` }
+                    : { ok: false, message: result.error || "Failed to send test events." }
+            );
+        } finally {
+            setSendingTest(false);
+        }
     };
 
     // The pixel is only meant to run on the public marketing pages. The test
@@ -290,9 +298,11 @@ export default function PlatformSettingsPage() {
                                         type="button"
                                         variant="outline"
                                         onClick={handleSendTestEvents}
-                                        disabled={!metaPixelId.trim() || testEvents.length === 0}
+                                        disabled={!metaPixelId.trim() || testEvents.length === 0 || sendingTest}
                                     >
-                                        <Send className="mr-2 h-4 w-4" />
+                                        {sendingTest
+                                            ? <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                            : <Send className="mr-2 h-4 w-4" />}
                                         Send Test Event{testEvents.length > 1 ? "s" : ""}
                                     </Button>
                                     <p className="text-xs text-amber-600 dark:text-amber-500 font-medium">

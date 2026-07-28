@@ -38,8 +38,31 @@ export const PIXEL_EVENTS = {
 
 let initializedPixelId: string | null = null;
 
+/**
+ * Whether Meta's SDK actually downloaded.
+ *
+ * This matters: when fbevents.js is blocked (ad blocker, tracker-blocking
+ * browser, corporate DNS), `fbq` still exists — it is our own stub — and every
+ * call silently piles up in `fbq.queue` instead of reaching Meta. Without
+ * tracking this, a "sent" report would be a lie.
+ */
+type SdkState = "idle" | "loading" | "loaded" | "blocked";
+let sdkState: SdkState = "idle";
+let sdkReady: Promise<boolean> | null = null;
+
 /** Whether a pixel is currently initialized in this browser session. */
 export const isPixelActive = () => initializedPixelId !== null;
+
+/** Resolves true once Meta's SDK loads, false if it was blocked or timed out. */
+export function whenPixelReady(timeoutMs = 5000): Promise<boolean> {
+    if (sdkState === "loaded") return Promise.resolve(true);
+    if (sdkState === "blocked" || !sdkReady) return Promise.resolve(false);
+
+    return Promise.race([
+        sdkReady,
+        new Promise<boolean>((resolve) => setTimeout(() => resolve(sdkState === "loaded"), timeoutMs)),
+    ]);
+}
 
 /**
  * Injects the Meta Pixel SDK and initializes it with `pixelId`.
@@ -68,11 +91,22 @@ export function initMetaPixel(pixelId: string) {
     }
 
     if (!document.getElementById(SCRIPT_ID)) {
-        const script = document.createElement("script");
-        script.id = SCRIPT_ID;
-        script.async = true;
-        script.src = SDK_SRC;
-        document.head.appendChild(script);
+        sdkState = "loading";
+        sdkReady = new Promise<boolean>((resolve) => {
+            const script = document.createElement("script");
+            script.id = SCRIPT_ID;
+            script.async = true;
+            script.src = SDK_SRC;
+            script.onload = () => {
+                sdkState = "loaded";
+                resolve(true);
+            };
+            script.onerror = () => {
+                sdkState = "blocked";
+                resolve(false);
+            };
+            document.head.appendChild(script);
+        });
     }
 
     window.fbq!("init", pixelId);
@@ -92,6 +126,8 @@ export function disableMetaPixel() {
     delete window.fbq;
     delete window._fbq;
     initializedPixelId = null;
+    sdkState = "idle";
+    sdkReady = null;
 }
 
 /** Fires a standard Meta event. No-op while the pixel is off. */
@@ -144,17 +180,28 @@ export type TestableEvent = (typeof TESTABLE_EVENTS)[number];
  * Manager. Uses the ID passed in rather than the saved one, so an admin can
  * validate a new Pixel ID before committing to it.
  */
-export function sendTestPixelEvents(pixelId: string, events: readonly string[]) {
+export async function sendTestPixelEvents(pixelId: string, events: readonly string[]) {
+    const fail = (error: string) => ({ success: false as const, error, sent: [] as string[] });
+
     const trimmedId = pixelId.trim();
-    if (!trimmedId) {
-        return { success: false as const, error: "Pixel ID is required.", sent: [] as string[] };
-    }
-    if (events.length === 0) {
-        return { success: false as const, error: "Select at least one event.", sent: [] as string[] };
+    if (!trimmedId) return fail("Pixel ID is required.");
+    if (events.length === 0) return fail("Select at least one event.");
+    if (!/^\d{15,16}$/.test(trimmedId)) {
+        return fail(`"${trimmedId}" does not look like a Meta Pixel ID — it should be 15–16 digits. Copy it from Events Manager > Data Sources.`);
     }
 
     try {
         initMetaPixel(trimmedId);
+
+        // Wait for Meta's SDK before claiming anything was sent: until it
+        // loads, fbq only buffers into a local queue.
+        const ready = await whenPixelReady();
+        if (!ready) {
+            return fail(
+                "Meta's script (fbevents.js) could not load — it is almost always an ad blocker or a tracker-blocking browser. " +
+                "Events were queued locally and never reached Meta. Disable the blocker for this site, or try a different browser, then send again."
+            );
+        }
 
         const sentAt = new Date().toISOString();
         events.forEach((event) => {
@@ -168,6 +215,6 @@ export function sendTestPixelEvents(pixelId: string, events: readonly string[]) 
 
         return { success: true as const, error: null, sent: [...events] };
     } catch (e: any) {
-        return { success: false as const, error: e?.message || "Failed to send test events.", sent: [] as string[] };
+        return fail(e?.message || "Failed to send test events.");
     }
 }
