@@ -261,11 +261,13 @@ export const walkthroughPages: PageWalkthrough[] = [
         },
       },
       {
-        element: "#bulk-actions-btn",
+        // Points at the table, not the bulk-action bar: that bar only renders
+        // once rows are selected, so it would be missing during the tour.
+        element: "#logistics-table",
         popover: {
           title: "⚡ الإجراءات الجماعية (Bulk Actions)",
-          description: "عايز تغير حالة أوردرات كتير مرة واحدة؟ اعمل Select للأوردرات ودوس Bulk Action وغير حالتهم كلهم زي ما انت عايز!",
-          side: "bottom",
+          description: "عايز تغير حالة أوردرات كتير مرة واحدة؟ علّم على الأوردرات من المربعات اللي على الشمال، وهيظهرلك شريط 'Bulk Action' فوق الجدول تغير حالتهم كلهم مرة واحدة!",
+          side: "top",
         },
       },
     ],

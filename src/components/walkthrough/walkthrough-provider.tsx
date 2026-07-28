@@ -5,8 +5,10 @@ import { usePathname, useRouter } from "next/navigation";
 import { driver, DriveStep } from "driver.js";
 import "driver.js/dist/driver.css";
 import { useBusiness } from "@/contexts/BusinessContext";
+import { useLanguage } from "@/contexts/LanguageContext";
 import { supabase } from "@/lib/supabase";
 import { getPageSteps, getFullTourPages, WalkthroughStep } from "./walkthrough-steps";
+import { walkthroughCss } from "./walkthrough-styles";
 
 interface WalkthroughContextType {
   startPageTour: (pageId: string) => void;
@@ -41,25 +43,62 @@ function getPageIdFromPath(pathname: string): string | null {
 }
 
 export function WalkthroughProvider({ children }: { children: React.ReactNode }) {
-  const { activeBusiness } = useBusiness();
+  const { activeBusiness, userRole, allowedPages, isSystemAdmin } = useBusiness();
+  const { direction } = useLanguage();
   const pathname = usePathname();
   const router = useRouter();
   const [isTouring, setIsTouring] = useState(false);
   const [hasCheckedFirstVisit, setHasCheckedFirstVisit] = useState(false);
   const driverRef = useRef<any>(null);
 
-  // Convert our steps to driver.js format
+  /**
+   * Convert our steps to driver.js format.
+   *
+   * A step whose element is not on the page is downgraded to a centered
+   * popover instead of being silently mispositioned — the copy is still
+   * useful even when the thing it points at is not rendered (empty tables,
+   * permission-hidden buttons, elements that appear only after selection).
+   */
   const toDriverSteps = (steps: WalkthroughStep[]): DriveStep[] => {
-    return steps.map((step) => ({
-      element: step.element || undefined,
-      popover: {
-        title: step.popover.title,
-        description: step.popover.description,
-        side: step.popover.side || "bottom",
-        align: step.popover.align || "center",
-      },
-    }));
+    return steps.map((step) => {
+      const exists = step.element ? !!document.querySelector(step.element) : false;
+
+      if (step.element && !exists && process.env.NODE_ENV === "development") {
+        console.warn(`[Walkthrough] "${step.element}" not found — showing this step centered.`);
+      }
+
+      return {
+        element: exists ? step.element : undefined,
+        popover: {
+          title: step.popover.title,
+          description: step.popover.description,
+          side: step.popover.side || "bottom",
+          align: step.popover.align || "center",
+        },
+      };
+    });
   };
+
+  // Arrows have to follow the layout direction, or "next" points backwards.
+  const isRtl = direction === "rtl";
+  const nextArrow = isRtl ? "←" : "→";
+  const prevArrow = isRtl ? "→" : "←";
+
+  /**
+   * Pages the current user can actually open. Without this the tour would
+   * march a limited-permission employee through screens their sidebar hides.
+   */
+  const canAccessRoute = useCallback(
+    (route: string) => {
+      if (isSystemAdmin) return true;
+      const role = userRole?.toLowerCase().trim() || "";
+      if (role === "owner" || role === "admin" || role.includes("super")) return true;
+      if (route === "/dashboard") return true;
+      if (!allowedPages || allowedPages.length === 0) return false;
+      return allowedPages.some((allowed) => route.startsWith(allowed));
+    },
+    [isSystemAdmin, userRole, allowedPages]
+  );
 
   // Start tour for a specific page
   const startPageTour = useCallback((pageId: string) => {
@@ -71,8 +110,8 @@ export function WalkthroughProvider({ children }: { children: React.ReactNode })
       const driverObj = driver({
         showProgress: true,
         showButtons: ["next", "previous", "close"],
-        nextBtnText: "التالي ←",
-        prevBtnText: "→ السابق",
+        nextBtnText: `التالي ${nextArrow}`,
+        prevBtnText: `${prevArrow} السابق`,
         doneBtnText: "تم ✓",
         progressText: "{{current}} من {{total}}",
         popoverClass: "ecommerx-walkthrough",
@@ -86,11 +125,11 @@ export function WalkthroughProvider({ children }: { children: React.ReactNode })
       setIsTouring(true);
       driverObj.drive();
     }, 500);
-  }, []);
+  }, [nextArrow, prevArrow]);
 
   // Start the full sequential tour across all pages
   const startFullTour = useCallback(() => {
-    const pages = getFullTourPages();
+    const pages = getFullTourPages().filter((page) => canAccessRoute(page.route));
     if (pages.length === 0) return;
 
     // Immediately mark as completed so it doesn't run on reload
@@ -131,9 +170,9 @@ export function WalkthroughProvider({ children }: { children: React.ReactNode })
         const driverObj = driver({
           showProgress: true,
           showButtons: ["next", "previous", "close"],
-          nextBtnText: "التالي ←",
-          prevBtnText: "→ السابق",
-          doneBtnText: pageIndex < pages.length - 1 ? "الصفحة التالية ←" : "🎉 تم!",
+          nextBtnText: `التالي ${nextArrow}`,
+          prevBtnText: `${prevArrow} السابق`,
+          doneBtnText: pageIndex < pages.length - 1 ? `الصفحة التالية ${nextArrow}` : "🎉 تم!",
           progressText: `${page.title} — {{current}} من {{total}}`,
           popoverClass: "ecommerx-walkthrough",
           steps,
@@ -164,7 +203,7 @@ export function WalkthroughProvider({ children }: { children: React.ReactNode })
     };
 
     runPageTour(0);
-  }, [router]);
+  }, [router, canAccessRoute]);
 
   // Mark tour as completed in DB
   const markTourCompleted = async () => {
@@ -210,69 +249,7 @@ export function WalkthroughProvider({ children }: { children: React.ReactNode })
   return (
     <WalkthroughContext.Provider value={{ startPageTour, startFullTour, isTouring }}>
       {children}
-      <style jsx global>{`
-        .ecommerx-walkthrough {
-          background: #0F172A !important;
-          color: white !important;
-          border-radius: 16px !important;
-          padding: 20px 24px !important;
-          max-width: 420px !important;
-          box-shadow: 0 25px 60px rgba(0, 0, 0, 0.4) !important;
-          border: 1px solid rgba(99, 102, 241, 0.3) !important;
-          direction: rtl !important;
-          text-align: right !important;
-          font-family: inherit !important;
-        }
-        .ecommerx-walkthrough .driver-popover-title {
-          font-size: 18px !important;
-          font-weight: 800 !important;
-          color: white !important;
-          margin-bottom: 8px !important;
-          line-height: 1.6 !important;
-        }
-        .ecommerx-walkthrough .driver-popover-description {
-          font-size: 14px !important;
-          color: rgba(255, 255, 255, 0.85) !important;
-          line-height: 2 !important;
-          white-space: pre-line !important;
-        }
-        .ecommerx-walkthrough .driver-popover-progress-text {
-          color: rgba(255, 255, 255, 0.5) !important;
-          font-size: 12px !important;
-        }
-        .ecommerx-walkthrough .driver-popover-navigation-btns {
-          direction: ltr !important;
-          gap: 8px !important;
-        }
-        .ecommerx-walkthrough .driver-popover-next-btn,
-        .ecommerx-walkthrough .driver-popover-prev-btn {
-          background: #6366F1 !important;
-          color: white !important;
-          border: none !important;
-          border-radius: 8px !important;
-          padding: 8px 16px !important;
-          font-weight: 600 !important;
-          font-size: 13px !important;
-          transition: all 0.2s !important;
-        }
-        .ecommerx-walkthrough .driver-popover-prev-btn {
-          background: rgba(255,255,255,0.1) !important;
-        }
-        .ecommerx-walkthrough .driver-popover-next-btn:hover {
-          background: #4F46E5 !important;
-          transform: scale(1.02) !important;
-        }
-        .ecommerx-walkthrough .driver-popover-close-btn {
-          color: rgba(255, 255, 255, 0.6) !important;
-        }
-        .ecommerx-walkthrough .driver-popover-close-btn:hover {
-          color: white !important;
-        }
-        .driver-overlay, .driver-overlay path {
-          fill: rgba(15, 23, 42, 0.35) !important;
-          background: rgba(15, 23, 42, 0.35) !important;
-        }
-      `}</style>
+      <style jsx global>{walkthroughCss}</style>
     </WalkthroughContext.Provider>
   );
 }

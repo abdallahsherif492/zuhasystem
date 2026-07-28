@@ -335,7 +335,7 @@ export default function SettingsPage() {
                 <h2 className="text-3xl font-bold tracking-tight">{t("Settings")}</h2>
             </div>
             <Tabs defaultValue="theme" className="space-y-4">
-                <TabsList>
+                <TabsList id="integrations-tab">
                     <TabsTrigger value="theme">{t("Theme & Appearance")}</TabsTrigger>
                     <TabsTrigger value="shipping">{t("Shipping Companies")}</TabsTrigger>
                     <TabsTrigger value="platforms">{t("Order Platforms")}</TabsTrigger>

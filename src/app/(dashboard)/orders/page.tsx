@@ -461,7 +461,7 @@ function OrdersContent() {
                     <div className="flex items-center gap-2">
                         <DateRangePicker />
                         <Link href="/orders/new">
-                            <Button>
+                            <Button id="create-order-btn">
                                 <Plus className="mr-2 h-4 w-4" /> {t("New Order")}
                             </Button>
                         </Link>
@@ -469,7 +469,7 @@ function OrdersContent() {
                 </div>
 
                 {/* Filters Bar */}
-                <div className="bg-white p-5 rounded-xl border border-border/50 shadow-sm space-y-5">
+                <div id="orders-filters" className="bg-white p-5 rounded-xl border border-border/50 shadow-sm space-y-5">
                     {/* Top Row: Main Search */}
                     <div className="relative group">
                         <div className="absolute left-4 top-1/2 -translate-y-1/2 flex items-center justify-center text-muted-foreground group-focus-within:text-primary transition-colors">
@@ -589,7 +589,7 @@ function OrdersContent() {
                 </div>
             </div>
 
-            <div className="rounded-md border">
+            <div id="orders-table" className="rounded-md border">
                 <Table>
                     <TableHeader>
                         <TableRow>

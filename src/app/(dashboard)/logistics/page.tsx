@@ -624,7 +624,7 @@ function LogisticsContent() {
             </div>
 
             {/* Filters Bar */}
-            <div className="bg-muted/40 p-4 rounded-lg space-y-4">
+            <div id="logistics-filters" className="bg-muted/40 p-4 rounded-lg space-y-4">
                 <div className="flex flex-col sm:flex-row gap-4">
                     <div className="relative flex-1">
                         <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -873,7 +873,7 @@ function LogisticsContent() {
             </div>
 
             {/* Complete Orders Table */}
-            <Card>
+            <Card id="logistics-table">
                 <CardHeader>
                     <CardTitle>{t("All Orders")}</CardTitle>
                 </CardHeader>

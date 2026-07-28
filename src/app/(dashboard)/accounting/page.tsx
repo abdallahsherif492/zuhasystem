@@ -186,7 +186,7 @@ function AccountingContent() {
             </div>
 
             {/* Balances */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div id="treasury-list" className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {Object.entries(balances).map(([name, amount]) => (
                     <Card key={name}>
                         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">

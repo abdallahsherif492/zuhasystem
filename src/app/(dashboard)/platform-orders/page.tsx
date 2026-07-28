@@ -627,6 +627,7 @@ function PlatformOrdersContent() {
                 </AlertDialogContent>
             </AlertDialog>
 
+            <div id="platform-orders-table">
             {filteredOrders.length === 0 ? (
                 <div className="flex flex-col items-center justify-center p-20 text-muted-foreground bg-muted/20 rounded-lg border border-dashed">
                     <PackageSearch className="h-12 w-12 mb-4 opacity-20" />
@@ -1119,6 +1120,7 @@ function PlatformOrdersContent() {
                     ))}
                 </div>
             )}
+            </div>
         </div>
     );
 }

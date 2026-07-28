@@ -207,7 +207,7 @@ export default function TeamManagementPage() {
                 {/* Add Member Button Dialog */}
                 <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
                     <DialogTrigger asChild>
-                        <Button className="bg-primary hover:bg-primary/90 gap-2 text-xs font-semibold shadow-sm">
+                        <Button id="add-team-member-btn" className="bg-primary hover:bg-primary/90 gap-2 text-xs font-semibold shadow-sm">
                             <UserPlus className="h-4 w-4" /> {t("Add Member")}
                         </Button>
                     </DialogTrigger>

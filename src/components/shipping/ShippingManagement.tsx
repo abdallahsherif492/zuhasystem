@@ -188,7 +188,7 @@ export function ShippingManagement() {
                             Bulk Updates
                         </Button>
                     </Link>
-                    <Button onClick={() => handleOpenDialog()}>
+                    <Button id="add-shipping-company-btn" onClick={() => handleOpenDialog()}>
                         <Plus className="mr-2 h-4 w-4" /> Add Company
                     </Button>
                 </div>

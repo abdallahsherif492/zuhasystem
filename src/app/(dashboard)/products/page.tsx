@@ -72,13 +72,13 @@ export default function ProductsPage() {
                     />
                 </div>
                 <Link href="/products/new">
-                    <Button>
+                    <Button id="add-product-btn">
                         <Plus className="mr-2 h-4 w-4" /> {t("New Product")}
                     </Button>
                 </Link>
             </div>
 
-            <div className="rounded-md border">
+            <div id="products-table" className="rounded-md border">
                 <Table>
                     <TableHeader>
                         <TableRow>
