@@ -401,7 +401,7 @@ const sections: SectionProps[] = [
 ];
 
 export default function GuidePage() {
-  const { language } = useLanguage();
+  const { language, direction } = useLanguage();
   const [searchQuery, setSearchQuery] = useState("");
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>(
     sections.reduce((acc, section) => ({ ...acc, [section.id]: true }), {})
@@ -468,7 +468,7 @@ export default function GuidePage() {
                   }}
                   className={cn(
                     "w-full text-start px-3 py-2 text-sm rounded-md transition-colors hover:bg-indigo-100 dark:hover:bg-indigo-900/50 hover:text-indigo-700 dark:hover:text-indigo-300",
-                    language === "ar" ? "text-right" : "text-left"
+                    direction === "rtl" ? "text-right" : "text-left"
                   )}
                 >
                   {language === "ar" ? section.titleAr : section.titleEn}

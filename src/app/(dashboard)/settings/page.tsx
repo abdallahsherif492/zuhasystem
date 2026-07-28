@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useBusiness } from "@/contexts/BusinessContext";
-import { useLanguage } from "@/contexts/LanguageContext";
+import { useLanguage, DEFAULT_LANGUAGE, DEFAULT_DIRECTION } from "@/contexts/LanguageContext";
 import { supabase } from "@/lib/supabase";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -30,7 +30,8 @@ export default function SettingsPage() {
     
     // Form state
     const [businessName, setBusinessName] = useState<string>("");
-    const [language, setLanguage] = useState<string>("en");
+    const [language, setLanguage] = useState<string>(DEFAULT_LANGUAGE);
+    const [direction, setDirection] = useState<string>(DEFAULT_DIRECTION);
     const [primaryColor, setPrimaryColor] = useState<string>("#0f172a");
     const [secondaryColor, setSecondaryColor] = useState<string>("#000000");
     const [darkMode, setDarkMode] = useState<string>("system");
@@ -61,7 +62,8 @@ export default function SettingsPage() {
     useEffect(() => {
         if (activeBusiness) {
             setBusinessName(activeBusiness.name || "");
-            setLanguage(activeBusiness.theme_config?.language || "en");
+            setLanguage(activeBusiness.theme_config?.language || DEFAULT_LANGUAGE);
+            setDirection(activeBusiness.theme_config?.direction || DEFAULT_DIRECTION);
             setPrimaryColor(activeBusiness.theme_config?.primaryColor || "#0f172a");
             setSecondaryColor(activeBusiness.theme_config?.secondaryColor || "#000000");
             setDarkMode(activeBusiness.theme_config?.darkMode || "system");
@@ -231,6 +233,7 @@ export default function SettingsPage() {
             const newThemeConfig = {
                 ...(activeBusiness.theme_config || {}),
                 language,
+                direction,
                 primaryColor,
                 secondaryColor,
                 darkMode,
@@ -411,6 +414,22 @@ export default function SettingsPage() {
                                             <SelectItem value="ar">{t("Arabic")}</SelectItem>
                                         </SelectContent>
                                     </Select>
+                                </div>
+
+                                <div className="space-y-2">
+                                    <Label>{t("Layout Direction")}</Label>
+                                    <Select value={direction} onValueChange={setDirection}>
+                                        <SelectTrigger>
+                                            <SelectValue placeholder={t("Select Direction")} />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="ltr">{t("Left to Right (LTR)")}</SelectItem>
+                                            <SelectItem value="rtl">{t("Right to Left (RTL)")}</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                    <p className="text-xs text-muted-foreground">
+                                        {t("Controls the page layout direction, independently of the language.")}
+                                    </p>
                                 </div>
 
                                 <div className="space-y-2">
