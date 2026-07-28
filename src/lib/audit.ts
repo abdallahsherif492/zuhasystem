@@ -12,7 +12,12 @@ export type AuditAction =
     | "PAYMENT_REJECTED"
     | "SETTINGS_UPDATED"
     | "PRICING_UPDATED"
-    | "PRICING_DELETED";
+    | "PRICING_DELETED"
+    | "BUSINESS_RENAMED"
+    | "BUSINESS_SUBSCRIPTION_UPDATED"
+    | "BUSINESS_SUBSCRIPTION_EXTENDED"
+    | "BUSINESS_WALLET_ADJUSTED"
+    | "BUSINESS_DELETED";
 
 export const logAuditAction = async (
     action: AuditAction,

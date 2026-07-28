@@ -10,6 +10,7 @@ import { LanguageProvider } from "@/contexts/LanguageContext";
 import { ActionFeedbackProvider } from "@/contexts/ActionFeedbackContext";
 import { MetaPixelProvider } from "@/components/providers/meta-pixel-provider";
 import { Toaster } from "@/components/ui/sonner-toaster";
+import { SessionTrackerProvider } from "@/components/providers/session-tracker-provider";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -48,6 +49,7 @@ export default function RootLayout({
               <ActionFeedbackProvider>
                 <DynamicThemeProvider>
                   <MetaPixelProvider />
+                  <SessionTrackerProvider />
                   {children}
                   <Toaster />
                 </DynamicThemeProvider>
