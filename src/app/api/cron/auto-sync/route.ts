@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 import { previewShippingSyncAction, previewBostaShippingSyncAction, applyShippingUpdatesAction, previewGenericShippingSyncAction } from '@/app/(dashboard)/orders/sync-actions';
 import { processOrderForVrobo } from '@/lib/vrobo/api';
 import { logIntegrationActivity } from '@/lib/logs/integration-logger';
+import { resolveCronCaller } from './cron-auth';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://telkkknuygjejmqcvyev.supabase.co";
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
@@ -10,15 +11,54 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 
 export const maxDuration = 300; // Allow Vercel functions to run up to 5 minutes
 
+/** Businesses processed per run, kept low so the function cannot time out. */
+const MAX_BUSINESSES_PER_RUN = 2;
+
+/**
+ * The oldest lastSyncAt across a business's integrations, used to process the
+ * most neglected tenant first. Without this the per-run cap always consumed
+ * the same arbitrary first businesses and the rest were never synced at all.
+ */
+function stalenessOf(themeConfig: any): number {
+    const integrations = themeConfig?.integrations || {};
+    const stamps: number[] = [];
+
+    const collect = (cfg: any) => {
+        if (!cfg?.enabled || !cfg?.autoSync) return;
+        stamps.push(cfg.lastSyncAt ? new Date(cfg.lastSyncAt).getTime() : 0);
+    };
+
+    ["telegraph", "bosta", "jt", "aramex", "filtareeq"].forEach((k) => collect(integrations.shipping?.[k]));
+    collect(integrations.tools?.vrobo);
+
+    // No auto-sync enabled: sort last, there is nothing to do.
+    return stamps.length === 0 ? Number.MAX_SAFE_INTEGER : Math.min(...stamps);
+}
+
 export async function GET(request: Request) {
     try {
-        // Fetch all businesses that have theme_config
-        const { data: businesses, error } = await supabase
-            .from('businesses')
-            .select('id, theme_config');
+        // This endpoint spends tenants' courier credentials, so it is never
+        // open. The scheduler may sweep everyone; a signed-in user may only
+        // trigger their own businesses.
+        const caller = await resolveCronCaller(request);
+        if (caller.kind === "denied") {
+            return NextResponse.json({ success: false, error: caller.reason }, { status: 401 });
+        }
+
+        let query = supabase.from('businesses').select('id, theme_config');
+        if (caller.kind === "user") {
+            query = query.in('id', caller.businessIds);
+        }
+
+        const { data: allBusinesses, error } = await query;
 
         if (error) throw error;
-        if (!businesses) return NextResponse.json({ success: true, message: "No businesses found." });
+        if (!allBusinesses) return NextResponse.json({ success: true, message: "No businesses found." });
+
+        // Most-neglected first, so the per-run cap rotates fairly.
+        const businesses = [...allBusinesses].sort(
+            (a, b) => stalenessOf(a.theme_config) - stalenessOf(b.theme_config)
+        );
 
         let syncedBusinessesCount = 0;
         const now = new Date();
@@ -176,17 +216,20 @@ export async function GET(request: Request) {
                     .eq('id', business.id);
                 syncedBusinessesCount++;
 
-                // Limit to 2 businesses per cron run to avoid Vercel Serverless 10s timeout!
-                if (syncedBusinessesCount >= 2) {
-                    console.log("[Auto-Sync] Reached limit of 2 businesses for this run. Stopping to prevent timeout.");
+                // Bounded per run so the function cannot time out. Safe to cut
+                // short because the list is ordered most-neglected first, so
+                // whoever is skipped now leads the next run.
+                if (syncedBusinessesCount >= MAX_BUSINESSES_PER_RUN) {
+                    console.log(`[Auto-Sync] Hit the ${MAX_BUSINESSES_PER_RUN}-business cap for this run.`);
                     break;
                 }
             }
         }
 
-        return NextResponse.json({ 
-            success: true, 
-            message: `Auto-sync completed. Processed ${syncedBusinessesCount} businesses.` 
+        return NextResponse.json({
+            success: true,
+            scope: caller.kind === "scheduler" ? "all" : "own",
+            message: `Auto-sync completed. Processed ${syncedBusinessesCount} businesses.`
         });
 
     } catch (err: any) {

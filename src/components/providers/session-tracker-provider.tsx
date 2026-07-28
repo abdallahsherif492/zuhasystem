@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { usePathname } from "next/navigation";
+import * as Sentry from "@sentry/nextjs";
 import { supabase } from "@/lib/supabase";
 import { useBusiness } from "@/contexts/BusinessContext";
 import {
@@ -50,6 +51,19 @@ export function SessionTrackerProvider() {
             reportRef.current();
         }
     }, [pathname]);
+
+    // Attach identity to error reports. Without this a Sentry issue says what
+    // broke but not who for — and "which tenant is affected" is the first
+    // question worth answering on a multi-tenant platform.
+    useEffect(() => {
+        if (currentUser?.email) {
+            Sentry.setUser({ email: currentUser.email });
+        } else {
+            Sentry.setUser(null);
+        }
+        Sentry.setTag("business_id", activeBusiness?.id ?? "none");
+        Sentry.setTag("business_name", activeBusiness?.name ?? "none");
+    }, [currentUser?.email, activeBusiness?.id, activeBusiness?.name]);
 
     useEffect(() => {
         if (typeof window === "undefined") return;
