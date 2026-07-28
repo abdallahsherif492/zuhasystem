@@ -25,7 +25,7 @@ export function MobileNav() {
                         <div className="relative h-20 w-40">
                             <Image
                                 src={activeBusiness?.logo_url || "/logo.png"}
-                                alt="Store Logo"
+                                alt={activeBusiness?.name || "eCommerx Logo"}
                                 fill
                                 className="object-contain"
                                 priority

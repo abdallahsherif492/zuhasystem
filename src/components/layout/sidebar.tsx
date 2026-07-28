@@ -34,8 +34,8 @@ export function Sidebar({ className }: SidebarProps) {
                     <div className="flex items-center justify-center mb-8 px-2 flex-col gap-2">
                         <div className="relative h-20 w-40 transition-transform hover:scale-105 duration-300">
                             <Image
-                                src="/logo.png"
-                                alt="eCommerx Logo"
+                                src={activeBusiness?.logo_url || "/logo.png"}
+                                alt={activeBusiness?.name || "eCommerx Logo"}
                                 fill
                                 className="object-contain"
                                 priority

@@ -93,13 +93,16 @@ export function WalkthroughProvider({ children }: { children: React.ReactNode })
     const pages = getFullTourPages();
     if (pages.length === 0) return;
 
+    // Immediately mark as completed so it doesn't run on reload
+    markTourCompleted();
+
     let currentPageIndex = 0;
+    let isCanceled = false;
 
     const runPageTour = (pageIndex: number) => {
       if (pageIndex >= pages.length) {
-        // Tour complete — mark as completed
+        // Tour complete
         setIsTouring(false);
-        markTourCompleted();
         return;
       }
 
@@ -134,14 +137,22 @@ export function WalkthroughProvider({ children }: { children: React.ReactNode })
           progressText: `${page.title} — {{current}} من {{total}}`,
           popoverClass: "ecommerx-walkthrough",
           steps,
+          onCloseClick: () => {
+            isCanceled = true;
+            driverObj.destroy();
+          },
           onDestroyed: () => {
+            if (isCanceled) {
+              setIsTouring(false);
+              return;
+            }
+            
             // Check if we should move to next page
             currentPageIndex = pageIndex + 1;
             if (currentPageIndex < pages.length) {
               runPageTour(currentPageIndex);
             } else {
               setIsTouring(false);
-              markTourCompleted();
             }
           },
         });
