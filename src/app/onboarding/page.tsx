@@ -89,16 +89,10 @@ export default function OnboardingPage() {
                 return;
             }
 
-            // 1. Create the business with 1-Month Free Trial (subscription_end_date & trial_ends_at = 1 month from now)
-            const now = new Date();
-            const oneMonthFromNow = new Date(now);
-            oneMonthFromNow.setMonth(oneMonthFromNow.getMonth() + 1);
-
+            // 1. Create the business (Trigger in DB handles 1-Month Free Trial automatically)
             const insertData: any = {
                 name: businessName,
                 subscription_status: "trial",
-                subscription_end_date: oneMonthFromNow.toISOString(),
-                trial_ends_at: oneMonthFromNow.toISOString(),
             };
 
             if (planId) {
