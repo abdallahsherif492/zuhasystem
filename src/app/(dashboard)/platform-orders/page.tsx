@@ -193,14 +193,37 @@ function PlatformOrdersContent() {
         setLoading(false);
     };
 
+    // Both of these ask for the changed rows back and insist on getting one.
+    //
+    // A filtered UPDATE that matches nothing is a success in PostgREST — no
+    // error, no rows. That is exactly what happened to line items whose
+    // business_id was NULL: mapping a product appeared to work, the UI updated
+    // optimistically, and the order moved into fulfilment still carrying
+    // "unknown product". Silent no-ops must not be mistaken for saves.
     const handleUpdateOrder = async (orderId: string, updates: any) => {
-        const { error } = await supabase.from('orders').update(updates).eq('business_id', activeBusiness!.id).eq('id', orderId);
+        const { data, error } = await supabase
+            .from('orders')
+            .update(updates)
+            .eq('business_id', activeBusiness!.id)
+            .eq('id', orderId)
+            .select('id');
         if (error) throw error;
+        if (!data || data.length === 0) {
+            throw new Error("لم يتم حفظ التعديل على الأوردر. حدّث الصفحة وجرّب تاني.");
+        }
     };
 
     const handleUpdateItem = async (itemId: string, updates: any) => {
-        const { error } = await supabase.from('order_items').update(updates).eq('business_id', activeBusiness!.id).eq('id', itemId);
+        const { data, error } = await supabase
+            .from('order_items')
+            .update(updates)
+            .eq('business_id', activeBusiness!.id)
+            .eq('id', itemId)
+            .select('id');
         if (error) throw error;
+        if (!data || data.length === 0) {
+            throw new Error("لم يتم حفظ المنتج على الأوردر. حدّث الصفحة وجرّب تاني.");
+        }
     };
 
     const handleRecordDepositAndMoveToPending = async (order: Order, accountName: string) => {

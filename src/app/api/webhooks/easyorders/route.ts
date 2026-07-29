@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { logIntegrationActivity } from '@/lib/logs/integration-logger';
 
 // Dictionary for Governorate mapping (Arabic to English)
 const GOVERNORATE_MAPPING: Record<string, string> = {
@@ -264,8 +265,14 @@ export async function POST(request: Request) {
         }
 
         // 6. Create Order Items
+        //
+        // business_id is required here. It was missing, so every EasyOrders
+        // line item was written with a NULL tenant — 942 of them — and any
+        // later update scoped by business_id matched zero rows and silently
+        // did nothing. The Shopify webhook already sets it.
         const itemsToInsert = processedItems.map(item => ({
             ...item,
+            business_id: businessId,
             order_id: newOrder.id
         }));
 
@@ -276,6 +283,8 @@ export async function POST(request: Request) {
 
             if (itemsError) {
                 console.error("Order Items Insert Error:", itemsError);
+                logIntegrationActivity(businessId, "EasyOrders", "error",
+                    `Order ${newOrder.id} saved but its items failed to insert: ${itemsError.message}`);
             }
         }
 
