@@ -102,6 +102,8 @@ SET search_path = public
 AS $$
 DECLARE
     v_unmapped INTEGER;
+    v_total    INTEGER;
+    v_ref      TEXT;
 BEGIN
     IF lower(coalesce(OLD.status, '')) <> 'waiting' THEN
         RETURN NEW;
@@ -110,13 +112,25 @@ BEGIN
         RETURN NEW;
     END IF;
 
-    SELECT count(*) INTO v_unmapped
+    SELECT count(*), count(*) FILTER (WHERE variant_id IS NULL)
+      INTO v_total, v_unmapped
     FROM public.order_items
-    WHERE order_id = NEW.id AND variant_id IS NULL;
+    WHERE order_id = NEW.id;
+
+    -- Name the order in the message. A bulk status change is one statement, so
+    -- one bad row aborts the whole batch — the operator needs to know which
+    -- order to fix rather than re-selecting fifty to find it.
+    v_ref := coalesce(NEW.easyorders_id, left(NEW.id::text, 8));
+
+    IF v_total = 0 THEN
+        RAISE EXCEPTION
+            'الأوردر % مفيهوش أي منتجات، مش ممكن يتحرك. راجعه أو الغيه.', v_ref
+            USING ERRCODE = 'P0001';
+    END IF;
 
     IF v_unmapped > 0 THEN
         RAISE EXCEPTION
-            'لسه في % منتج غير محدد في الأوردر ده. اربط كل المنتجات الأول قبل ما تحركه.', v_unmapped
+            'الأوردر % لسه فيه % منتج غير محدد. اربط كل المنتجات الأول قبل ما تحركه.', v_ref, v_unmapped
             USING ERRCODE = 'P0001';
     END IF;
 
