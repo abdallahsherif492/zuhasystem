@@ -1,5 +1,3 @@
-import { supabase } from "./supabase";
-
 export type InventoryItem = {
     variant_id: string;
     qty: number;
@@ -8,8 +6,30 @@ export type InventoryItem = {
 };
 
 /**
- * Validates if the order can be placed based on stock and track_inventory settings.
- * Returns true if valid, throws error if invalid.
+ * Order statuses in which the goods have physically left the shelf.
+ *
+ * MUST stay in sync with the SQL function `is_stock_out()` in
+ * supabase/migrations/20260730_inventory_ledger.sql — the database is the
+ * authority that actually moves stock; this copy exists only so the UI can
+ * warn about overselling before a save. Compared lower-cased.
+ */
+export const STOCK_OUT_STATUSES = [
+    "prepared",
+    "shipped",
+    "delivered",
+    "collected",
+    "hold to redeliver",
+    "returning",
+];
+
+/**
+ * Validates that tracked items have enough stock. Returns true, or throws.
+ *
+ * This is an oversell guard only. Stock is mutated exclusively by database
+ * triggers (see the inventory ledger migration) so that every path — the
+ * courier sync, the CSV importer, bulk actions, order edits — moves stock
+ * consistently and writes the audit ledger. Nothing in the app deducts or
+ * restocks directly anymore.
  */
 export async function validateStock(items: InventoryItem[]) {
     for (const item of items) {
@@ -18,64 +38,4 @@ export async function validateStock(items: InventoryItem[]) {
         }
     }
     return true;
-}
-
-/**
- * Deducts stock for a list of items and logs transactions.
- */
-export async function deductStock(
-    business_id: string,
-    items: { variant_id: string; qty: number; track_inventory: boolean }[],
-    orderId: string,
-    note: string = "Order Creation",
-    type: string = "sale"
-) {
-    for (const item of items) {
-        // 1. Decrement Stock (Always call, passing logic flag)
-        const { error: updateError } = await supabase.rpc('decrement_stock', {
-            row_id: item.variant_id,
-            amount: item.qty,
-            is_open: !item.track_inventory // track_inventory=false => Open Product
-        });
-
-        // 2. Log Transaction
-        if (!updateError) {
-            await supabase.from('inventory_transactions').insert({
-                variant_id: item.variant_id,
-                quantity_change: -item.qty,
-                transaction_type: type,
-                reference_id: orderId,
-                note: note
-            });
-        }
-    }
-}
-
-/**
- * Restocks items for a returned order.
- */
-export async function restockItems(
-    business_id: string,
-    items: { variant_id: string; qty: number; track_inventory: boolean }[],
-    orderId: string,
-    note: string = "Order Returned"
-) {
-    for (const item of items) {
-        // 1. Increment Stock (Always for consistency, even Open products represent physical items when returned)
-        const { error: updateError } = await supabase.rpc('increment_stock', {
-            row_id: item.variant_id,
-            amount: item.qty
-        });
-
-        // 2. Log Transaction
-        if (!updateError) {
-            await supabase.from('inventory_transactions').insert({
-                variant_id: item.variant_id,
-                quantity_change: item.qty,
-                transaction_type: 'return',
-                reference_id: orderId,
-                note: note
-            });
-        }
-    }
 }

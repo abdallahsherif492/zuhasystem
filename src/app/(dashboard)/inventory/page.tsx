@@ -21,7 +21,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Loader2, Search, ArrowUpRight, ArrowDownRight, Package, Box, Plus, Edit } from "lucide-react";
+import { Loader2, Search, ArrowUpRight, ArrowDownRight, Package, Box, Plus, Edit, AlertTriangle } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import {
@@ -52,6 +52,7 @@ export default function InventoryPage() {
     const [loading, setLoading] = useState(true);
     const [stockItems, setStockItems] = useState<any[]>([]);
     const [transactions, setTransactions] = useState<any[]>([]);
+    const [mismatches, setMismatches] = useState<any[]>([]);
     const [searchQuery, setSearchQuery] = useState("");
 
     useEffect(() => {
@@ -88,12 +89,20 @@ export default function InventoryPage() {
                 .limit(50);
 
             if (transError) {
-                // Ignore 404/missing table error initially if migration hasn't run, 
+                // Ignore 404/missing table error initially if migration hasn't run,
                 // but generally we expect it to exist.
                 console.warn("Transactions fetch error", transError);
             } else {
                 setTransactions(trans || []);
             }
+
+            // 3. Reconciliation: variants whose counter disagrees with the
+            //    ledger. Expected empty; anything here is stock that moved
+            //    without going through the triggers. Ignored gracefully if the
+            //    inventory-ledger migration has not run yet.
+            const { data: recon, error: reconError } = await supabase
+                .rpc("get_inventory_reconciliation", { p_business_id: activeBusiness.id });
+            if (!reconError) setMismatches(recon || []);
 
         } catch (error) {
             console.error("Error fetching inventory:", error);
@@ -181,8 +190,11 @@ export default function InventoryPage() {
                     .eq('id', selectedVariant.id);
             }
 
-            // 3. Log Transaction
-            await supabase.from('inventory_transactions').insert({
+            // 3. Log Transaction — the error must be checked. This insert
+            //    silently failed for months (it referenced a business_id column
+            //    that did not exist), so the counter moved while the audit
+            //    ledger recorded nothing, which is what let stock drift unseen.
+            const { error: logError } = await supabase.from('inventory_transactions').insert({
                 business_id: activeBusiness!.id,
                 variant_id: selectedVariant.id,
                 quantity_change: changeAmount,
@@ -190,6 +202,7 @@ export default function InventoryPage() {
                 reference_id: null,
                 note: `Action: ${restockForm.type}. Note: ${restockForm.supplier || 'N/A'}`
             });
+            if (logError) throw logError;
 
             toast.success("Stock updated successfully");
             setIsRestockOpen(false);
@@ -269,6 +282,50 @@ export default function InventoryPage() {
                     </CardContent>
                 </Card>
             </div>
+
+            {/* Reconciliation: on-hand vs ledger. Empty = healthy. */}
+            {mismatches.length > 0 && (
+                <Card className="border-amber-400 bg-amber-50 dark:bg-amber-950/30">
+                    <CardHeader className="pb-3">
+                        <CardTitle className="text-base flex items-center gap-2 text-amber-800 dark:text-amber-300">
+                            <AlertTriangle className="h-5 w-5" />
+                            {t("Stock mismatch")} ({mismatches.length})
+                        </CardTitle>
+                        <p className="text-sm text-amber-700 dark:text-amber-400">
+                            {t("These variants' on-hand count disagrees with the movement log — stock changed without going through the system. Recount and adjust.")}
+                        </p>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="rounded-md border border-amber-200 dark:border-amber-900 overflow-x-auto bg-white dark:bg-slate-950">
+                            <table className="w-full text-sm">
+                                <thead>
+                                    <tr className="border-b text-muted-foreground text-xs">
+                                        <th className="text-start p-2.5">{t("Product")}</th>
+                                        <th className="text-start p-2.5">{t("Variant")}</th>
+                                        <th className="text-end p-2.5">{t("On Hand")}</th>
+                                        <th className="text-end p-2.5">{t("Ledger")}</th>
+                                        <th className="text-end p-2.5">{t("Difference")}</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {mismatches.map((m: any) => (
+                                        <tr key={m.variant_id} className="border-b last:border-0">
+                                            <td className="p-2.5 font-medium">{m.product_name}</td>
+                                            <td className="p-2.5 text-muted-foreground">{m.variant_title}</td>
+                                            <td className="p-2.5 text-end tabular-nums">{m.stock_qty}</td>
+                                            <td className="p-2.5 text-end tabular-nums">{m.ledger_qty}</td>
+                                            <td className={cn("p-2.5 text-end tabular-nums font-bold",
+                                                m.difference > 0 ? "text-green-600" : "text-red-600")}>
+                                                {m.difference > 0 ? "+" : ""}{m.difference}
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    </CardContent>
+                </Card>
+            )}
 
             <Tabs defaultValue="stock">
                 <TabsList>

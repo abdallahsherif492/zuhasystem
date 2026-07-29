@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { formatCurrency } from "@/lib/utils";
-import { deductStock, validateStock } from "@/lib/inventory";
+import { validateStock } from "@/lib/inventory";
 import { ProductWithVariants, Variant } from "@/types";
 import { Button } from "@/components/ui/button";
 import {

@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { formatCurrency } from "@/lib/utils";
-import { restockItems, deductStock, validateStock } from "@/lib/inventory";
 import { syncStatusToEasyOrders } from "@/lib/easyorders";
 import { processOrderForVrobo } from "@/lib/vrobo/api";
 import { logBusinessAction } from "@/lib/logs/actions-logger";
@@ -266,55 +265,14 @@ function LogisticsContent() {
 
             if (error) throw error;
 
-            // Handle Inventory Logic for each order (simplified loop)
-            // Note: Ideally this should be a batch RPC for performance, but loop is acceptable for typical usage
-            const preStates = ["Pending", "Processing", "Cancelled", "Unavailable"];
-            const newIsPreState = preStates.includes(newStatus);
-
+            // Stock movement is now owned by the database trigger on
+            // orders.status — the UPDATE above already applied it, idempotently
+            // and for every order regardless of which path changed the status.
+            // This loop only fires the side integrations.
             for (const oid of orderIds) {
                 const order = orders.find(o => o.id === oid);
                 if (!order) continue;
                 const oldStatus = order.status;
-                const oldIsPreState = preStates.includes(oldStatus);
-
-                const isFullDeduction = oldIsPreState && !newIsPreState;
-                const isFullRestock = !oldIsPreState && newIsPreState;
-
-                if (isFullDeduction) {
-                    const { data: items } = await supabase
-                        .from('order_items')
-                        .select('variant_id, quantity, variant:variants(track_inventory)')
-                        .eq('order_id', oid);
-                    if (items) {
-                        await deductStock(
-                            activeBusiness!.id,
-                            items.map((i: any) => ({
-                                variant_id: i.variant_id,
-                                qty: i.quantity,
-                                track_inventory: i.variant?.track_inventory
-                            })),
-                            oid,
-                            `Logistics: Status Change to ${newStatus}`
-                        );
-                    }
-                } else if (isFullRestock) {
-                    const { data: items } = await supabase
-                        .from('order_items')
-                        .select('variant_id, quantity, variant:variants(track_inventory)')
-                        .eq('order_id', oid);
-                    if (items) {
-                        await restockItems(
-                            activeBusiness!.id,
-                            items.map((i: any) => ({
-                                variant_id: i.variant_id,
-                                qty: i.quantity,
-                                track_inventory: i.variant?.track_inventory
-                            })),
-                            oid,
-                            `Logistics: Status Change to ${newStatus} (Restocked)`
-                        );
-                    }
-                }
 
                 // Sync with EasyOrders if applicable
                 if (activeBusiness) {

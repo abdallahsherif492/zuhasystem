@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { formatCurrency } from "@/lib/utils";
-import { restockItems, deductStock, validateStock } from "@/lib/inventory";
+import { STOCK_OUT_STATUSES } from "@/lib/inventory";
 import { syncStatusToEasyOrders } from "@/lib/easyorders";
 import { processOrderForVrobo } from "@/lib/vrobo/api";
 import { Button } from "@/components/ui/button";
@@ -292,95 +292,42 @@ export default function OrderDetailsPage() {
             const newTotalCost = editItems.reduce((acc, i) => acc + (i.cost_price * i.quantity), 0);
             const newTotal = Math.max(0, newSubtotal + editForm.shippingCost - editForm.discount);
 
-            // 2. Validate Stock (Changes Only)
-            // We need to fetch FRESH stock data because 'editItems.stock_qty' might be stale.
-            const variantIds = [...new Set(editItems.map(i => i.variantId))];
-            const { data: freshVariants } = await supabase
-                .from('variants')
-                .select('id, stock_qty, track_inventory')
-                .eq('business_id', activeBusiness!.id)
-                .in('id', variantIds);
-
-            // New State Machine Definition
-            // Pre-Deduction States: Pending, Cancelled (Cancelled before sending)
-            // Post-Deduction States: Prepared, Shipped, Delivered, Collected, Returned (Returned represents physical stock, but logically it was deducted then added back by a transaction. For simple status transitions, moving FROM a pre-state TO a post-state triggers FULL DEDUCTION. Moving FROM a post-state TO a pre-state triggers FULL RESTOCK.)
-            const preStates = ["Pending", "Processing", "Cancelled", "Unavailable"];
-            const oldIsPreState = preStates.includes(order.status);
-            const newIsPreState = preStates.includes(editForm.status);
-
-            const isFullDeduction = oldIsPreState && !newIsPreState;
-            const isFullRestock = !oldIsPreState && newIsPreState;
-            const isDiffUpdate = !oldIsPreState && !newIsPreState; // Editing an already prepared/shipped order
-
-            // 3. Inventory Logic
-            // Compare Original Order Items vs Edit Items
-            // originalItemsMap: Map<variantId, quantity>
+            // 2. Oversell guard only — the DATABASE now owns stock movement.
+            //    Triggers on orders.status and order_items apply every deduction
+            //    and restock (see the inventory ledger migration), so this block
+            //    must not mutate stock. It only blocks selling more of a tracked
+            //    variant than is on hand, at the moment goods leave the shelf.
             const originalItems = order.items;
-            const originalMap = new Map();
-            originalItems.forEach((i: any) => {
-                originalMap.set(i.variant_id, (originalMap.get(i.variant_id) || 0) + i.quantity);
-            });
+            const wasOut = STOCK_OUT_STATUSES.includes((order.status || "").toLowerCase().trim());
+            const willBeOut = STOCK_OUT_STATUSES.includes((editForm.status || "").toLowerCase().trim());
 
-            const newMap = new Map();
-            editItems.forEach((i: any) => {
-                newMap.set(i.variantId, (newMap.get(i.variantId) || 0) + i.quantity);
-            });
+            if (willBeOut) {
+                const variantIds = [...new Set(editItems.map(i => i.variantId))];
+                const { data: freshVariants } = await supabase
+                    .from('variants')
+                    .select('id, stock_qty, track_inventory')
+                    .eq('business_id', activeBusiness!.id)
+                    .in('id', variantIds);
 
-            const allInvolvedVariants = new Set([...originalMap.keys(), ...newMap.keys()]);
-
-            // Prepare Stock Adjustments
-            const deductionQueue: { variant_id: string, qty: number, track_inventory: boolean }[] = [];
-            const restockQueue: { variant_id: string, qty: number, track_inventory: boolean }[] = [];
-
-            if (isFullDeduction) {
-                // Deduct EVERYTHING based on the NEW map
-                for (const [vid, qty] of Array.from(newMap.entries())) {
-                    const vInfo = freshVariants?.find(v => v.id === vid);
-                    const trackInv = vInfo?.track_inventory ?? false;
-
-                    if (trackInv && (vInfo?.stock_qty || 0) < qty) {
-                        throw new Error(`Insufficient stock for variant ${vid}. Need ${qty}, have ${vInfo?.stock_qty || 0}.`);
-                    }
-                    deductionQueue.push({ variant_id: vid as string, qty: qty, track_inventory: trackInv });
+                // Units already out (only if the order was already in a deducted
+                // state); the DB will move just the increase over these.
+                const alreadyOut = new Map<string, number>();
+                if (wasOut) {
+                    (originalItems || []).forEach((i: any) =>
+                        alreadyOut.set(i.variant_id, (alreadyOut.get(i.variant_id) || 0) + i.quantity));
                 }
-            } else if (isFullRestock) {
-                // Restock EVERYTHING based on the OLD map (since the order is basically being cancelled/reset)
-                // Wait, if they edit items AND cancel at the same time, we restock what was originally deducted.
-                for (const [vid, qty] of Array.from(originalMap.entries())) {
-                    const vInfo = freshVariants?.find(v => v.id === vid);
-                    const trackInv = vInfo?.track_inventory ?? false;
-                    restockQueue.push({ variant_id: vid as string, qty: qty, track_inventory: trackInv });
-                }
-            } else if (isDiffUpdate) {
-                // Standard Diffing
-                for (const vid of Array.from(allInvolvedVariants)) {
-                    const oldQty = originalMap.get(vid) || 0;
-                    const newQty = newMap.get(vid) || 0;
-                    const diff = newQty - oldQty;
+                const wantMap = new Map<string, number>();
+                editItems.forEach((i: any) =>
+                    wantMap.set(i.variantId, (wantMap.get(i.variantId) || 0) + i.quantity));
 
+                for (const [vid, want] of Array.from(wantMap.entries())) {
                     const vInfo = freshVariants?.find(v => v.id === vid);
-                    const trackInv = vInfo?.track_inventory ?? false;
-
-                    if (diff > 0) {
-                        if (trackInv) {
-                            const available = vInfo?.stock_qty || 0;
-                            if (available < diff) {
-                                throw new Error(`Insufficient stock for variant ${vid}. Need ${diff} more, have ${available}.`);
-                            }
-                        }
-                        deductionQueue.push({ variant_id: vid as string, qty: diff, track_inventory: trackInv });
-                    } else if (diff < 0) {
-                        restockQueue.push({ variant_id: vid as string, qty: Math.abs(diff), track_inventory: trackInv });
+                    if (!vInfo?.track_inventory) continue;
+                    const needed = want - (alreadyOut.get(vid) || 0);
+                    if (needed > 0 && (vInfo.stock_qty || 0) < needed) {
+                        throw new Error(`مخزون غير كافٍ. المتاح ${vInfo.stock_qty || 0}، والمطلوب خصمه ${needed}.`);
                     }
                 }
-            }
-
-            // 4. Apply Stock Changes
-            if (deductionQueue.length > 0) {
-                await deductStock(activeBusiness!.id, deductionQueue, orderId, "Order Edit: Added Items/Qty");
-            }
-            if (restockQueue.length > 0) {
-                await restockItems(activeBusiness!.id, restockQueue, orderId, "Order Edit: Removed Items/Qty");
             }
 
             // 5 & 6. Transactional Update via RPC
@@ -487,34 +434,9 @@ export default function OrderDetailsPage() {
             });
 
 
-            // 7. Status change logic is now handled in the state machine blocks above.
-            // However, the "Returned" status implies the items *came back* to the warehouse physically.
-            // The isFullRestock handles "Pending/Cancelled". 
-            // If new status is "Returned" AND old status was a post-state (e.g. Delivered), we must restock.
-            // But wait, what if they change from Pending to Returned? That shouldn't restock because it never deducted.
-            if (editForm.status === 'Returned' && order.status !== 'Returned') {
-                if (!oldIsPreState) {
-                    // It was deducted previously, now it's returned.
-                    // The Diff logic currently ignores 'Returned' as a special case. 
-                    // Let's manually restock the *final* items here if it wasn't caught by isFullRestock.
-                    const finalItems = editItems.map(i => ({
-                        variant_id: i.variantId,
-                        qty: i.quantity,
-                        track_inventory: i.track_inventory
-                    }));
-                    await restockItems(activeBusiness!.id, finalItems, orderId, "Status Change: Returned");
-                }
-            } else if (order.status === 'Returned' && editForm.status !== 'Returned') {
-                if (!newIsPreState) {
-                    // Taking it OUT of returned, back to a deducted state (like Shipped).
-                    const finalItems = editItems.map(i => ({
-                        variant_id: i.variantId,
-                        qty: i.quantity,
-                        track_inventory: i.track_inventory
-                    }));
-                    await deductStock(activeBusiness!.id, finalItems, orderId, "Status Change: Un-returned");
-                }
-            }
+            // 7. Status-driven stock (including Returned → restock) is applied
+            //    by the database trigger on orders.status inside the RPC above,
+            //    so no stock handling is needed here.
 
             const paymentStatusChanged = editForm.paymentStatus !== order.payment_status;
             const paidAmountChanged = editForm.paidAmount !== order.paid_amount;
