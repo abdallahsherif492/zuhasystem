@@ -55,6 +55,7 @@ export async function syncStatusToEasyOrders(orderId: string, newStatus: string,
         const { data: order } = await supabase
             .from('orders')
             .select('easyorders_id')
+            .eq('business_id', businessId)
             .eq('id', orderId)
             .single();
 

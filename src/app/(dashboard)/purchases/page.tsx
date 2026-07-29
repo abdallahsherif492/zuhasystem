@@ -154,6 +154,7 @@ export default function PurchasesPage() {
         const { error } = await supabase
             .from("orders")
             .update({ status: "Prepared" })
+            .eq("business_id", activeBusiness!.id)
             .eq("id", orderId);
 
         if (error) throw error;

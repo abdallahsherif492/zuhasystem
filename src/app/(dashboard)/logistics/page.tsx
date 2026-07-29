@@ -261,6 +261,7 @@ function LogisticsContent() {
             const { error } = await supabase
                 .from("orders")
                 .update(payload)
+                .eq("business_id", activeBusiness!.id)
                 .in("id", orderIds);
 
             if (error) throw error;
@@ -411,6 +412,7 @@ function LogisticsContent() {
             const { error } = await supabase
                 .from("orders")
                 .update({ shipping_company_id: companyId || null }) // null if empty string
+                .eq("business_id", activeBusiness!.id)
                 .eq("id", orderId);
 
             if (error) throw error;

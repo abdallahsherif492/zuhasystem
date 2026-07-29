@@ -117,12 +117,12 @@ export default function OrderDetailsPage() {
     const [accounts, setAccounts] = useState<{ id: string; name: string }[]>([]);
 
     useEffect(() => {
-        fetchOrderDetails();
         if (activeBusiness) {
+            fetchOrderDetails();
             fetchProducts();
             fetchAccounts();
+            fetchShippingCompanies();
         }
-        fetchShippingCompanies();
     }, [orderId, activeBusiness]);
 
     // Helpers for Product Selection
@@ -159,11 +159,18 @@ export default function OrderDetailsPage() {
 
 
     async function fetchShippingCompanies() {
-        const { data } = await supabase.from("shipping_companies").select("*").eq("active", true).order("name");
+        if (!activeBusiness) return;
+        const { data } = await supabase
+            .from("shipping_companies")
+            .select("*")
+            .eq("business_id", activeBusiness.id)
+            .eq("active", true)
+            .order("name");
         setShippingCompanies(data || []);
     }
 
     async function fetchOrderDetails() {
+        if (!activeBusiness) return;
         try {
             const { data, error } = await supabase
                 .from("orders")
@@ -180,6 +187,7 @@ export default function OrderDetailsPage() {
                         )
                     )
                 `)
+                .eq("business_id", activeBusiness!.id)
                 .eq("id", orderId)
                 .single();
 
@@ -290,6 +298,7 @@ export default function OrderDetailsPage() {
             const { data: freshVariants } = await supabase
                 .from('variants')
                 .select('id, stock_qty, track_inventory')
+                .eq('business_id', activeBusiness!.id)
                 .in('id', variantIds);
 
             // New State Machine Definition

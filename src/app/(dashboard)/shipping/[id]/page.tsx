@@ -2,6 +2,7 @@
 
 import { useEffect, useState, Suspense } from "react";
 import { supabase } from "@/lib/supabase";
+import { useBusiness } from "@/contexts/BusinessContext";
 import { useSearchParams, useRouter, useParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { DateRangePicker } from "@/components/date-range-picker";
@@ -43,6 +44,7 @@ type CompanyDetails = {
 };
 
 function ShippingCompanyDetailsContent() {
+    const { activeBusiness } = useBusiness();
     const params = useParams();
     const router = useRouter();
     const searchParams = useSearchParams();
@@ -81,9 +83,10 @@ function ShippingCompanyDetailsContent() {
             return;
         }
         fetchData();
-    }, [companyId, fromDate, toDate]);
+    }, [companyId, fromDate, toDate, activeBusiness]);
 
     const fetchData = async () => {
+        if (!activeBusiness) return;
         setLoading(true);
         try {
             const start = fromDate ? `${fromDate}T00:00:00` : new Date().toISOString();
@@ -94,6 +97,7 @@ function ShippingCompanyDetailsContent() {
                 const { data: companyData, error: companyError } = await supabase
                     .from('shipping_companies')
                     .select('*')
+                    .eq('business_id', activeBusiness.id)
                     .eq('id', companyId)
                     .single();
                 if (companyError) throw companyError;
@@ -104,6 +108,7 @@ function ShippingCompanyDetailsContent() {
             const { data: ordersData, error: ordersError } = await supabase
                 .from('orders')
                 .select('id, status, total_amount, shipping_cost, created_at, customer_info')
+                .eq('business_id', activeBusiness.id)
                 .eq('shipping_company_id', companyId)
                 .gte('created_at', start)
                 .lte('created_at', end)

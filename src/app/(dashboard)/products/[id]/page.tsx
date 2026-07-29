@@ -82,16 +82,17 @@ export default function EditProductPage() {
     });
 
     useEffect(() => {
-        if (id) {
+        if (id && activeBusiness) {
             fetchProduct();
         }
-    }, [id]);
+    }, [id, activeBusiness]);
 
     async function fetchProduct() {
         try {
             const { data: product, error } = await supabase
                 .from("products")
                 .select(`*, variants(*)`)
+                .eq("business_id", activeBusiness!.id)
                 .eq("id", id)
                 .single();
 
@@ -128,7 +129,7 @@ export default function EditProductPage() {
     async function handleDeleteProduct() {
         try {
             setDeleting(true);
-            const { error } = await supabase.from('products').delete().eq('id', id);
+            const { error } = await supabase.from('products').delete().eq('business_id', activeBusiness!.id).eq('id', id);
             if (error) {
                 if (error.code === '23503') {
                     throw new Error("Cannot delete this product because it is linked to existing orders. Please delete those orders first or keep the product.");
@@ -173,6 +174,7 @@ export default function EditProductPage() {
                     name: values.name,
                     description: values.description,
                 })
+                .eq("business_id", activeBusiness!.id)
                 .eq("id", id);
 
             if (productError) throw productError;
@@ -186,6 +188,7 @@ export default function EditProductPage() {
                 const { error: deleteError } = await supabase
                     .from("variants")
                     .delete()
+                    .eq("business_id", activeBusiness!.id)
                     .in("id", toDelete);
                 if (deleteError) {
                     if (deleteError.code === '23503') {
@@ -217,14 +220,14 @@ export default function EditProductPage() {
             if (updates.length > 0) {
                 const { error: updateError } = await supabase
                     .from("variants")
-                    .upsert(updates);
+                    .upsert(updates.map(v => ({ ...v, business_id: activeBusiness!.id })));
                 if (updateError) throw updateError;
             }
 
             if (inserts.length > 0) {
                 const { error: insertError } = await supabase
                     .from("variants")
-                    .insert(inserts);
+                    .insert(inserts.map(v => ({ ...v, business_id: activeBusiness!.id })));
                 if (insertError) throw insertError;
             }
 

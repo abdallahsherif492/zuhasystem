@@ -10,6 +10,7 @@ import { Loader2, ArrowRight } from "lucide-react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { format, startOfMonth } from "date-fns";
 import { Button } from "@/components/ui/button";
+import { useBusiness } from "@/contexts/BusinessContext";
 
 type CompanyMetrics = {
     id: string;
@@ -23,6 +24,7 @@ type CompanyMetrics = {
 };
 
 export function ShippingAnalytics() {
+    const { activeBusiness } = useBusiness();
     const router = useRouter();
     const searchParams = useSearchParams();
     const fromDate = searchParams.get("from");
@@ -40,9 +42,12 @@ export function ShippingAnalytics() {
             // passing checks here
         }
         fetchData();
-    }, [fromDate, toDate]);
+    }, [fromDate, toDate, activeBusiness]);
 
     const fetchData = async () => {
+        // Courier performance is per-tenant; without this the table mixed in
+        // every other business's orders and shipping companies.
+        if (!activeBusiness) return;
         setLoading(true);
         try {
             const start = fromDate ? `${fromDate}T00:00:00` : new Date().toISOString();
@@ -51,7 +56,8 @@ export function ShippingAnalytics() {
             // 1. Fetch Companies
             const { data: companies, error: companiesError } = await supabase
                 .from('shipping_companies')
-                .select('id, name');
+                .select('id, name')
+                .eq('business_id', activeBusiness.id);
 
             if (companiesError) throw companiesError;
 
@@ -65,6 +71,7 @@ export function ShippingAnalytics() {
                 const { data: chunk, error: chunkError } = await supabase
                     .from('orders')
                     .select('id, status, shipping_company_id, total_amount, shipping_cost')
+                    .eq('business_id', activeBusiness.id)
                     .gte('created_at', start)
                     .lte('created_at', end)
                     .not('shipping_company_id', 'is', null)

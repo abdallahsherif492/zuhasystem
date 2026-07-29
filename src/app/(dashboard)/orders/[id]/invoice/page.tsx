@@ -3,6 +3,7 @@
 import { useEffect, useState, use } from "react";
 import Image from "next/image";
 import { supabase } from "@/lib/supabase";
+import { useBusiness } from "@/contexts/BusinessContext";
 import { Loader2 } from "lucide-react";
 import { format } from "date-fns";
 import Barcode from 'react-barcode';
@@ -39,13 +40,14 @@ type InvoiceData = {
 export default function InvoicePage({ params }: { params: Promise<{ id: string }> }) {
     // Unwrap params using React.use()
     const { id } = use(params);
+    const { activeBusiness } = useBusiness();
 
     const [order, setOrder] = useState<InvoiceData | null>(null);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
         const fetchOrder = async () => {
-            if (!id) return;
+            if (!id || !activeBusiness) return;
 
             // Fetch order with related data
             // Note: We're assuming the foreign keys are set up correctly in Supabase
@@ -73,6 +75,7 @@ export default function InvoicePage({ params }: { params: Promise<{ id: string }
                         governorate
                     )
                 `)
+                .eq("business_id", activeBusiness.id)
                 .eq("id", id)
                 .single();
 
@@ -99,7 +102,7 @@ export default function InvoicePage({ params }: { params: Promise<{ id: string }
         };
 
         fetchOrder();
-    }, [id]);
+    }, [id, activeBusiness]);
 
     useEffect(() => {
         if (!loading && order) {

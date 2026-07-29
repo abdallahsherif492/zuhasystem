@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Loader2, ArrowLeft, Mail, Lock, User, Phone, Calendar } from "lucide-react";
+import { Loader2, ArrowLeft, Mail, Lock, User, Phone } from "lucide-react";
 import { motion } from "framer-motion";
 import { trackCompleteRegistration, flushPixelEvent } from "@/lib/meta-pixel";
 
@@ -21,7 +21,6 @@ export default function RegisterPage() {
     const [fullName, setFullName] = useState("");
     const [email, setEmail] = useState("");
     const [phone, setPhone] = useState("");
-    const [dob, setDob] = useState("");
     const [password, setPassword] = useState("");
     
     const [error, setError] = useState<string | null>(null);
@@ -39,8 +38,7 @@ export default function RegisterPage() {
                 options: {
                     data: {
                         full_name: fullName,
-                        phone: phone,
-                        date_of_birth: dob,
+                        phone: phone.trim() || null,
                     }
                 }
             });
@@ -162,43 +160,24 @@ export default function RegisterPage() {
                                 </div>
                             </div>
 
-                            <div className="grid grid-cols-2 gap-4">
-                                <div className="space-y-3">
-                                    <Label htmlFor="phone" className="text-slate-700 font-bold text-sm block text-right">رقم التليفون</Label>
-                                    <div className="relative">
-                                        <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
-                                            <Phone className="h-5 w-5 text-slate-400" />
-                                        </div>
-                                        <Input
-                                            id="phone"
-                                            name="phone"
-                                            type="tel"
-                                            required
-                                            value={phone}
-                                            onChange={(e) => setPhone(e.target.value)}
-                                            className="h-12 pr-10 pl-4 bg-slate-50 border-slate-200 focus:border-indigo-500 focus:ring-indigo-500 rounded-xl text-right transition-all"
-                                            placeholder="010..."
-                                            dir="ltr"
-                                        />
+                            <div className="space-y-3">
+                                <Label htmlFor="phone" className="text-slate-700 font-bold text-sm block text-right">
+                                    رقم التليفون <span className="font-normal text-slate-400">(اختياري)</span>
+                                </Label>
+                                <div className="relative">
+                                    <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
+                                        <Phone className="h-5 w-5 text-slate-400" />
                                     </div>
-                                </div>
-                                <div className="space-y-3">
-                                    <Label htmlFor="dob" className="text-slate-700 font-bold text-sm block text-right">تاريخ الميلاد</Label>
-                                    <div className="relative">
-                                        <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
-                                            <Calendar className="h-5 w-5 text-slate-400" />
-                                        </div>
-                                        <Input
-                                            id="dob"
-                                            name="dob"
-                                            type="date"
-                                            required
-                                            value={dob}
-                                            onChange={(e) => setDob(e.target.value)}
-                                            className="h-12 pr-10 pl-4 bg-slate-50 border-slate-200 focus:border-indigo-500 focus:ring-indigo-500 rounded-xl text-right transition-all"
-                                            dir="ltr"
-                                        />
-                                    </div>
+                                    <Input
+                                        id="phone"
+                                        name="phone"
+                                        type="tel"
+                                        value={phone}
+                                        onChange={(e) => setPhone(e.target.value)}
+                                        className="h-12 pr-10 pl-4 bg-slate-50 border-slate-200 focus:border-indigo-500 focus:ring-indigo-500 rounded-xl text-right transition-all"
+                                        placeholder="010..."
+                                        dir="ltr"
+                                    />
                                 </div>
                             </div>
 

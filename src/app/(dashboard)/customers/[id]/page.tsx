@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import { useBusiness } from "@/contexts/BusinessContext";
 import { formatCurrency } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -19,6 +20,7 @@ import {
 } from "@/components/ui/table";
 
 export default function CustomerDetailsPage() {
+    const { activeBusiness } = useBusiness();
     const params = useParams();
     const id = params?.id as string;
 
@@ -27,8 +29,8 @@ export default function CustomerDetailsPage() {
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        if (id) fetchData();
-    }, [id]);
+        if (id && activeBusiness) fetchData();
+    }, [id, activeBusiness]);
 
     async function fetchData() {
         try {
@@ -37,6 +39,7 @@ export default function CustomerDetailsPage() {
             const { data: customerData, error: custError } = await supabase
                 .from("customers")
                 .select("*")
+                .eq("business_id", activeBusiness!.id)
                 .eq("id", id)
                 .single();
             if (custError) throw custError;
@@ -45,6 +48,7 @@ export default function CustomerDetailsPage() {
             const { data: ordersData, error: ordError } = await supabase
                 .from("orders")
                 .select("*")
+                .eq("business_id", activeBusiness!.id)
                 .eq("customer_id", id)
                 .order("created_at", { ascending: false });
             if (ordError) throw ordError;

@@ -196,6 +196,7 @@ function PrintContent() {
                     customer_info,
                     order_type
                 `)
+                .eq("business_id", activeBusiness!.id)
                 .in("id", ids);
 
             if (data) {

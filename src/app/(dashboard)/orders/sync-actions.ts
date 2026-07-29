@@ -255,6 +255,7 @@ export async function applyShippingUpdatesAction(updates: SyncPreviewItem[], bus
             const { error } = await supabase
                 .from("orders")
                 .update(updatePayload)
+                .eq("business_id", businessId)
                 .eq("id", update.orderId);
             if (error) {
                 console.error(`Failed to update order ${update.orderId}:`, error);

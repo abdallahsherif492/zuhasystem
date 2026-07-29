@@ -194,12 +194,12 @@ function PlatformOrdersContent() {
     };
 
     const handleUpdateOrder = async (orderId: string, updates: any) => {
-        const { error } = await supabase.from('orders').update(updates).eq('id', orderId);
+        const { error } = await supabase.from('orders').update(updates).eq('business_id', activeBusiness!.id).eq('id', orderId);
         if (error) throw error;
     };
 
     const handleUpdateItem = async (itemId: string, updates: any) => {
-        const { error } = await supabase.from('order_items').update(updates).eq('id', itemId);
+        const { error } = await supabase.from('order_items').update(updates).eq('business_id', activeBusiness!.id).eq('id', itemId);
         if (error) throw error;
     };
 
@@ -496,7 +496,7 @@ function PlatformOrdersContent() {
         }));
 
         try {
-            await supabase.from('order_items').delete().eq('id', itemId);
+            await supabase.from('order_items').delete().eq('business_id', activeBusiness!.id).eq('id', itemId);
             toast.success(t("Item removed"));
         } catch(e) {
             toast.error(t("Failed to delete item"));

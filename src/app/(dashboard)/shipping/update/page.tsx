@@ -11,6 +11,7 @@ import { Loader2, Upload, CheckCircle2, AlertCircle, ArrowUpRight } from "lucide
 import Papa from "papaparse";
 import { toast } from "sonner";
 import { formatCurrency, cn } from "@/lib/utils";
+import { useBusiness } from "@/contexts/BusinessContext";
 
 type Order = {
     id: string;
@@ -45,6 +46,7 @@ type UnmatchedRow = {
 };
 
 export default function UpdateShippingPage() {
+    const { activeBusiness } = useBusiness();
     const [allOrders, setAllOrders] = useState<Order[]>([]);
     const [loading, setLoading] = useState(true);
 
@@ -58,18 +60,21 @@ export default function UpdateShippingPage() {
     const [unmatchedRows, setUnmatchedRows] = useState<UnmatchedRow[]>([]);
 
     useEffect(() => {
-        fetchOrders();
-    }, []);
+        if (activeBusiness) fetchOrders();
+    }, [activeBusiness]);
 
     const fetchOrders = async () => {
+        if (!activeBusiness) return;
         setLoading(true);
-        // Fetch ALL orders (item details needed for matching)
+        // Scoped to the active business: this page bulk-updates whatever it
+        // loads, so an unscoped read here would let one tenant mark another
+        // tenant's orders as delivered.
         const { data, error } = await supabase
             .from("orders")
             .select(`
-                id, 
-                customer_info, 
-                total_amount, 
+                id,
+                customer_info,
+                total_amount,
                 status,
                 items:order_items (
                     quantity,
@@ -79,6 +84,7 @@ export default function UpdateShippingPage() {
                     )
                 )
             `)
+            .eq("business_id", activeBusiness.id)
             .neq("status", "Cancelled");
 
         if (error) {
@@ -232,10 +238,12 @@ export default function UpdateShippingPage() {
     };
 
     const updateOrders = async (ids: string[]) => {
+        if (!activeBusiness) return;
         setIsProcessing(true);
         const { error } = await supabase
             .from("orders")
             .update({ status: "Delivered" })
+            .eq("business_id", activeBusiness.id)
             .in("id", ids);
 
         if (error) {

@@ -57,6 +57,7 @@ export async function syncStatusToShopify(orderId: string, newStatus: string, bu
         const { data: order } = await supabase
             .from('orders')
             .select('shopify_id, easyorders_id')
+            .eq('business_id', businessId)
             .eq('id', orderId)
             .single();
 

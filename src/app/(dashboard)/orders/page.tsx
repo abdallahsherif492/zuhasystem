@@ -118,7 +118,10 @@ function OrdersContent() {
             setProductsOptions(data.map(p => ({ label: p.name, value: p.id })));
         }
 
-        const { data: companies } = await supabase.from('shipping_companies').select('id, name');
+        const { data: companies } = await supabase
+            .from('shipping_companies')
+            .select('id, name')
+            .eq('business_id', activeBusiness.id);
         if (companies) {
             setShippingCompanies(companies);
         }
