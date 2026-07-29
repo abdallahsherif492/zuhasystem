@@ -67,61 +67,24 @@ export default function OnboardingPage() {
             const planId = new URLSearchParams(window.location.search).get('plan');
 
             
-            // Check quota before creating
-            const { data: userPerms } = await supabase
-                .from('user_permissions')
-                .select('max_businesses')
-                .eq('email', userEmail)
-                .single();
-
-            const maxBusinesses = userPerms?.max_businesses || 1;
-
-            // Check current owned businesses
-            const { count: ownedCount } = await supabase
-                .from('business_users')
-                .select('*', { count: 'exact', head: true })
-                .eq('user_email', userEmail)
-                .eq('role', 'owner');
-
-            if (ownedCount !== null && ownedCount >= maxBusinesses) {
-                setError(`You have reached the maximum limit of ${maxBusinesses} business profile(s) allowed for your account. Please contact support or upgrade.`);
-                setLoading(false);
-                return;
-            }
-
-            // 1. Create the business (Trigger in DB handles 1-Month Free Trial automatically)
-            const insertData: any = {
-                name: businessName,
-                subscription_status: "trial",
-            };
-
-            if (planId) {
-                insertData.plan_id = planId;
-            }
-
-            const { data: business, error: businessError } = await supabase
-                .from("businesses")
-                .insert(insertData)
-                .select("id")
-                .single();
-
-            if (businessError) throw businessError;
-
-            // 2. Link user as owner
-            const { error: linkError } = await supabase
-                .from("business_users")
-                .insert({
-                    business_id: business.id,
-                    user_email: userEmail,
-                    role: "owner"
+            // Creating the business and linking the owner happen together in
+            // create_business_with_owner(). Doing it from here as two inserts
+            // could not work: RLS blocks the insert, RETURNING cannot see the
+            // new row until the owner link exists, and a failure between the
+            // two left a business with no members. The quota is checked inside
+            // the function too, so it cannot be skipped via the REST API.
+            const { data: newBusinessId, error: createError } = await supabase
+                .rpc("create_business_with_owner", {
+                    p_name: businessName,
+                    p_plan_id: planId || null,
                 });
 
-            if (linkError) throw linkError;
+            if (createError) throw createError;
+            if (!newBusinessId) throw new Error("Business was not created. Please try again.");
 
-            // 3. Set Active Business ID in localStorage
-            safeLocal.set("activeBusinessId", business.id);
+            safeLocal.set("activeBusinessId", newBusinessId as string);
 
-            // 4. Force a hard reload to the dashboard so Context picks it up
+            // Force a hard reload to the dashboard so Context picks it up
             window.location.href = "/";
             
         } catch (err: any) {
