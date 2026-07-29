@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Plus, Pencil, Trash2, Truck, Upload } from "lucide-react";
+import { Loader2, Plus, Pencil, Trash2, Truck, Upload, Wallet } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -31,6 +31,8 @@ type ShippingCompany = {
     rates: Record<string, number>;
     active: boolean;
     is_default?: boolean;
+    cod_fee_percent?: number;
+    return_fee?: number;
 };
 
 export function ShippingManagement() {
@@ -46,7 +48,9 @@ export function ShippingManagement() {
         type: "Company" as 'Company' | 'Courier' | 'Office',
         phone: "",
         rates: {} as Record<string, number>,
-        is_default: false
+        is_default: false,
+        cod_fee_percent: 0,
+        return_fee: 0
     });
 
     useEffect(() => {
@@ -79,7 +83,9 @@ export function ShippingManagement() {
                 type: company.type,
                 phone: company.phone || "",
                 rates: company.rates || {},
-                is_default: company.is_default || false
+                is_default: company.is_default || false,
+                cod_fee_percent: Number(company.cod_fee_percent) || 0,
+                return_fee: Number(company.return_fee) || 0
             });
         } else {
             setEditingCompany(null);
@@ -88,7 +94,9 @@ export function ShippingManagement() {
                 type: "Company",
                 phone: "",
                 rates: {},
-                is_default: false
+                is_default: false,
+                cod_fee_percent: 0,
+                return_fee: 0
             });
         }
         setIsDialogOpen(true);
@@ -116,7 +124,9 @@ export function ShippingManagement() {
                 type: formData.type,
                 phone: formData.phone,
                 rates: formData.rates,
-                is_default: formData.is_default
+                is_default: formData.is_default,
+                cod_fee_percent: Number(formData.cod_fee_percent) || 0,
+                return_fee: Number(formData.return_fee) || 0
             };
 
             let error;
@@ -182,6 +192,12 @@ export function ShippingManagement() {
                     <p className="text-muted-foreground text-sm">Manage couriers, companies, and shipping rates.</p>
                 </div>
                 <div className="flex gap-2">
+                    <Link href="/shipping/settlements">
+                        <Button variant="outline">
+                            <Wallet className="mr-2 h-4 w-4" />
+                            تسوية الحسابات
+                        </Button>
+                    </Link>
                     <Link href="/shipping/update">
                         <Button variant="outline">
                             <Upload className="mr-2 h-4 w-4" />
@@ -286,7 +302,40 @@ export function ShippingManagement() {
                             </div>
                         </div>
 
-                        
+                        {/* Deductions the courier takes before transferring the
+                            collected cash. Drives the expected payout on the
+                            settlement screen; leave at 0 if they take neither. */}
+                        <div className="space-y-3 border rounded-lg p-4 bg-muted/20">
+                            <div>
+                                <h3 className="font-semibold">Settlement Deductions</h3>
+                                <p className="text-sm text-muted-foreground">
+                                    What this courier keeps when they transfer collected money to you.
+                                </p>
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-2">
+                                    <Label>COD Collection Fee (%)</Label>
+                                    <Input
+                                        type="number" step="0.01" min="0"
+                                        value={formData.cod_fee_percent}
+                                        onChange={e => setFormData({ ...formData, cod_fee_percent: parseFloat(e.target.value) || 0 })}
+                                        placeholder="0"
+                                    />
+                                    <p className="text-xs text-muted-foreground">Percentage of the amount collected.</p>
+                                </div>
+                                <div className="space-y-2">
+                                    <Label>Return Fee (EGP)</Label>
+                                    <Input
+                                        type="number" step="0.01" min="0"
+                                        value={formData.return_fee}
+                                        onChange={e => setFormData({ ...formData, return_fee: parseFloat(e.target.value) || 0 })}
+                                        placeholder="0"
+                                    />
+                                    <p className="text-xs text-muted-foreground">Charged per returned parcel.</p>
+                                </div>
+                            </div>
+                        </div>
+
                         <div className="flex items-center justify-between border rounded-lg p-4 bg-muted/20">
                             <div>
                                 <h3 className="font-semibold">Default Shipping Company</h3>
