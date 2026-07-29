@@ -60,6 +60,11 @@ export async function middleware(request: NextRequest) {
         const isUpdatePasswordPage = request.nextUrl.pathname.startsWith('/update-password')
         const isAuthCallback = request.nextUrl.pathname.startsWith('/auth')
         const isLandingPage = request.nextUrl.pathname.startsWith('/landing')
+        // Sentry's tunnel (next.config.ts `tunnelRoute`). It must stay open:
+        // reports are posted by signed-out visitors too, and redirecting them
+        // to /login swallows every crash report — including the ones from
+        // users who cannot get past login in the first place.
+        const isMonitoring = request.nextUrl.pathname.startsWith('/monitoring')
         const isStatic = request.nextUrl.pathname.startsWith('/_next') ||
             request.nextUrl.pathname.includes('.') ||
             request.nextUrl.pathname.startsWith('/api')
@@ -67,7 +72,7 @@ export async function middleware(request: NextRequest) {
         // 4. Redirect Rules
 
         // If user is NOT logged in AND trying to access a protected page
-        if (!user && request.nextUrl.pathname !== '/' && !isLandingPage && !isLoginPage && !isRegisterPage && !isForgotPage && !isUpdatePasswordPage && !isAuthCallback && !request.nextUrl.pathname.includes('.') && !request.nextUrl.pathname.startsWith('/api')) {
+        if (!user && request.nextUrl.pathname !== '/' && !isLandingPage && !isLoginPage && !isRegisterPage && !isForgotPage && !isUpdatePasswordPage && !isAuthCallback && !isMonitoring && !request.nextUrl.pathname.includes('.') && !request.nextUrl.pathname.startsWith('/api')) {
             const loginUrl = request.nextUrl.clone()
             loginUrl.pathname = '/login'
             return NextResponse.redirect(loginUrl)
@@ -81,7 +86,7 @@ export async function middleware(request: NextRequest) {
         }
 
         // --- RBAC: Role-Based Access Control ---
-        if (user && !isLoginPage && !isRegisterPage && !isForgotPage && !isUpdatePasswordPage && !isAuthCallback && !isStatic) {
+        if (user && !isLoginPage && !isRegisterPage && !isForgotPage && !isUpdatePasswordPage && !isAuthCallback && !isMonitoring && !isStatic) {
             const pathname = request.nextUrl.pathname;
 
             if (pathname.startsWith('/system-admin')) {
