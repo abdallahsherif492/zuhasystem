@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Loader2, Store, CheckCircle2, LogOut, ArrowRight, Package, Truck, BarChart3, Wallet, Link as LinkIcon } from "lucide-react";
+import { Loader2, Store, CheckCircle2, LogOut, Package, BarChart3, Wallet, Link as LinkIcon } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { safeLocal } from "@/lib/safe-storage";
 import { motion } from "framer-motion";
@@ -20,6 +20,37 @@ const features = [
     { icon: BarChart3, text: "تقارير وتحليلات متقدمة" },
     { icon: Wallet, text: "إدارة الحسابات والمصروفات" }
 ];
+
+/**
+ * Turn a Supabase/Postgres failure into something a merchant can act on.
+ *
+ * This step used to render `err.message` directly, so when RLS was blocking
+ * business creation every visitor saw "new row violates row-level security
+ * policy for table businesses" — English, meaningless to them, and impossible
+ * to report usefully. Nobody told us; they just left.
+ */
+function describeError(err: any): string {
+    const raw = String(err?.message || "");
+    const code = String(err?.code || "");
+
+    // Quota, raised by create_business_with_owner()
+    if (raw.includes("maximum of")) {
+        return "وصلت للحد الأقصى لعدد المتاجر المسموح بها لحسابك. كلّمنا لو محتاج تزوّده.";
+    }
+    if (code === "28000" || raw.includes("signed in")) {
+        return "جلستك انتهت. سجّل دخول تاني وجرّب من الأوسع.";
+    }
+    if (code === "42501" || raw.toLowerCase().includes("row-level security")) {
+        return "معندناش صلاحية ننشئ المتجر دلوقتي. المشكلة عندنا إحنا مش عندك — كلّمنا وهنظبطها فوراً.";
+    }
+    if (code === "PGRST202" || raw.includes("Could not find the function")) {
+        return "في خلل مؤقت عندنا في السيرفر. جرّب كمان شوية أو كلّمنا.";
+    }
+    if (raw.includes("Failed to fetch") || raw.includes("NetworkError") || raw.includes("Load failed")) {
+        return "النت فصل. اتأكد من اتصالك وجرّب تاني.";
+    }
+    return "حصلت مشكلة وإحنا بننشئ المتجر. جرّب تاني، ولو فضلت كلّمنا وهنحلها معاك.";
+}
 
 export default function OnboardingPage() {
     const router = useRouter();
@@ -47,18 +78,19 @@ export default function OnboardingPage() {
         window.location.href = "/login";
     };
 
-    const handleSkip = () => {
-        safeLocal.set('skipOnboarding', 'true');
-        window.location.href = "/dashboard";
-    };
-
     const handleCreateBusiness = async (e: React.FormEvent) => {
         e.preventDefault();
         setLoading(true);
         setError(null);
 
         if (!userEmail) {
-            setError("User email not found. Please log in again.");
+            setError("مش لاقيين حسابك. سجّل دخول تاني من فضلك.");
+            setLoading(false);
+            return;
+        }
+
+        if (!businessName.trim()) {
+            setError("اكتب اسم البراند أو المتجر الأول.");
             setLoading(false);
             return;
         }
@@ -80,7 +112,7 @@ export default function OnboardingPage() {
                 });
 
             if (createError) throw createError;
-            if (!newBusinessId) throw new Error("Business was not created. Please try again.");
+            if (!newBusinessId) throw new Error("__generic__");
 
             safeLocal.set("activeBusinessId", newBusinessId as string);
 
@@ -89,7 +121,7 @@ export default function OnboardingPage() {
             
         } catch (err: any) {
             console.error("Onboarding error:", err);
-            setError(err.message || "Failed to create business profile.");
+            setError(describeError(err));
             setLoading(false);
         }
     };
@@ -103,7 +135,7 @@ export default function OnboardingPage() {
     }
 
     return (
-        <div className="flex min-h-screen bg-[#F8FAFC]">
+        <div className="flex min-h-screen bg-[#F8FAFC]" dir="rtl">
             {/* Left Panel - Branding & Features (Hidden on mobile) */}
             <div className="hidden lg:flex lg:w-1/2 flex-col justify-between p-12 bg-gradient-to-br from-[#0F172A] to-[#6366F1] text-white relative overflow-hidden">
                 <div className="absolute inset-0 bg-[url('/grid.svg')] bg-center [mask-image:linear-gradient(180deg,white,rgba(255,255,255,0))] opacity-20"></div>
@@ -125,8 +157,8 @@ export default function OnboardingPage() {
                             transition={{ duration: 0.5 }}
                             className="text-4xl font-bold leading-tight"
                         >
-                            Grow your business <br/>
-                            <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-200 to-white">with eCommerx</span>
+                            كبّر تجارتك <br/>
+                            <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-200 to-white">مع eCommerx</span>
                         </motion.h1>
                         
                         <div className="space-y-4 mt-8">
@@ -137,7 +169,6 @@ export default function OnboardingPage() {
                                     animate={{ opacity: 1, x: 0 }}
                                     transition={{ duration: 0.5, delay: idx * 0.1 + 0.3 }}
                                     className="flex items-center gap-4 bg-white/10 backdrop-blur-md px-6 py-4 rounded-xl border border-white/10 shadow-lg"
-                                    dir="rtl"
                                 >
                                     <feature.icon className="h-6 w-6 text-indigo-300" />
                                     <span className="text-lg font-medium">{feature.text}</span>
@@ -148,14 +179,14 @@ export default function OnboardingPage() {
                 </div>
                 
                 <div className="relative z-10 text-white/60 text-sm">
-                    © {new Date().getFullYear()} eCommerx. All rights reserved.
+                    © {new Date().getFullYear()} eCommerx — جميع الحقوق محفوظة.
                 </div>
             </div>
 
             {/* Right Panel - Form */}
             <div className="w-full lg:w-1/2 flex items-center justify-center p-6 lg:p-12 relative">
                 {/* Mobile Logo */}
-                <div className="absolute top-6 left-6 lg:hidden">
+                <div className="absolute top-6 right-6 lg:hidden">
                     <div className="relative h-10 w-32">
                         <Image
                             src="/logo.png"
@@ -178,10 +209,10 @@ export default function OnboardingPage() {
                                     <Store className="h-8 w-8 text-indigo-600" />
                                 </div>
                                 <CardTitle className="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-slate-900 to-slate-700">
-                                    Welcome to eCommerx
+                                    خطوة واحدة وتبدأ 🚀
                                 </CardTitle>
                                 <CardDescription className="text-base mt-3 text-slate-500">
-                                    Set up your store profile to start managing orders and inventory
+                                    اكتب اسم متجرك بس، وهنجهّزلك السيستم كامل في ثانية
                                 </CardDescription>
                             </CardHeader>
                             
@@ -189,16 +220,16 @@ export default function OnboardingPage() {
                                 <CardContent className="space-y-6 pt-6">
                                     {error && (
                                         <Alert variant="destructive" className="bg-red-50 border-red-200 text-red-800">
-                                            <AlertTitle>Error</AlertTitle>
+                                            <AlertTitle className="font-bold">معلش، في مشكلة</AlertTitle>
                                             <AlertDescription>{error}</AlertDescription>
                                         </Alert>
                                     )}
                                     
                                     <div className="space-y-3">
-                                        <Label htmlFor="businessName" className="text-sm font-semibold text-slate-700">Business / Brand Name</Label>
+                                        <Label htmlFor="businessName" className="text-sm font-semibold text-slate-700">اسم البراند أو المتجر</Label>
                                         <Input
                                             id="businessName"
-                                            placeholder="e.g. Acme Corp or Fashion Store"
+                                            placeholder="مثال: زُهى ستور"
                                             value={businessName}
                                             onChange={(e) => setBusinessName(e.target.value)}
                                             required
@@ -207,19 +238,19 @@ export default function OnboardingPage() {
                                     </div>
 
                                     <div className="bg-indigo-50/50 border border-indigo-100 p-5 rounded-xl space-y-3">
-                                        <h4 className="font-semibold text-sm text-indigo-900">What happens next?</h4>
+                                        <h4 className="font-semibold text-sm text-indigo-900">هيحصل إيه بعد كده؟</h4>
                                         <ul className="space-y-2.5 text-sm text-slate-600">
                                             <li className="flex items-center gap-3">
                                                 <CheckCircle2 className="h-5 w-5 text-indigo-600" />
-                                                <span className="font-medium">شهر كامل مجاناً - 1 Month Free Trial</span>
+                                                <span className="font-medium">شهر كامل مجاني — من غير كريديت كارد</span>
                                             </li>
                                             <li className="flex items-center gap-3">
                                                 <CheckCircle2 className="h-5 w-5 text-indigo-600" />
-                                                <span>Full access to all modules and insights</span>
+                                                <span>كل مميزات السيستم مفتوحة من غير حدود</span>
                                             </li>
                                             <li className="flex items-center gap-3">
                                                 <CheckCircle2 className="h-5 w-5 text-indigo-600" />
-                                                <span>Add unlimited team members</span>
+                                                <span>ضيف فريقك وحدد صلاحيات كل واحد</span>
                                             </li>
                                         </ul>
                                     </div>
@@ -232,30 +263,31 @@ export default function OnboardingPage() {
                                         disabled={loading}
                                     >
                                         {loading && <Loader2 className="mr-2 h-5 w-5 animate-spin" />}
-                                        Launch My Business
+                                        يلا نبدأ
                                     </Button>
                                     
-                                    <div className="flex gap-3 w-full mt-2">
-                                        <Button 
-                                            type="button" 
-                                            variant="outline" 
-                                            className="flex-1 h-11 border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900 rounded-xl" 
-                                            onClick={handleSkip} 
-                                            disabled={loading}
-                                        >
-                                            Skip to Dashboard <ArrowRight className="ml-2 h-4 w-4" />
-                                        </Button>
-                                        <Button 
-                                            type="button" 
-                                            variant="ghost" 
-                                            className="flex-none h-11 w-11 p-0 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-xl" 
-                                            onClick={handleLogout} 
-                                            disabled={loading}
-                                            title="Logout"
-                                        >
-                                            <LogOut className="h-5 w-5" />
-                                        </Button>
-                                    </div>
+                                    {/*
+                                      No "skip" here on purpose. It used to send
+                                      people to an empty dashboard and store a
+                                      flag so they were never asked again —
+                                      quietly stranding anyone who clicked it.
+                                      The dashboard is unusable without a
+                                      business, so there is nothing to skip to.
+                                    */}
+                                    <p className="text-xs text-center text-slate-400 mt-1">
+                                        تقدر تغيّر اسم المتجر وكل الإعدادات في أي وقت بعدين
+                                    </p>
+
+                                    <Button
+                                        type="button"
+                                        variant="ghost"
+                                        className="h-10 text-sm text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-xl"
+                                        onClick={handleLogout}
+                                        disabled={loading}
+                                    >
+                                        <LogOut className="h-4 w-4 ml-2" />
+                                        تسجيل الخروج
+                                    </Button>
                                 </CardFooter>
                             </form>
                         </Card>

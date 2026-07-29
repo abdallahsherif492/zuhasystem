@@ -172,9 +172,14 @@ export const BusinessProvider = ({ children }: { children: React.ReactNode }) =>
         setWeekendDays(active.weekend_days);
         safeLocal.set('activeBusinessId', active.business.id);
       } else {
-        // User has no businesses. Redirect to onboarding if not on onboarding page.
-        const skipped = safeLocal.get('skipOnboarding');
-        if (pathname !== '/onboarding' && !pathname.startsWith('/system-admin') && !skipped) {
+        // User has no businesses — send them to onboarding.
+        //
+        // The old 'skipOnboarding' opt-out is deliberately gone. It was set by
+        // a "Skip to Dashboard" button and persisted forever, so anyone who
+        // pressed it once was never asked again and sat in a dashboard with no
+        // business behind it. Ignoring the flag also recovers the accounts
+        // already stranded by it.
+        if (pathname !== '/onboarding' && !pathname.startsWith('/system-admin')) {
           router.push('/onboarding');
         }
       }
