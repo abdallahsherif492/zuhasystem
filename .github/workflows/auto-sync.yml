@@ -1,0 +1,78 @@
+name: Auto-sync shipping statuses
+
+# Vercel's Hobby plan caps cron jobs at one run per day, which is far too slow
+# for courier status updates. This drives the same endpoint on a real interval.
+# Actions minutes are free and unmetered on public repositories.
+#
+# Requires one repository secret:
+#   CRON_SECRET — must match the CRON_SECRET set in Vercel.
+# Optionally a repository variable:
+#   SYNC_BASE_URL — defaults to the production domain below.
+
+on:
+  schedule:
+    # Every 15 minutes. GitHub queues scheduled runs on a best-effort basis and
+    # can be several minutes late under load; the endpoint is driven by each
+    # integration's own lastSyncAt, so a late or repeated call is harmless.
+    - cron: "*/15 * * * *"
+  # Lets you trigger a sync by hand from the Actions tab.
+  workflow_dispatch:
+
+# Never let two syncs overlap: the endpoint mutates each business's
+# theme_config, and concurrent runs could clobber each other's lastSyncAt.
+concurrency:
+  group: auto-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Trigger auto-sync
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          BASE_URL: ${{ vars.SYNC_BASE_URL || 'https://www.e-commerx.com' }}
+        run: |
+          set -euo pipefail
+
+          # Not yet configured is a setup state, not a failure. Warn and stop
+          # rather than erroring, so this does not email a failure notice every
+          # 15 minutes before the secret has been added. Real problems below
+          # still fail loudly.
+          if [ -z "${CRON_SECRET}" ]; then
+            echo "::warning::CRON_SECRET is not set, so no sync ran. Add it under Settings > Secrets and variables > Actions, using the same value as CRON_SECRET in Vercel."
+            exit 0
+          fi
+
+          # --fail-with-body so a non-2xx still prints the server's reason
+          # before the step fails. The secret is passed via an env var so it
+          # never appears in the command line or the logs.
+          http_code=$(curl --silent --show-error \
+            --location \
+            --max-time 300 \
+            --retry 2 --retry-delay 10 --retry-connrefused \
+            --header "Authorization: Bearer ${CRON_SECRET}" \
+            --output response.json \
+            --write-out '%{http_code}' \
+            "${BASE_URL}/api/cron/auto-sync") || true
+
+          echo "HTTP ${http_code}"
+          echo "Response:"
+          cat response.json || true
+          echo
+
+          if [ "${http_code}" != "200" ]; then
+            echo "::error::Auto-sync failed with HTTP ${http_code}. A 401 means CRON_SECRET here does not match the one in Vercel."
+            exit 1
+          fi
+
+          # The route answers 200 with {"success": false} when a run is
+          # rejected downstream, so check the payload too rather than trusting
+          # the status code alone.
+          if ! grep -q '"success":true' response.json; then
+            echo "::error::Endpoint returned 200 but reported failure."
+            exit 1
+          fi
+
+          echo "Auto-sync completed."
