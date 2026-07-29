@@ -22,9 +22,30 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+// Meta's domain verification token. Served as a <meta> tag in <head>, which is
+// how Business Manager confirms we own e-commerx.com. Verification is what
+// unlocks Aggregated Event Measurement — without it, conversions from iOS
+// visitors are under-reported no matter how correct the pixel is.
+//
+// The token is public by design (anyone can read it in the page source), but
+// it lives in an env var so it can be rotated or pointed at a different
+// Business Manager without a code change.
+const facebookDomainVerification = process.env.NEXT_PUBLIC_FB_DOMAIN_VERIFICATION;
+
 export const metadata: Metadata = {
+  // Absolute URLs for OG/social tags now that the app has a real domain.
+  metadataBase: new URL(
+    process.env.NEXT_PUBLIC_SITE_URL || "https://www.e-commerx.com"
+  ),
   title: "eCommerx Admin System",
   description: "Internal E-commerce Dashboard",
+  ...(facebookDomainVerification
+    ? {
+        verification: {
+          other: { "facebook-domain-verification": facebookDomainVerification },
+        },
+      }
+    : {}),
 };
 
 export default function RootLayout({
