@@ -25,6 +25,7 @@ export default function RegisterPage() {
     const [password, setPassword] = useState("");
     
     const [error, setError] = useState<string | null>(null);
+    const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
     const handleRegister = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -46,7 +47,17 @@ export default function RegisterPage() {
             
             if (error) throw error;
 
-            // Redirect to onboarding after successful registration
+            // Check if email confirmation is required by Supabase
+            if (data.user && !data.session) {
+                setSuccessMessage("تم إنشاء الحساب بنجاح! 🎉 رجاءً مراجعة بريدك الإلكتروني والضغط على رابط التفعيل لتتمكن من تسجيل الدخول.");
+                
+                // Report the sign-up to Meta
+                const planId = new URLSearchParams(window.location.search).get('plan');
+                await flushPixelEvent(() => trackCompleteRegistration({ plan_id: planId || "none" }));
+                return;
+            }
+
+            // Redirect to onboarding after successful registration (if auto-login was successful)
             const planId = new URLSearchParams(window.location.search).get('plan');
 
             // Report the sign-up to Meta and let the beacon leave before the
@@ -98,6 +109,15 @@ export default function RegisterPage() {
                                     <Alert variant="destructive" className="bg-red-50 border-red-200 text-red-800">
                                         <AlertTitle className="text-right font-bold">خطأ في التسجيل</AlertTitle>
                                         <AlertDescription className="text-right mt-1">{error}</AlertDescription>
+                                    </Alert>
+                                </motion.div>
+                            )}
+                            
+                            {successMessage && (
+                                <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}>
+                                    <Alert className="bg-green-50 border-green-200 text-green-800">
+                                        <AlertTitle className="text-right font-bold text-green-700">تأكيد البريد الإلكتروني</AlertTitle>
+                                        <AlertDescription className="text-right mt-1 font-medium">{successMessage}</AlertDescription>
                                     </Alert>
                                 </motion.div>
                             )}

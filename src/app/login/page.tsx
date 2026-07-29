@@ -33,7 +33,11 @@ export default function LoginPage() {
             window.location.href = "/dashboard"; // Redirect to dashboard explicitly after login
         } catch (err: any) {
             console.error("Login error:", err);
-            setError(err.message === "Invalid login credentials" ? "البريد الإلكتروني أو كلمة المرور غير صحيحة." : err.message);
+            if (err.message === "Email not confirmed") {
+                setError("حسابك لسه متفعلش. رجاءً مراجعة بريدك الإلكتروني والضغط على رابط التفعيل.");
+            } else {
+                setError(err.message === "Invalid login credentials" ? "البريد الإلكتروني أو كلمة المرور غير صحيحة." : err.message);
+            }
         } finally {
             setLoading(false);
         }
