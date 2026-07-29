@@ -11,6 +11,13 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 
 export const maxDuration = 300; // Allow Vercel functions to run up to 5 minutes
 
+// Scheduling note: vercel.json runs this once a day, because the Hobby plan
+// rejects any cron more frequent than daily — and rejects the whole deployment
+// with it, not just the cron. For a real interval, drive this endpoint from an
+// off-platform scheduler with `Authorization: Bearer $CRON_SECRET`, or upgrade
+// the plan and shorten the schedule. AutoSyncProvider still triggers it from
+// the browser while someone has the dashboard open.
+
 /** Businesses processed per run, kept low so the function cannot time out. */
 const MAX_BUSINESSES_PER_RUN = 2;
 
