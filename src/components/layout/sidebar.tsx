@@ -11,7 +11,8 @@ import {
     LayoutDashboard, AlertTriangle, Package, ShoppingCart, Settings, Users, Truck, 
     Banknote, LineChart, ShoppingBag, Megaphone, Box, DollarSign, ShieldCheck, 
     FileText, Ticket, CreditCard, Clock, Inbox, Calendar, LogOut, Globe,
-    ChevronDown, ChevronRight, BarChart3, PieChart, History, BookOpen
+    ChevronDown, ChevronRight, BarChart3, PieChart, History, BookOpen,
+    Wallet, Upload
 } from "lucide-react";
 
 import Image from "next/image";
@@ -79,6 +80,8 @@ type NavItem = {
     exactMatch?: boolean;
     adminOnly?: boolean;
     systemAdminOnly?: boolean;
+    /** Key for a live counter rendered beside the label, e.g. "platform-orders". */
+    badge?: string;
     subItems?: Omit<NavItem, 'subItems'>[];
 };
 
@@ -89,8 +92,30 @@ type NavGroup = {
 
 export function SidebarContent({ onLinkClick }: { onLinkClick?: () => void }) {
     const pathname = usePathname();
-    const { userRole, allowedPages, isSystemAdmin, loading } = useBusiness();
+    const { userRole, allowedPages, isSystemAdmin, loading, activeBusiness } = useBusiness();
     const { t } = useLanguage();
+
+    // Orders waiting to be confirmed. Shown beside "New from stores" so the
+    // queue is visible without opening it — previously the only way to know
+    // work had arrived was to go and look.
+    const [waitingCount, setWaitingCount] = useState(0);
+    useEffect(() => {
+        if (!activeBusiness) return;
+        let cancelled = false;
+        const load = async () => {
+            const { count } = await supabase
+                .from("orders")
+                .select("id", { count: "exact", head: true })
+                .eq("business_id", activeBusiness.id)
+                .ilike("status", "waiting");
+            if (!cancelled) setWaitingCount(count ?? 0);
+        };
+        load();
+        // Refresh periodically: platform orders arrive by webhook, not by
+        // anything the user did in this tab.
+        const timer = setInterval(load, 60_000);
+        return () => { cancelled = true; clearInterval(timer); };
+    }, [activeBusiness, pathname]);
     const [expandedGroups, setExpandedGroups] = useState<string[]>([
         t("Overview"), 
         t("Sales & Orders"), 
@@ -133,8 +158,20 @@ export function SidebarContent({ onLinkClick }: { onLinkClick?: () => void }) {
         {
             title: t("Sales & Orders"),
             items: [
-                { title: t("Orders"), href: "/orders", icon: ShoppingCart, exactMatch: true },
-                { title: t("Platform Orders"), href: "/platform-orders", icon: Globe },
+                // One destination with the lifecycle underneath it. These used
+                // to be three sibling entries, which read as three unrelated
+                // places rather than stages of the same thing — the single most
+                // common "where do I go?" confusion in the app.
+                {
+                    title: t("Orders"),
+                    href: "/orders",
+                    icon: ShoppingCart,
+                    exactMatch: true,
+                    subItems: [
+                        { title: t("New from stores"), href: "/platform-orders", icon: Globe, badge: "platform-orders" },
+                        { title: t("Fulfilment & shipping"), href: "/logistics", icon: Truck },
+                    ]
+                },
                 { title: t("Customers"), href: "/customers", icon: Users },
                 { title: t("Support"), href: "/support", icon: Ticket },
             ]
@@ -159,8 +196,19 @@ export function SidebarContent({ onLinkClick }: { onLinkClick?: () => void }) {
             items: [
                 { title: t("Purchases"), href: "/purchases", icon: ShoppingBag },
                 { title: t("Accounts Payable"), href: "/payable", icon: FileText },
-                { title: t("Logistics"), href: "/logistics", icon: Truck },
-                { title: t("Shipping"), href: "/shipping", icon: Truck }, // Using truck again or Box
+                {
+                    // Settlements and bulk update were reachable only by landing
+                    // on Shipping first and noticing a button — invisible unless
+                    // you already knew they existed.
+                    title: t("Shipping"),
+                    href: "/shipping",
+                    icon: Truck,
+                    exactMatch: true,
+                    subItems: [
+                        { title: t("Courier Settlements"), href: "/shipping/settlements", icon: Wallet },
+                        { title: t("Bulk Status Update"), href: "/shipping/update", icon: Upload },
+                    ]
+                },
             ]
         },
         {
@@ -324,7 +372,12 @@ export function SidebarContent({ onLinkClick }: { onLinkClick?: () => void }) {
                                                                     )}
                                                                 >
                                                                     <subItem.icon className={cn("mr-2 h-3.5 w-3.5", isSubActive ? "text-foreground" : "opacity-50")} />
-                                                                    {subItem.title}
+                                                                    <span className="flex-1 text-start">{subItem.title}</span>
+                                                                    {subItem.badge === "platform-orders" && waitingCount > 0 && (
+                                                                        <span className="ms-2 inline-flex items-center justify-center min-w-5 h-5 px-1.5 rounded-full bg-primary text-primary-foreground text-[10px] font-bold tabular-nums">
+                                                                            {waitingCount}
+                                                                        </span>
+                                                                    )}
                                                                 </Button>
                                                             </Link>
                                                         );

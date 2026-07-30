@@ -1,6 +1,7 @@
 import { Sidebar } from "@/components/layout/sidebar";
 import { MobileNav } from "@/components/layout/mobile-nav";
 import { BusinessSwitcher } from "@/components/layout/business-switcher";
+import { CommandPalette } from "@/components/layout/command-palette";
 import { AnnouncementBanner } from "@/components/layout/announcement-banner";
 import { ExpirationBanner } from "@/components/layout/expiration-banner";
 import { PermissionGuard } from "@/components/layout/permission-guard";
@@ -22,6 +23,7 @@ export default function DashboardLayout({
         <ExpirationBanner />
         <header className="flex h-14 items-center gap-4 border-b bg-muted/40 px-4 lg:h-[60px] lg:px-6">
           <MobileNav />
+          <CommandPalette />
           <div className="w-full flex justify-end items-center gap-4">
             <BusinessSwitcher />
           </div>
