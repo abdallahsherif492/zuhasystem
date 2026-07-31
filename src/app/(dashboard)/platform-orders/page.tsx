@@ -5,7 +5,7 @@ import { useEffect, useState, useMemo, useRef, Suspense } from "react";
 import { supabase } from "@/lib/supabase";
 import { useBusiness } from "@/contexts/BusinessContext";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, normalizeSearchText } from "@/lib/utils";
 import { DateRangePicker } from "@/components/date-range-picker";
 import { useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -149,7 +149,8 @@ function PlatformOrdersContent() {
         if (!activeBusiness) return;
         const { data, error } = await supabase
             .from('products')
-            .select('id, name, variants(id, title, sale_price, stock_qty, track_inventory)')
+            // sku is needed so the add-product search can match on it
+            .select('id, name, variants(id, title, sku, sale_price, cost_price, stock_qty, track_inventory)')
             .eq('business_id', activeBusiness.id)
             .order('name');
         if (error) console.error("Error fetching products:", error);
@@ -773,49 +774,61 @@ function PlatformOrdersContent() {
                                                         + {t("Add Product")}
                                                     </Button>
                                                 </PopoverTrigger>
-                                                <PopoverContent className="w-80 p-4 space-y-3" align="end">
-                                                    <h4 className="font-medium text-sm">Add Item to Order</h4>
-                                                    <div className="space-y-2">
-                                                        <div className="space-y-1">
-                                                            <Label className="text-xs">Product</Label>
-                                                            <Select 
-                                                                value={selectedProductForAdd[order.id] || ""}
-                                                                onValueChange={(val) => {
-                                                                    setSelectedProductForAdd(prev => ({...prev, [order.id]: val}));
-                                                                    setSelectedVariantForAdd(prev => ({...prev, [order.id]: ""}));
-                                                                }}
-                                                            >
-                                                                <SelectTrigger className="h-8 text-xs">
-                                                                    <SelectValue placeholder="Select Product" />
-                                                                </SelectTrigger>
-                                                                <SelectContent>
-                                                                    {products.map(p => (
-                                                                        <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-                                                                    ))}
-                                                                </SelectContent>
-                                                            </Select>
-                                                        </div>
-
-                                                        <div className="space-y-1">
-                                                            <Label className="text-xs">Variant</Label>
-                                                            <Select 
-                                                                value={selectedVariantForAdd[order.id] || ""}
-                                                                onValueChange={(val) => setSelectedVariantForAdd(prev => ({...prev, [order.id]: val}))}
-                                                                disabled={!selectedProductForAdd[order.id]}
-                                                            >
-                                                                <SelectTrigger className="h-8 text-xs">
-                                                                    <SelectValue placeholder="Select Variant" />
-                                                                </SelectTrigger>
-                                                                <SelectContent>
-                                                                    {products.find(p => p.id === selectedProductForAdd[order.id])?.variants.map((v: any) => (
-                                                                        <SelectItem key={v.id} value={v.id}>
-                                                                            {v.title} - {formatCurrency(v.sale_price)}
-                                                                        </SelectItem>
-                                                                    ))}
-                                                                </SelectContent>
-                                                            </Select>
-                                                        </div>
-                                                    </div>
+                                                <PopoverContent className="w-96 p-0" align="end">
+                                                    {/*
+                                                      One searchable list of product+variant rather than two
+                                                      dependent dropdowns. Picking a product first only to then
+                                                      hunt its variant is slow when you already know what you
+                                                      want, and the plain Select had no search at all — with a
+                                                      long catalogue that means scrolling blind.
+                                                      Searchable by product name, variant title and SKU.
+                                                    */}
+                                                    <Command
+                                                        filter={(value, search) =>
+                                                            // Substring over cmdk's fuzzy scoring — SKUs and Arabic
+                                                            // names match far more predictably — and folded so
+                                                            // "احمر" finds "أحمر" the way staff actually type.
+                                                            normalizeSearchText(value).includes(normalizeSearchText(search)) ? 1 : 0
+                                                        }
+                                                    >
+                                                        <CommandInput placeholder={t("Search by product, variant or SKU…")} />
+                                                        <CommandList className="max-h-72">
+                                                            <CommandEmpty>{t("No product found.")}</CommandEmpty>
+                                                            {products.map(p => (
+                                                                <CommandGroup key={p.id} heading={p.name}>
+                                                                    {(p.variants || []).map((v: any) => {
+                                                                        const isPicked = selectedVariantForAdd[order.id] === v.id;
+                                                                        const outOfStock = v.track_inventory && (v.stock_qty ?? 0) <= 0;
+                                                                        return (
+                                                                            <CommandItem
+                                                                                key={v.id}
+                                                                                value={`${p.name} ${v.title} ${v.sku || ""}`}
+                                                                                onSelect={() => {
+                                                                                    setSelectedProductForAdd(prev => ({ ...prev, [order.id]: p.id }));
+                                                                                    setSelectedVariantForAdd(prev => ({ ...prev, [order.id]: v.id }));
+                                                                                }}
+                                                                            >
+                                                                                <Check className={cn("mr-2 h-4 w-4 shrink-0", isPicked ? "opacity-100" : "opacity-0")} />
+                                                                                <div className="flex-1 min-w-0">
+                                                                                    <div className="text-xs font-medium truncate">{v.title}</div>
+                                                                                    {v.sku && <div className="text-[10px] text-muted-foreground font-mono truncate">{v.sku}</div>}
+                                                                                </div>
+                                                                                <div className="text-end shrink-0 ms-2">
+                                                                                    <div className="text-xs font-semibold">{formatCurrency(v.sale_price)}</div>
+                                                                                    {v.track_inventory && (
+                                                                                        <div className={cn("text-[10px]", outOfStock ? "text-red-600 font-bold" : "text-muted-foreground")}>
+                                                                                            {outOfStock ? t("Out of stock") : `${v.stock_qty} ${t("in stock")}`}
+                                                                                        </div>
+                                                                                    )}
+                                                                                </div>
+                                                                            </CommandItem>
+                                                                        );
+                                                                    })}
+                                                                </CommandGroup>
+                                                            ))}
+                                                        </CommandList>
+                                                    </Command>
+                                                    <div className="p-3 border-t">
                                                     <Button 
                                                         size="sm" 
                                                         className="w-full h-8"
@@ -849,7 +862,7 @@ function PlatformOrdersContent() {
                                                                 cost_at_sale: vari.cost_price || 0,
                                                                 variants: {
                                                                     title: vari.title,
-                                                                    sku: "",
+                                                                    sku: vari.sku || "",
                                                                     product_id: prod.id,
                                                                     products: { name: prod.name }
                                                                 }
@@ -872,11 +885,14 @@ function PlatformOrdersContent() {
                                                             handleUpdateOrder(order.id, { subtotal: newTotal - order.shipping_cost, total_amount: newTotal });
                                                             
                                                             setAddItemOpen(prev => ({...prev, [order.id]: false}));
+                                                            setSelectedProductForAdd(prev => ({...prev, [order.id]: ""}));
+                                                            setSelectedVariantForAdd(prev => ({...prev, [order.id]: ""}));
                                                             toast.success("Item added");
                                                         }}
                                                     >
-                                                        Add to Order
+                                                        {t("Add to Order")}
                                                     </Button>
+                                                    </div>
                                                 </PopoverContent>
                                             </Popover>
                                         </div>

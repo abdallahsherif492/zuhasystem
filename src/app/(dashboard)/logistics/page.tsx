@@ -7,6 +7,7 @@ import { formatCurrency } from "@/lib/utils";
 import { syncStatusToEasyOrders } from "@/lib/easyorders";
 import { processOrderForVrobo } from "@/lib/vrobo/api";
 import { logBusinessAction } from "@/lib/logs/actions-logger";
+import { STOCK_OUT_STATUSES } from "@/lib/inventory";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -135,6 +136,12 @@ function LogisticsContent() {
     const [pendingConfirmAction, setPendingConfirmAction] = useState<(() => void) | null>(null);
     const [confirmDialogContent, setConfirmDialogContent] = useState({ title: "", description: "" });
 
+    // Returning stock is a physical question, not a policy one — a parcel can
+    // come back intact, damaged, or not at all. Ask per return instead of
+    // assuming, which previously forced a manual stock correction afterwards.
+    const [returnDialogOpen, setReturnDialogOpen] = useState(false);
+    const [pendingReturn, setPendingReturn] = useState<string[]>([]);
+
     const fromDate = searchParams.get("from");
     const toDate = searchParams.get("to");
 
@@ -223,6 +230,13 @@ function LogisticsContent() {
     // --- Update Logic ---
 
     const initiateStatusChange = (orderId: string, newStatus: string) => {
+        // Returning asks about stock first; nothing else needs to.
+        if (newStatus === "Returned") {
+            setPendingReturn([orderId]);
+            setReturnDialogOpen(true);
+            return;
+        }
+
         const action = () => {
             if (newStatus === "Shipped") {
                 const order = orders.find(o => o.id === orderId);
@@ -236,8 +250,11 @@ function LogisticsContent() {
         };
 
         const order = orders.find(o => o.id === orderId);
-        const preStates = ["Pending", "Processing", "Cancelled", "Unavailable"];
-        const isDeductingAction = order && preStates.includes(order.status) && !preStates.includes(newStatus);
+        // Uses the same set the database uses to decide stock movement, so the
+        // warning can never disagree with what actually happens.
+        const isDeductingAction = order
+            && !STOCK_OUT_STATUSES.includes((order.status || "").toLowerCase().trim())
+            && STOCK_OUT_STATUSES.includes((newStatus || "").toLowerCase().trim());
 
         if (isDeductingAction) {
             setConfirmDialogContent({
@@ -251,11 +268,23 @@ function LogisticsContent() {
         }
     };
 
-    const executeStatusUpdate = async (orderIds: string[], newStatus: string, companyId?: string) => {
+    const executeStatusUpdate = async (
+        orderIds: string[],
+        newStatus: string,
+        companyId?: string,
+        restockOnReturn?: boolean,
+    ) => {
         try {
             startAction(`Updating ${orderIds.length} orders...`);
             const payload: any = { status: newStatus };
             if (companyId) payload.shipping_company_id = companyId;
+
+            // Set explicitly on every return, not just when declining: a stale
+            // false from an earlier return would otherwise silently suppress a
+            // restock the operator asked for this time.
+            if (newStatus === "Returned") {
+                payload.restock_on_return = restockOnReturn !== false;
+            }
 
             const { error } = await supabase
                 .from("orders")
@@ -263,7 +292,14 @@ function LogisticsContent() {
                 .eq("business_id", activeBusiness!.id)
                 .in("id", orderIds);
 
-            if (error) throw error;
+            if (error) {
+                if (/restock_on_return/.test(error.message)) {
+                    throw new Error(
+                        "لسه متعملش الميجريشن بتاع المخزون. شغّل supabase/migrations/20260730_optional_restock_on_return.sql"
+                    );
+                }
+                throw error;
+            }
 
             // Stock movement is now owned by the database trigger on
             // orders.status — the UPDATE above already applied it, idempotently
@@ -334,6 +370,13 @@ function LogisticsContent() {
         const ids = Array.from(selectedOrders);
         if (ids.length === 0) return;
 
+        // Same question as the single-order path, asked once for the batch.
+        if (status === "Returned") {
+            setPendingReturn(ids);
+            setReturnDialogOpen(true);
+            return;
+        }
+
         const action = () => {
             if (status === "Shipped") {
                 setPendingStatusChange({ orderIds: ids, status });
@@ -343,12 +386,12 @@ function LogisticsContent() {
             }
         };
 
-        const preStates = ["Pending", "Processing", "Cancelled", "Unavailable"];
-        const hasPendingOrders = ids.some(id => {
-            const status = orders.find(o => o.id === id)?.status;
-            return status && preStates.includes(status);
+        const target = (status || "").toLowerCase().trim();
+        const hasStockInOrders = ids.some(id => {
+            const s = orders.find(o => o.id === id)?.status;
+            return s && !STOCK_OUT_STATUSES.includes(s.toLowerCase().trim());
         });
-        const isDeductingAction = hasPendingOrders && !preStates.includes(status);
+        const isDeductingAction = hasStockInOrders && STOCK_OUT_STATUSES.includes(target);
 
         if (isDeductingAction) {
             setConfirmDialogContent({
@@ -933,6 +976,65 @@ function LogisticsContent() {
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
+            {/* Return: did the goods actually come back to the shelf? */}
+            <Dialog open={returnDialogOpen} onOpenChange={setReturnDialogOpen}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>
+                            {pendingReturn.length > 1
+                                ? `ترجيع ${pendingReturn.length} أوردر`
+                                : "ترجيع الأوردر"}
+                        </DialogTitle>
+                        <DialogDescription>
+                            البضاعة رجعت المخزن فعلاً؟ اختار الصح عشان الجرد يفضل مظبوط.
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    <div className="space-y-3 py-2">
+                        <button
+                            onClick={() => {
+                                setReturnDialogOpen(false);
+                                executeStatusUpdate(pendingReturn, "Returned", undefined, true);
+                                setPendingReturn([]);
+                            }}
+                            className="w-full text-start rounded-xl border-2 p-4 hover:border-primary hover:bg-primary/5 transition-colors"
+                        >
+                            <div className="font-semibold flex items-center gap-2">
+                                <Package className="h-4 w-4 text-green-600" />
+                                أيوة، رجّع الكميات للمخزون
+                            </div>
+                            <p className="text-sm text-muted-foreground mt-1">
+                                البضاعة وصلت المخزن سليمة وتقدر تتباع تاني.
+                            </p>
+                        </button>
+
+                        <button
+                            onClick={() => {
+                                setReturnDialogOpen(false);
+                                executeStatusUpdate(pendingReturn, "Returned", undefined, false);
+                                setPendingReturn([]);
+                            }}
+                            className="w-full text-start rounded-xl border-2 p-4 hover:border-amber-500 hover:bg-amber-50 dark:hover:bg-amber-950/30 transition-colors"
+                        >
+                            <div className="font-semibold flex items-center gap-2">
+                                <AlertCircle className="h-4 w-4 text-amber-600" />
+                                لأ، متزودش المخزون
+                            </div>
+                            <p className="text-sm text-muted-foreground mt-1">
+                                البضاعة تالفة أو ضايعة أو لسه موصلتش — الأوردر هيتقفل مرتجع
+                                والكميات تفضل مخصومة.
+                            </p>
+                        </button>
+                    </div>
+
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => { setReturnDialogOpen(false); setPendingReturn([]); }}>
+                            إلغاء
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
             {/* Confirmation Dialog */}
             <AlertDialog open={confirmDialogOpen} onOpenChange={setConfirmDialogOpen}>
                 <AlertDialogContent>

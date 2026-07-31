@@ -398,5 +398,9 @@
   "New from stores": "New from stores",
   "Fulfilment & shipping": "Fulfilment & shipping",
   "Courier Settlements": "Courier Settlements",
-  "Bulk Status Update": "Bulk Status Update"
+  "Bulk Status Update": "Bulk Status Update",
+  "Search by product, variant or SKU…": "Search by product, variant or SKU…",
+  "Out of stock": "Out of stock",
+  "in stock": "in stock",
+  "Add to Order": "Add to Order"
 }

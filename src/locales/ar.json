@@ -398,5 +398,9 @@
   "New from stores": "جديدة من المتاجر",
   "Fulfilment & shipping": "التحضير والشحن",
   "Courier Settlements": "تسوية حسابات الشحن",
-  "Bulk Status Update": "تحديث الحالات جماعي"
+  "Bulk Status Update": "تحديث الحالات جماعي",
+  "Search by product, variant or SKU…": "ابحث باسم المنتج أو النوع أو الـ SKU…",
+  "Out of stock": "نفد المخزون",
+  "in stock": "متاح",
+  "Add to Order": "أضف للأوردر"
 }
