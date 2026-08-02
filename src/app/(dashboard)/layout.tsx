@@ -18,7 +18,16 @@ export default function DashboardLayout({
   return (
     <div className="flex min-h-screen w-full">
       <Sidebar className="w-64 hidden md:block" />
-      <div className="flex flex-col flex-1">
+      {/*
+        min-w-0 is load-bearing. A flex item defaults to min-width:auto, so this
+        column refuses to shrink below the intrinsic width of its widest child.
+        A page with a wide table (logistics is ~1050px of columns) pushed this
+        column past the viewport and scrolled the entire shell sideways, sidebar
+        included — you had to scroll right to reach the rest of the page.
+        With min-w-0 the column stays viewport-width and the table scrolls
+        inside its own card, which is what its overflow-x-auto wrapper is for.
+      */}
+      <div className="flex flex-col flex-1 min-w-0">
         <AnnouncementBanner />
         <ExpirationBanner />
         <header className="flex h-14 items-center gap-4 border-b bg-muted/40 px-4 lg:h-[60px] lg:px-6">
@@ -28,7 +37,7 @@ export default function DashboardLayout({
             <BusinessSwitcher />
           </div>
         </header>
-        <main className="flex flex-1 flex-col gap-4 p-4 lg:gap-6 lg:p-6">
+        <main className="flex flex-1 flex-col gap-4 p-4 lg:gap-6 lg:p-6 min-w-0">
           <AutoSyncProvider>
             <PermissionGuard>
               <SubscriptionGuard>

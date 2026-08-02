@@ -402,5 +402,6 @@
   "Search by product, variant or SKU…": "ابحث باسم المنتج أو النوع أو الـ SKU…",
   "Out of stock": "نفد المخزون",
   "in stock": "متاح",
-  "Add to Order": "أضف للأوردر"
+  "Add to Order": "أضف للأوردر",
+  "This total does not match what the store sent. Check the quantities and prices below before moving the order on.": "الإجمالي ده مش مطابق للي المتجر بعته. راجع الكميات والأسعار تحت قبل ما تمرر الأوردر."
 }

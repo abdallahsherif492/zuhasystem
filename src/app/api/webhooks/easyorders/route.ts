@@ -192,6 +192,26 @@ export async function POST(request: Request) {
         // Helper to normalize strings for better matching
         const normalizeStr = (str: any) => (str || "").toString().replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
 
+        // EasyOrders nests per-item data under `product` and `variant` (the SKU
+        // lookup below already has to search all three levels), and quantity is
+        // not always at the top. `parseInt(item.quantity || ... || 1)` silently
+        // fell back to 1 whenever it sat somewhere unexpected, which records a
+        // three-piece order as one piece — the line, the subtotal and the total
+        // all agree with each other and all understate the order, so nothing
+        // looks wrong until the courier hands over a different amount.
+        const readQty = (item: any): number => {
+            const candidates = [
+                item?.quantity, item?.qty, item?.count, item?.amount,
+                item?.variant?.quantity, item?.product?.quantity,
+            ];
+            for (const c of candidates) {
+                if (c === null || c === undefined || c === "") continue;
+                const n = Math.floor(Number(c));
+                if (Number.isFinite(n) && n > 0) return n;
+            }
+            return 1;
+        };
+
         const variantsMap = new Map();
         if (allVariants) {
             allVariants.forEach(v => {
@@ -204,7 +224,7 @@ export async function POST(request: Request) {
         for (const item of rawItems) {
             // EasyOrders puts sku in product.sku or variant.taager_code
             let itemSku = normalizeStr(item.variant?.taager_code || item.product?.sku || item.sku || "");
-            const itemQty = parseInt(item.quantity || item.qty || 1);
+            const itemQty = readQty(item);
             let itemPrice = parseFloat(item.price || 0);
             const itemName = item.product?.name || item.name || item.title || "Unknown Item";
 
@@ -237,6 +257,38 @@ export async function POST(request: Request) {
 
         const totalAmount = calculatedSubtotal + shippingCost;
 
+        // EasyOrders states its own total. Ours is derived from the lines we
+        // managed to parse, so a disagreement means we misread the payload —
+        // a quantity in an unexpected field, a missing line, a price nested
+        // somewhere new. There is no safe way to guess which side is right, so
+        // the order keeps our figure but is tagged and logged with the payload
+        // that produced it, and the reviewer is told before it moves on.
+        // Without this the two totals never meet and the mistake only surfaces
+        // when the courier hands over a different amount weeks later.
+        const payloadTotal = [
+            payload.total_cost, payload.total, payload.total_price,
+            payload.grand_total, payload.order_total,
+        ].map(Number).find(n => Number.isFinite(n) && n > 0);
+
+        const totalMismatch = payloadTotal !== undefined
+            && Math.abs(payloadTotal - totalAmount) > 1;
+
+        if (totalMismatch) {
+            await logIntegrationActivity(
+                businessId, "EasyOrders", "error",
+                `Order ${easyOrderId}: EasyOrders says ${payloadTotal} EGP, we calculated ${totalAmount} EGP from its items. Held for review.`,
+                {
+                    easyorders_id: easyOrderId,
+                    their_total: payloadTotal,
+                    our_total: totalAmount,
+                    our_subtotal: calculatedSubtotal,
+                    shipping_cost: shippingCost,
+                    parsed_items: processedItems.map(i => ({ quantity: i.quantity, price_at_sale: i.price_at_sale })),
+                    raw_items: rawItems,
+                }
+            );
+        }
+
         // 5. Create Order
         const { data: newOrder, error: orderError } = await supabase
             .from('orders')
@@ -247,7 +299,7 @@ export async function POST(request: Request) {
                 created_at: payload.created_at || payload.date || payload.order_date || new Date().toISOString(),
                 status: 'Waiting',
                 channel: 'Website',
-                tags: ['easyorders'],
+                tags: totalMismatch ? ['easyorders', 'total-mismatch'] : ['easyorders'],
                 subtotal: calculatedSubtotal,
                 shipping_cost: shippingCost,
                 total_amount: totalAmount,

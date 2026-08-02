@@ -64,8 +64,12 @@ export function MultiSelect({
                     aria-expanded={open}
                     className={cn("w-full justify-between h-auto min-h-10", className)}
                 >
-                    <div className="flex flex-wrap gap-1 items-center">
-                        {selected.length === 0 && <span className="text-muted-foreground">{placeholder}</span>}
+                    {/* min-w-0 + truncate: the trigger sits in filter rows next to
+                        other controls, and a long placeholder like "Shipping
+                        Company" used to set a floor on the whole row's width and
+                        push the page sideways. It now gives ground and ellipsises. */}
+                    <div className="flex flex-wrap gap-1 items-center min-w-0 overflow-hidden">
+                        {selected.length === 0 && <span className="text-muted-foreground truncate">{placeholder}</span>}
                         {selected.length > 0 && selected.length <= 2 && (
                             selectedLabels.map(label => (
                                 <Badge variant="secondary" key={label} className="mr-1 mb-1">

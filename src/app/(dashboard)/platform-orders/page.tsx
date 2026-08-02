@@ -11,7 +11,7 @@ import { useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
+import { AutosaveField } from "@/components/ui/autosave-field";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Loader2, Check, X, AlertTriangle, Search, PackageSearch, ChevronsUpDown } from "lucide-react";
@@ -347,41 +347,36 @@ function PlatformOrdersContent() {
     };
 
     const [saveStatus, setSaveStatus] = useState<Record<string, string>>({});
-    const saveTimeouts = useRef<Record<string, NodeJS.Timeout>>({});
 
-    const handleAutoSaveNotes = (order: Order, newNoteText: string) => {
-        const newInfo = { ...order.customer_info, internal_workbench_notes: newNoteText };
-        
-        // Update local React state instantly
-        setOrders(prev => prev.map(o => o.id === order.id ? { ...o, customer_info: newInfo } : o));
-        setSaveStatus(prev => ({ ...prev, [order.id]: "جاري الحفظ..." }));
-
-        // Clear existing debounce timer
-        if (saveTimeouts.current[order.id]) {
-            clearTimeout(saveTimeouts.current[order.id]);
-        }
-
-        // Set 600ms debounce timer for autosave
-        saveTimeouts.current[order.id] = setTimeout(async () => {
-            try {
-                await handleUpdateOrder(order.id, { customer_info: newInfo });
-                setSaveStatus(prev => ({ ...prev, [order.id]: "تم الحفظ تلقائياً ✓" }));
-                setTimeout(() => {
-                    setSaveStatus(prev => ({ ...prev, [order.id]: "" }));
-                }, 2000);
-            } catch (err) {
-                setSaveStatus(prev => ({ ...prev, [order.id]: "فشل الحفظ" }));
-            }
-        }, 600);
-    };
+    // customer_info is one JSON column, so every field writes the whole object.
+    // The fields debounce independently now, which means two of them can commit
+    // within milliseconds of each other; building the payload from the render's
+    // snapshot would let the later write resurrect the older field's value.
+    // This mirror always holds the newest orders, so each save starts from what
+    // the previous one actually wrote.
+    const ordersRef = useRef<Order[]>([]);
+    useEffect(() => { ordersRef.current = orders; }, [orders]);
 
     const updateCustomerInfo = async (order: Order, field: string, value: string) => {
-        const newInfo = { ...order.customer_info, [field]: value };
-        setOrders(orders.map(o => o.id === order.id ? { ...o, customer_info: newInfo } : o));
+        const latest = ordersRef.current.find(o => o.id === order.id)?.customer_info
+            ?? order.customer_info;
+        const newInfo = { ...latest, [field]: value };
+        setOrders(prev => prev.map(o => o.id === order.id ? { ...o, customer_info: newInfo } : o));
         try {
             await handleUpdateOrder(order.id, { customer_info: newInfo });
-        } catch(e) {
+            return true;
+        } catch (e) {
             toast.error(t("Failed to save"));
+            return false;
+        }
+    };
+
+    const handleAutoSaveNotes = async (order: Order, newNoteText: string) => {
+        setSaveStatus(prev => ({ ...prev, [order.id]: "جاري الحفظ..." }));
+        const ok = await updateCustomerInfo(order, 'internal_workbench_notes', newNoteText);
+        setSaveStatus(prev => ({ ...prev, [order.id]: ok ? "تم الحفظ تلقائياً ✓" : "فشل الحفظ" }));
+        if (ok) {
+            setTimeout(() => setSaveStatus(prev => ({ ...prev, [order.id]: "" })), 2000);
         }
     };
 
@@ -396,30 +391,41 @@ function PlatformOrdersContent() {
         }
     };
 
+    /**
+     * Rewrite an order's lines and re-derive its money from them.
+     *
+     * The three callers below each used to do this inside the setOrders updater
+     * and fire the database write from in there. React treats updaters as pure
+     * and is free to run one more than once — in development StrictMode always
+     * does — so every quantity edit sent its PATCH twice. Reading from ordersRef
+     * gives the same fresh lines the updater would have seen, with the write
+     * kept outside where it belongs.
+     */
+    const applyItemChange = async (
+        orderId: string,
+        mutate: (items: OrderItem[]) => OrderItem[],
+    ) => {
+        const order = ordersRef.current.find(o => o.id === orderId);
+        if (!order) return;
+
+        const newItems = mutate(order.order_items);
+        const newSubtotal = newItems.reduce((sum, i) => sum + (i.price_at_sale * i.quantity), 0);
+        const newTotal = newSubtotal + order.shipping_cost;
+
+        setOrders(prev => prev.map(o => o.id === orderId
+            ? { ...o, subtotal: newSubtotal, total_amount: newTotal, order_items: newItems }
+            : o));
+
+        try {
+            await handleUpdateOrder(orderId, { subtotal: newSubtotal, total_amount: newTotal });
+        } catch (e) {
+            toast.error(t("Failed to save"));
+        }
+    };
+
     const updateOrderItem = async (orderId: string, itemId: string, field: string, value: any) => {
-        setOrders(prev => prev.map(o => {
-            if (o.id === orderId) {
-                const newItems = o.order_items.map(item => {
-                    if (item.id === itemId) {
-                        return { ...item, [field]: value };
-                    }
-                    return item;
-                });
-                
-                const newSubtotal = newItems.reduce((sum, item) => sum + (item.price_at_sale * item.quantity), 0);
-                const newTotal = newSubtotal + o.shipping_cost;
-                
-                handleUpdateOrder(orderId, { subtotal: newSubtotal, total_amount: newTotal });
-                
-                return {
-                    ...o,
-                    subtotal: newSubtotal,
-                    total_amount: newTotal,
-                    order_items: newItems
-                };
-            }
-            return o;
-        }));
+        await applyItemChange(orderId, items =>
+            items.map(item => item.id === itemId ? { ...item, [field]: value } : item));
 
         try {
             await handleUpdateItem(itemId, { [field]: value });
@@ -438,39 +444,19 @@ function PlatformOrdersContent() {
             ? `${targetItem.variants.products.name} (${targetItem.variants.title})`
             : targetItem?.unmapped_name || "Unmapped Item";
 
-        setOrders(prev => prev.map(o => {
-            if (o.id === orderId) {
-                const newItems = o.order_items.map(item => {
-                    if (item.id === itemId) {
-                        return {
-                            ...item,
-                            variant_id: variantId,
-                            price_at_sale: item.price_at_sale || variant.sale_price,
-                            variants: {
-                                title: variant.title,
-                                sku: variant.sku,
-                                product_id: '',
-                                products: { name: variant.products?.name || "Mapped Product" }
-                            }
-                        };
-                    }
-                    return item;
-                });
-
-                const newSubtotal = newItems.reduce((sum, item) => sum + (item.price_at_sale * item.quantity), 0);
-                const newTotal = newSubtotal + o.shipping_cost;
-
-                handleUpdateOrder(orderId, { subtotal: newSubtotal, total_amount: newTotal });
-
-                return {
-                    ...o,
-                    subtotal: newSubtotal,
-                    total_amount: newTotal,
-                    order_items: newItems
-                };
+        await applyItemChange(orderId, items => items.map(item => item.id === itemId
+            ? {
+                ...item,
+                variant_id: variantId,
+                price_at_sale: item.price_at_sale || variant.sale_price,
+                variants: {
+                    title: variant.title,
+                    sku: variant.sku,
+                    product_id: '',
+                    products: { name: variant.products?.name || "Mapped Product" }
+                }
             }
-            return o;
-        }));
+            : item));
 
         try {
             await handleUpdateItem(itemId, { variant_id: variantId });
@@ -501,23 +487,7 @@ function PlatformOrdersContent() {
 
 
     const deleteItemFromOrder = async (orderId: string, itemId: string) => {
-        setOrders(prev => prev.map(o => {
-            if (o.id === orderId) {
-                const newItems = o.order_items.filter(item => item.id !== itemId);
-                const newSubtotal = newItems.reduce((sum, item) => sum + (item.price_at_sale * item.quantity), 0);
-                const newTotal = newSubtotal + o.shipping_cost;
-
-                handleUpdateOrder(orderId, { subtotal: newSubtotal, total_amount: newTotal });
-
-                return {
-                    ...o,
-                    subtotal: newSubtotal,
-                    total_amount: newTotal,
-                    order_items: newItems
-                };
-            }
-            return o;
-        }));
+        await applyItemChange(orderId, items => items.filter(item => item.id !== itemId));
 
         try {
             await supabase.from('order_items').delete().eq('business_id', activeBusiness!.id).eq('id', itemId);
@@ -681,6 +651,18 @@ function PlatformOrdersContent() {
                                         </Badge>
                                     </div>
                                 </div>
+                                {/* Set by the webhook when our total from the items
+                                    disagrees with the total EasyOrders sent. Almost
+                                    always a quantity or a line we failed to read, so
+                                    the quantities below are what needs checking. */}
+                                {Array.isArray(order.tags) && order.tags.includes('total-mismatch') && (
+                                    <div className="mt-3 flex items-start gap-2 rounded-md border border-red-300 bg-red-50 dark:bg-red-950/20 p-2.5 text-xs text-red-700 dark:text-red-400">
+                                        <AlertTriangle className="h-4 w-4 shrink-0 mt-px" />
+                                        <span>
+                                            {t("This total does not match what the store sent. Check the quantities and prices below before moving the order on.")}
+                                        </span>
+                                    </div>
+                                )}
                             </CardHeader>
                             <CardContent className="pt-6">
                                 <div className="grid md:grid-cols-2 gap-8">
@@ -690,16 +672,16 @@ function PlatformOrdersContent() {
                                         <div className="grid grid-cols-2 gap-4">
                                             <div className="space-y-2">
                                                 <Label>{t("Name")}</Label>
-                                                <Input 
-                                                    value={order.customer_info?.name || ""} 
-                                                    onChange={e => updateCustomerInfo(order, 'name', e.target.value)} 
+                                                <AutosaveField
+                                                    value={order.customer_info?.name || ""}
+                                                    onCommit={v => updateCustomerInfo(order, 'name', v)}
                                                 />
                                             </div>
                                             <div className="space-y-2">
                                                 <Label>{t("Phone 1")}</Label>
-                                                <Input 
-                                                    value={order.customer_info?.phone || ""} 
-                                                    onChange={e => updateCustomerInfo(order, 'phone', e.target.value)} 
+                                                <AutosaveField
+                                                    value={order.customer_info?.phone || ""}
+                                                    onCommit={v => updateCustomerInfo(order, 'phone', v)}
                                                 />
                                             </div>
                                         </div>
@@ -707,9 +689,9 @@ function PlatformOrdersContent() {
                                         <div className="grid grid-cols-2 gap-4">
                                             <div className="space-y-2">
                                                 <Label>{t("Phone 2")}</Label>
-                                                <Input 
-                                                    value={order.customer_info?.phone2 || ""} 
-                                                    onChange={e => updateCustomerInfo(order, 'phone2', e.target.value)} 
+                                                <AutosaveField
+                                                    value={order.customer_info?.phone2 || ""}
+                                                    onCommit={v => updateCustomerInfo(order, 'phone2', v)}
                                                 />
                                             </div>
                                             <div className="space-y-2">
@@ -732,9 +714,10 @@ function PlatformOrdersContent() {
 
                                         <div className="space-y-2">
                                             <Label>{t("Address")}</Label>
-                                            <Textarea 
-                                                value={order.customer_info?.address || ""} 
-                                                onChange={e => updateCustomerInfo(order, 'address', e.target.value)} 
+                                            <AutosaveField
+                                                multiline
+                                                value={order.customer_info?.address || ""}
+                                                onCommit={v => updateCustomerInfo(order, 'address', v)}
                                                 rows={2}
                                             />
                                         </div>
@@ -751,10 +734,11 @@ function PlatformOrdersContent() {
                                                     </span>
                                                 )}
                                             </div>
-                                            <Textarea 
-                                                placeholder={t("Write internal review notes here (Auto-Save)...")} 
-                                                value={order.customer_info?.internal_workbench_notes || ""} 
-                                                onChange={e => handleAutoSaveNotes(order, e.target.value)} 
+                                            <AutosaveField
+                                                multiline
+                                                placeholder={t("Write internal review notes here (Auto-Save)...")}
+                                                value={order.customer_info?.internal_workbench_notes || ""}
+                                                onCommit={v => handleAutoSaveNotes(order, v)}
                                                 rows={2}
                                                 className="text-xs bg-amber-50/30 dark:bg-amber-950/10 border-amber-200/80 dark:border-amber-900/40 focus:border-amber-400"
                                             />

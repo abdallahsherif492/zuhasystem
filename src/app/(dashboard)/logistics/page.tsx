@@ -628,8 +628,14 @@ function LogisticsContent() {
 
             {/* Filters Bar */}
             <div id="logistics-filters" className="bg-muted/40 p-4 rounded-lg space-y-4">
-                <div className="flex flex-col sm:flex-row gap-4">
-                    <div className="relative flex-1">
+                {/* Stacks until lg. Squeezing the search box and four filter
+                    dropdowns onto one line only works on a wide desktop; below
+                    that the row overflowed and took the page with it. */}
+                <div className="flex flex-col lg:flex-row gap-4">
+                    {/* min-w-0 on both flex-1 children: without it the four filter
+                        dropdowns hold the row open at their placeholder width and
+                        the search box can never give ground. */}
+                    <div className="relative flex-1 min-w-0">
                         <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                         <Input
                             placeholder={t("Search orders (comma separated for multiple)...")}
@@ -638,7 +644,7 @@ function LogisticsContent() {
                             onChange={(e) => setSearchQuery(e.target.value)}
                         />
                     </div>
-                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 flex-1">
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 flex-1 min-w-0">
                         <MultiSelect
                             options={STATUSES.map(s => ({ label: s, value: s }))}
                             selected={statusFilter}
@@ -890,10 +896,17 @@ function LogisticsContent() {
                                         onCheckedChange={handleSelectAll}
                                     />
                                 </TableHead>
-                                <TableHead>{t("Order ID")}</TableHead>
-                                <TableHead>{t("Date")}</TableHead>
+                                {/* Eight columns need ~800px, and below a wide
+                                    desktop that pushed Status and Shipping — the
+                                    two columns this page exists to change — off
+                                    the right edge behind a scrollbar. The ID and
+                                    date are reference, not work, so they fold
+                                    away first and the ID reappears under the
+                                    customer name so nothing is actually lost. */}
+                                <TableHead className="hidden xl:table-cell">{t("Order ID")}</TableHead>
+                                <TableHead className="hidden xl:table-cell">{t("Date")}</TableHead>
                                 <TableHead>{t("Customer")}</TableHead>
-                                <TableHead>{t("Gov")}</TableHead>
+                                <TableHead className="hidden lg:table-cell">{t("Gov")}</TableHead>
                                 <TableHead>{t("Status")}</TableHead>
                                 <TableHead>{t("Net Value")}</TableHead>
                                 <TableHead>{t("Shipping")}</TableHead>
@@ -908,13 +921,19 @@ function LogisticsContent() {
                                             onCheckedChange={(c) => handleSelectRow(order.id, c as boolean)}
                                         />
                                     </TableCell>
-                                    <TableCell className="font-mono text-xs">{order.id.slice(0, 8)}</TableCell>
-                                    <TableCell>{new Date(order.created_at).toLocaleDateString()}</TableCell>
+                                    <TableCell className="hidden xl:table-cell font-mono text-xs">{order.id.slice(0, 8)}</TableCell>
+                                    <TableCell className="hidden xl:table-cell">{new Date(order.created_at).toLocaleDateString()}</TableCell>
                                     <TableCell>
                                         <div className="font-medium">{order.customer_info?.name || "N/A"}</div>
                                         <div className="text-xs text-muted-foreground">{order.customer_info?.phone}</div>
+                                        <div className="xl:hidden text-xs text-muted-foreground font-mono">
+                                            {order.id.slice(0, 8)} · {new Date(order.created_at).toLocaleDateString()}
+                                        </div>
+                                        <div className="lg:hidden text-xs text-muted-foreground">
+                                            {order.customer_info?.governorate || "-"}
+                                        </div>
                                     </TableCell>
-                                    <TableCell>{order.customer_info?.governorate || "-"}</TableCell>
+                                    <TableCell className="hidden lg:table-cell">{order.customer_info?.governorate || "-"}</TableCell>
                                     <TableCell>
                                         <select
                                             className="h-8 w-32 rounded-md border border-input bg-transparent px-2 text-xs"
