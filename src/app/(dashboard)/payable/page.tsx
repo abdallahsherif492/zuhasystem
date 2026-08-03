@@ -58,10 +58,16 @@ function PayableContent() {
     const [isSubmittingSupplier, setIsSubmittingSupplier] = useState(false);
     const [supplierDialogOpen, setSupplierDialogOpen] = useState(false);
 
+    // Invoices and payments are almost always entered after the fact — the
+    // paper arrives days later, the transfer went out last week. Both dates
+    // start at today and can be moved back.
+    const today = () => format(new Date(), "yyyy-MM-dd");
+
     // New Invoice State
     const [invoiceSupplierId, setInvoiceSupplierId] = useState("");
     const [invoiceNumber, setInvoiceNumber] = useState("");
     const [invoiceAmount, setInvoiceAmount] = useState("");
+    const [invoiceDate, setInvoiceDate] = useState(today);
     const [isSubmittingInvoice, setIsSubmittingInvoice] = useState(false);
     const [invoiceDialogOpen, setInvoiceDialogOpen] = useState(false);
 
@@ -69,6 +75,7 @@ function PayableContent() {
     const [paymentInvoice, setPaymentInvoice] = useState<any>(null); // The invoice being paid
     const [paymentStatus, setPaymentStatus] = useState<"Partially Paid" | "Fully Paid">("Partially Paid");
     const [paymentAmount, setPaymentAmount] = useState("");
+    const [paymentDate, setPaymentDate] = useState(today);
     const [paymentTreasury, setPaymentTreasury] = useState("Abdallah Sherif");
     const [addToTransactions, setAddToTransactions] = useState(true);
     const [isSubmittingPayment, setIsSubmittingPayment] = useState(false);
@@ -83,7 +90,7 @@ function PayableContent() {
         try {
             const [supRes, invRes] = await Promise.all([
                 supabase.from("suppliers").select("*").eq('business_id', activeBusiness.id).order("name"),
-                supabase.from("supplier_invoices").select("*, suppliers(name)").eq('business_id', activeBusiness.id).order("created_at", { ascending: false })
+                supabase.from("supplier_invoices").select("*, suppliers(name)").eq('business_id', activeBusiness.id).order("invoice_date", { ascending: false }).order("created_at", { ascending: false })
             ]);
 
             if (supRes.error) throw supRes.error;
@@ -132,6 +139,7 @@ function PayableContent() {
                     business_id: activeBusiness!.id,
                     supplier_id: invoiceSupplierId,
                     invoice_number: invoiceNumber,
+                    invoice_date: invoiceDate,
                     total_amount: Number(invoiceAmount),
                     paid_amount: 0,
                     status: "Not Paid"
@@ -143,6 +151,7 @@ function PayableContent() {
             setInvoiceSupplierId("");
             setInvoiceNumber("");
             setInvoiceAmount("");
+            setInvoiceDate(today());
             fetchData();
         } catch (error: any) {
             toast.error(error.message || "Failed to add invoice");
@@ -194,7 +203,7 @@ function PayableContent() {
                     .insert([
                         {
                             business_id: activeBusiness!.id,
-                            transaction_date: format(new Date(), "yyyy-MM-dd"),
+                            transaction_date: paymentDate,
                             amount: -Math.abs(amountToPay), // Negative for expense
                             type: "expense",
                             category: "Purchases",
@@ -307,6 +316,13 @@ function PayableContent() {
                                             <Input type="number" value={invoiceAmount} onChange={e => setInvoiceAmount(e.target.value)} placeholder="0.00" />
                                         </div>
                                     </div>
+                                    <div className="space-y-2">
+                                        <Label>Invoice Date</Label>
+                                        <Input type="date" value={invoiceDate} onChange={e => setInvoiceDate(e.target.value)} />
+                                        <p className="text-xs text-muted-foreground">
+                                            The date on the supplier&apos;s invoice, not the day it was entered.
+                                        </p>
+                                    </div>
                                 </div>
                                 <DialogFooter>
                                     <Button variant="outline" onClick={() => setInvoiceDialogOpen(false)}>Cancel</Button>
@@ -350,7 +366,9 @@ function PayableContent() {
                                         const remaining = inv.total_amount - inv.paid_amount;
                                         return (
                                             <TableRow key={inv.id}>
-                                                <TableCell>{format(new Date(inv.created_at), "yyyy-MM-dd")}</TableCell>
+                                                {/* The invoice's own date, not the day it was keyed in —
+                                                    otherwise backdating an invoice has no visible effect. */}
+                                                <TableCell>{format(new Date(inv.invoice_date || inv.created_at), "yyyy-MM-dd")}</TableCell>
                                                 <TableCell className="font-medium">{inv.suppliers?.name}</TableCell>
                                                 <TableCell>{inv.invoice_number || "-"}</TableCell>
                                                 <TableCell>{formatCurrency(inv.total_amount)}</TableCell>
@@ -363,7 +381,14 @@ function PayableContent() {
                                                 </TableCell>
                                                 <TableCell className="text-right">
                                                     {inv.status !== "Fully Paid" && (
-                                                        <Button size="sm" variant="outline" onClick={() => setPaymentInvoice(inv)}>
+                                                        <Button size="sm" variant="outline" onClick={() => {
+                                                            // Reset per-invoice, so a date typed for the last
+                                                            // payment isn't silently reused for this one.
+                                                            setPaymentDate(today());
+                                                            setPaymentAmount("");
+                                                            setPaymentStatus("Partially Paid");
+                                                            setPaymentInvoice(inv);
+                                                        }}>
                                                             Register Payment
                                                         </Button>
                                                     )}
@@ -489,6 +514,15 @@ function PayableContent() {
                                 </div>
                             </div>
                         )}
+
+                        <div className="space-y-2">
+                            <Label>Payment Date</Label>
+                            <Input type="date" value={paymentDate} onChange={e => setPaymentDate(e.target.value)} />
+                            <p className="text-xs text-muted-foreground">
+                                The day the money actually left the treasury. This is the date the
+                                expense is booked under.
+                            </p>
+                        </div>
 
                         <div className="space-y-2">
                             <Label>From Treasury</Label>
