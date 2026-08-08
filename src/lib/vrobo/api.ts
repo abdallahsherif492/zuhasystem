@@ -3,7 +3,30 @@
 import { createClient } from "@supabase/supabase-js";
 import { logIntegrationActivity } from "@/lib/logs/integration-logger";
 
-export async function sendOrderToVrobo(order: any, vroboApiKey: string, vroboMerchantId: string) {
+/**
+ * The reason code VROBO records against an order.
+ *
+ * Hardcoded to "2" (Customer Refused) until now, which meant every business on
+ * the platform reported the same reason regardless of why the parcel came
+ * back. It is configurable per business in Settings → Integrations → VROBO.
+ *
+ * "2" remains the fallback so an unconfigured business keeps sending exactly
+ * what it sent before, rather than dropping the field and having VROBO reject
+ * or silently default it.
+ */
+const DEFAULT_VROBO_REASON_ID = "2";
+
+export async function sendOrderToVrobo(
+    order: any,
+    vroboApiKey: string,
+    vroboMerchantId: string,
+    vroboReasonId?: string | null,
+) {
+    // Trimmed: an all-whitespace value typed into Settings must not become the
+    // payload. Coerced to string because a number typed in the field would
+    // otherwise change the JSON type VROBO receives.
+    const reasonId = String(vroboReasonId ?? "").trim() || DEFAULT_VROBO_REASON_ID;
+
     // Map the order details to VROBO payload
     const payload = {
         waybill_id: order.tracking_number || order.id.substring(0, 10), // Fallback if no tracking number
@@ -21,7 +44,7 @@ export async function sendOrderToVrobo(order: any, vroboApiKey: string, vroboMer
             items_qty: item.quantity || 1,
             item_image_url: "https://via.placeholder.com/150" // Fallback since we might not have product images easily accessible here
         })),
-        reason_id: "2" // Default: Customer Refused
+        reason_id: reasonId
     };
 
     console.log("Sending to VROBO payload:", JSON.stringify(payload, null, 2));
@@ -41,13 +64,13 @@ export async function sendOrderToVrobo(order: any, vroboApiKey: string, vroboMer
 
         if (!response.ok || data.order_creation !== "Success") {
              console.error("VROBO Order Creation Failed:", data);
-             return { success: false, error: data };
+             return { success: false, error: data, reasonId };
         }
 
-        return { success: true, data };
+        return { success: true, data, reasonId };
     } catch (error: any) {
         console.error("VROBO API Error:", error.message);
-        return { success: false, error: error.message };
+        return { success: false, error: error.message, reasonId };
     }
 }
 
@@ -105,7 +128,7 @@ export async function processOrderForVrobo(orderId: string) {
     }
 
     // 4. Send to VROBO
-    const result = await sendOrderToVrobo(order, vroboConfig.apiKey, vroboConfig.merchantId);
+    const result = await sendOrderToVrobo(order, vroboConfig.apiKey, vroboConfig.merchantId, vroboConfig.reasonId);
 
     if (result.success) {
         // 5. Mark as synced
@@ -114,10 +137,10 @@ export async function processOrderForVrobo(orderId: string) {
             .update({ vrobo_synced: true })
             .eq("id", orderId);
         console.log(`Order ${orderId} successfully synced to VROBO.`);
-        logIntegrationActivity(order.business_id, "VROBO", "success", `Order ${orderId} synced to VROBO successfully.`, { orderId, response: result.data });
+        logIntegrationActivity(order.business_id, "VROBO", "success", `Order ${orderId} synced to VROBO successfully.`, { orderId, reasonId: result.reasonId, response: result.data });
         return { success: true, message: "Successfully synced to VROBO.", vrobo_response: result.data };
     } else {
-        logIntegrationActivity(order.business_id, "VROBO", "error", `Order ${orderId} failed to sync to VROBO.`, { orderId, error: result.error });
+        logIntegrationActivity(order.business_id, "VROBO", "error", `Order ${orderId} failed to sync to VROBO.`, { orderId, reasonId: result.reasonId, error: result.error });
         return { success: false, message: "Failed to sync to VROBO API.", error: result.error };
     }
 }

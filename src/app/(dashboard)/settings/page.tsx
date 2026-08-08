@@ -53,7 +53,7 @@ export default function SettingsPage() {
             easyorders: { enabled: false, apiKey: "", webhookToken: "" }
         },
         tools: {
-            vrobo: { enabled: false, apiKey: "", merchantId: "", autoSync: false, autoSyncIntervalMinutes: 60 }
+            vrobo: { enabled: false, apiKey: "", merchantId: "", reasonId: "2", autoSync: false, autoSyncIntervalMinutes: 60 }
         }
     });
 
@@ -143,6 +143,7 @@ export default function SettingsPage() {
                         enabled: savedIntegrations.tools?.vrobo?.enabled || false,
                         apiKey: savedIntegrations.tools?.vrobo?.apiKey || "",
                         merchantId: savedIntegrations.tools?.vrobo?.merchantId || "",
+                        reasonId: savedIntegrations.tools?.vrobo?.reasonId || "2",
                         autoSync: savedIntegrations.tools?.vrobo?.autoSync || false,
                         autoSyncIntervalMinutes: savedIntegrations.tools?.vrobo?.autoSyncIntervalMinutes || 60
                     }
@@ -1233,6 +1234,18 @@ export default function SettingsPage() {
                                                 value={integrations.tools.vrobo.merchantId}
                                                 onChange={(e) => handleIntegrationChange('tools', 'vrobo', 'merchantId', e.target.value)}
                                             />
+                                        </div>
+
+                                        <div className="space-y-2">
+                                            <Label>{t("Reason ID")}</Label>
+                                            <Input
+                                                placeholder="2"
+                                                value={integrations.tools.vrobo.reasonId}
+                                                onChange={(e) => handleIntegrationChange('tools', 'vrobo', 'reasonId', e.target.value)}
+                                            />
+                                            <p className="text-xs text-muted-foreground">
+                                                {t("Sent with every order VROBO verifies. Ask VROBO which id matches the reason you want recorded — it was fixed at 2 (Customer Refused) before this field existed, and stays 2 if left empty.")}
+                                            </p>
                                         </div>
 
                                         <div className="flex items-center space-x-2 pt-2">
