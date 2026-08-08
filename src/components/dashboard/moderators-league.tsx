@@ -130,7 +130,7 @@ export function ModeratorsLeague() {
         const returned = sum("returned_count");
         const resolved = delivered + returned;
         return {
-            orders, items, delivered, returned,
+            orders, items, delivered, returned, resolved,
             sales: sum("sales_value"),
             deliveryRate: resolved ? (100 * delivered) / resolved : null,
             itemsPerOrder: orders ? items / orders : 0,
@@ -186,7 +186,7 @@ export function ModeratorsLeague() {
                         {t("Moderators League")}
                     </CardTitle>
                     <CardDescription>
-                        {format(from, "MMMM yyyy")} — {t("orders confirmed with customers this month")}
+                        {format(from, "MMMM yyyy")} — {t("confirmed orders, matching the Confirmed Orders tile above")}
                     </CardDescription>
                 </div>
                 {canSetTargets && (
@@ -227,6 +227,16 @@ export function ModeratorsLeague() {
                             </span>
                         </div>
                         <Progress value={ratePct} />
+                        {/* Mid-month this number always flatters: collections land
+                            before returns do, so a month that is mostly still in
+                            transit reads high and then falls. Showing how much of
+                            the month it is actually based on stops it being read
+                            as final. */}
+                        <p className="text-[11px] text-muted-foreground">
+                            {totals.resolved === 0
+                                ? t("nothing collected or returned yet")
+                                : `${t("based on")} ${totals.resolved.toLocaleString()} ${t("of")} ${totals.orders.toLocaleString()} ${t("orders settled so far")}`}
+                        </p>
                     </div>
 
                     <div className="space-y-2">
@@ -270,7 +280,7 @@ export function ModeratorsLeague() {
                                 <TableHead className="text-right">{t("Orders")}</TableHead>
                                 <TableHead className="text-right hidden sm:table-cell">{t("Items")}</TableHead>
                                 <TableHead className="text-right">{t("Items / order")}</TableHead>
-                                <TableHead className="text-right hidden lg:table-cell">{t("Delivery rate")}</TableHead>
+                                <TableHead className="text-right hidden lg:table-cell">{t("Collected %")}</TableHead>
                                 <TableHead className="text-right">{t("Sales")}</TableHead>
                             </TableRow>
                         </TableHeader>
@@ -359,7 +369,7 @@ export function ModeratorsLeague() {
 
                 {rows.length > 0 && (
                     <p className="text-xs text-muted-foreground">
-                        {t("The meters count every order this month, assigned or not. The ranking only counts orders someone was assigned to. Delivery rate is delivered against returned; cancelled orders are left out, since the parcel never shipped.")}
+                        {t("Counts confirmed orders — everything except Waiting and Cancelled — assigned or not. The ranking only lists orders someone was assigned to. Delivery rate is Collected against Returned; orders still in transit are in neither.")}
                     </p>
                 )}
             </CardContent>
