@@ -28,6 +28,7 @@ import { DateRangePicker } from "@/components/date-range-picker";
 import { AdvancedSearch } from "@/components/dashboard/advanced-search";
 import { format } from "date-fns";
 import { RecentSales } from "@/components/dashboard/recent-sales";
+import { ModeratorsLeague } from "@/components/dashboard/moderators-league";
 
 interface RestockAlertItem {
   variantId: string;
@@ -682,6 +683,8 @@ function DashboardContent() {
           </CardContent>
         </Card>
       </div>
+
+      <ModeratorsLeague />
     </div>
   );
 }

@@ -81,6 +81,7 @@ const GOVERNORATES = [
 const CHANNELS = ["Facebook", "Instagram", "Tiktok", "Tiktok Website", "Website", "Whatsapp"];
 
 import { useBusiness } from "@/contexts/BusinessContext";
+import { ClosedBySelect } from "@/components/orders/closed-by-select";
 import { logBusinessAction } from "@/lib/logs/actions-logger";
 
 export default function NewOrderPage() {
@@ -112,6 +113,11 @@ export default function NewOrderPage() {
     const [orderType, setOrderType] = useState<"new" | "replacement" | "return">("new");
     const [shippingPayer, setShippingPayer] = useState<"customer" | "store">("customer");
     const [channel, setChannel] = useState("Facebook");
+    // Whoever is keying the order in is nearly always the one who closed it, so
+    // default to them. Left changeable for the case where someone enters an
+    // order on a colleague's behalf — an empty default would have meant most
+    // orders going unattributed and the league sitting near-empty.
+    const [closedBy, setClosedBy] = useState<string | null>(null);
     const [shippingCost, setShippingCost] = useState(0);
     const [discount, setDiscount] = useState(0);
     const [tags, setTags] = useState("");
@@ -147,6 +153,10 @@ export default function NewOrderPage() {
             fetchAccounts();
         }
     }, [activeBusiness]);
+
+    useEffect(() => {
+        if (currentUser?.email) setClosedBy(prev => prev ?? currentUser.email!);
+    }, [currentUser]);
 
     // Update Shipping when Gov changes
     useEffect(() => {
@@ -431,6 +441,7 @@ export default function NewOrderPage() {
                     actual_shipping_cost: actual_shipping_cost,
                     status: initialStatus,
                     channel: channel,
+                    closed_by: closedBy,
                     tags: tags.split(",").map(t => t.trim()).filter(Boolean),
                     notes: notes,
                     created_at: orderDate.toISOString(),
@@ -856,6 +867,12 @@ export default function NewOrderPage() {
                                 </SelectContent>
                             </Select>
                         </div>
+
+                        <ClosedBySelect
+                            businessId={activeBusiness?.id}
+                            value={closedBy}
+                            onChange={setClosedBy}
+                        />
 
                         <div className="space-y-2">
                             <Label>Order Date</Label>

@@ -65,6 +65,7 @@ const GOVERNORATES = [
 const CHANNELS = ["Facebook", "Instagram", "Tiktok", "Tiktok Website", "Website", "Whatsapp"];
 
 import { useBusiness } from "@/contexts/BusinessContext";
+import { ClosedBySelect } from "@/components/orders/closed-by-select";
 import { logBusinessAction, ActionDiff } from "@/lib/logs/actions-logger";
 
 export default function OrderDetailsPage() {
@@ -96,6 +97,7 @@ export default function OrderDetailsPage() {
         shippingCost: 0,
         discount: 0,
         channel: "",
+        closedBy: null as string | null,
         shippingCompanyId: "",
         tags: "",
         notes: "",
@@ -205,6 +207,7 @@ export default function OrderDetailsPage() {
                 shippingCost: data.shipping_cost || 0,
                 discount: data.discount || 0,
                 channel: data.channel || "",
+                closedBy: data.closed_by || null,
                 shippingCompanyId: data.shipping_company_id || "",
                 tags: (data.tags || []).join(", "),
                 notes: data.notes || "",
@@ -387,6 +390,7 @@ export default function OrderDetailsPage() {
                 subtotal: newSubtotal,
                 total_cost: newTotalCost,
                 channel: editForm.channel,
+                closed_by: editForm.closedBy,
                 shipping_company_id: editForm.shippingCompanyId || null,
                 actual_shipping_cost: actual_shipping_cost,
                 
@@ -607,6 +611,19 @@ export default function OrderDetailsPage() {
                                 <Input value={editForm.channel} onChange={e => setEditForm({ ...editForm, channel: e.target.value })} />
                             ) : (
                                 <div>{order.channel}</div>
+                            )}
+                        </div>
+                        <div className="space-y-2">
+                            <Label>Closed by</Label>
+                            {isEditing ? (
+                                <ClosedBySelect
+                                    bare
+                                    businessId={activeBusiness?.id}
+                                    value={editForm.closedBy}
+                                    onChange={v => setEditForm({ ...editForm, closedBy: v })}
+                                />
+                            ) : (
+                                <div>{order.closed_by || <span className="text-muted-foreground">Not assigned</span>}</div>
                             )}
                         </div>
                         <div className="space-y-2">

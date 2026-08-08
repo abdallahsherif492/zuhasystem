@@ -4,6 +4,7 @@ import { useEffect, useState, useMemo, useRef, Suspense } from "react";
 
 import { supabase } from "@/lib/supabase";
 import { useBusiness } from "@/contexts/BusinessContext";
+import { ClosedBySelect } from "@/components/orders/closed-by-select";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { formatCurrency, normalizeSearchText } from "@/lib/utils";
 import { DateRangePicker } from "@/components/date-range-picker";
@@ -63,6 +64,7 @@ interface Order {
     payment_status: string;
     paid_amount: number;
     created_at: string;
+    closed_by?: string | null;
     order_items: OrderItem[];
 }
 
@@ -243,7 +245,13 @@ function PlatformOrdersContent() {
                 });
             }
 
-            await handleUpdateOrder(order.id, { status: 'Pending' });
+            await handleUpdateOrder(order.id, {
+                status: 'Pending',
+                // Confirming the order IS closing it. If the reviewer never
+                // touched the dropdown, they are the one who did it — leaving
+                // it null would drop the order out of the league entirely.
+                ...(order.closed_by ? {} : { closed_by: currentUser?.email ?? null }),
+            });
 
             if (activeBusiness) {
                 logBusinessAction({
@@ -288,7 +296,13 @@ function PlatformOrdersContent() {
         } else {
             setSaving(order.id);
             try {
-                await handleUpdateOrder(order.id, { status: 'Pending' });
+                await handleUpdateOrder(order.id, {
+                status: 'Pending',
+                // Confirming the order IS closing it. If the reviewer never
+                // touched the dropdown, they are the one who did it — leaving
+                // it null would drop the order out of the league entirely.
+                ...(order.closed_by ? {} : { closed_by: currentUser?.email ?? null }),
+            });
 
                 if (activeBusiness) {
                     logBusinessAction({
@@ -741,6 +755,23 @@ function PlatformOrdersContent() {
                                                 onCommit={v => handleAutoSaveNotes(order, v)}
                                                 rows={2}
                                                 className="text-xs bg-amber-50/30 dark:bg-amber-950/10 border-amber-200/80 dark:border-amber-900/40 focus:border-amber-400"
+                                            />
+                                        </div>
+
+                                        {/* Who confirmed this order with the customer. This is the
+                                            busiest of the three entry points — most orders arrive
+                                            from EasyOrders and get closed right here — so it is
+                                            prefilled with whoever is reviewing and saved on the spot
+                                            rather than waiting for the order to move on. */}
+                                        <div className="space-y-1.5 pt-3 border-t">
+                                            <Label className="text-xs font-semibold text-primary">
+                                                {t("Closed by")}
+                                            </Label>
+                                            <ClosedBySelect
+                                                bare
+                                                businessId={activeBusiness?.id}
+                                                value={order.closed_by ?? null}
+                                                onChange={v => updateOrderField(order, 'closed_by', v)}
                                             />
                                         </div>
                                     </div>
