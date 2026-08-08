@@ -10,6 +10,37 @@
 --
 -- So the denominator is now every confirmed order — the same population the
 -- orders meter counts — and nothing drops out of it.
+--
+-- ---------------------------------------------------------------------------
+-- This file is deliberately self-contained.
+--
+-- It first shipped assuming 20260804 had already run, and it had not. PL/pgSQL
+-- resolves function calls at call time, not at CREATE time, so the migration
+-- applied cleanly and the dashboard then failed with 42883 —
+-- is_confirmed_order(text) does not exist. Splitting a dependency across two
+-- files only works if both are applied, in order; these are applied by hand.
+-- Every helper the league needs is therefore defined below, all idempotent, so
+-- running this one file is enough no matter what came before it.
+-- ---------------------------------------------------------------------------
+
+-- Confirmed: the same line the dashboard's Confirmed Orders tile draws.
+CREATE OR REPLACE FUNCTION public.is_confirmed_order(p_status TEXT)
+RETURNS BOOLEAN LANGUAGE sql IMMUTABLE AS $$
+    SELECT lower(btrim(coalesce(p_status,''))) NOT IN ('waiting', 'cancelled');
+$$;
+
+-- Success is Collected alone. Delivered is not where this business finishes,
+-- so an order sitting in it still counts against the rate until it lands.
+CREATE OR REPLACE FUNCTION public.is_delivery_success(p_status TEXT)
+RETURNS BOOLEAN LANGUAGE sql IMMUTABLE AS $$
+    SELECT lower(btrim(coalesce(p_status,''))) = 'collected';
+$$;
+
+CREATE OR REPLACE FUNCTION public.is_delivery_failure(p_status TEXT)
+RETURNS BOOLEAN LANGUAGE sql IMMUTABLE AS $$
+    SELECT lower(btrim(coalesce(p_status,''))) = 'returned';
+$$;
+
 CREATE OR REPLACE FUNCTION public.get_moderator_league(
     p_business_id UUID,
     p_from        TIMESTAMPTZ,
