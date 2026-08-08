@@ -132,7 +132,9 @@ export function ModeratorsLeague() {
         return {
             orders, items, delivered, returned, resolved,
             sales: sum("sales_value"),
-            deliveryRate: resolved ? (100 * delivered) / resolved : null,
+            // Collected out of every confirmed order — the same denominator the
+            // orders meter uses, so the two read off one population.
+            deliveryRate: orders ? (100 * delivered) / orders : null,
             itemsPerOrder: orders ? items / orders : 0,
         };
     }, [rows]);
@@ -227,15 +229,15 @@ export function ModeratorsLeague() {
                             </span>
                         </div>
                         <Progress value={ratePct} />
-                        {/* Mid-month this number always flatters: collections land
-                            before returns do, so a month that is mostly still in
-                            transit reads high and then falls. Showing how much of
-                            the month it is actually based on stops it being read
-                            as final. */}
+                        {/* Out of every confirmed order, so early in the month
+                            this reads low and climbs as orders come back
+                            collected — the opposite of the settled-only ratio.
+                            Spelling out how much of the month is still moving
+                            stops a mid-month figure being read as the result. */}
                         <p className="text-[11px] text-muted-foreground">
-                            {totals.resolved === 0
-                                ? t("nothing collected or returned yet")
-                                : `${t("based on")} ${totals.resolved.toLocaleString()} ${t("of")} ${totals.orders.toLocaleString()} ${t("orders settled so far")}`}
+                            {totals.orders === 0
+                                ? t("no confirmed orders yet")
+                                : `${totals.delivered.toLocaleString()} ${t("collected of")} ${totals.orders.toLocaleString()} ${t("confirmed")} · ${(totals.orders - totals.resolved).toLocaleString()} ${t("still in progress")}`}
                         </p>
                     </div>
 
@@ -369,7 +371,7 @@ export function ModeratorsLeague() {
 
                 {rows.length > 0 && (
                     <p className="text-xs text-muted-foreground">
-                        {t("Counts confirmed orders — everything except Waiting and Cancelled — assigned or not. The ranking only lists orders someone was assigned to. Delivery rate is Collected against Returned; orders still in transit are in neither.")}
+                        {t("Counts confirmed orders — everything except Waiting and Cancelled — assigned or not. The ranking only lists orders someone was assigned to. Delivery rate is Collected out of confirmed, so orders still in transit count against it until they land.")}
                     </p>
                 )}
             </CardContent>
