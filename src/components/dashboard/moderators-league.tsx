@@ -23,7 +23,8 @@ import { toast } from "sonner";
 import { format } from "date-fns";
 
 interface LeagueRow {
-    closed_by: string;
+    /** Null for the bucket of orders nobody has been assigned to. */
+    closed_by: string | null;
     orders_count: number;
     items_count: number;
     items_per_order: number;
@@ -63,8 +64,15 @@ function monthBounds() {
  * its own column with its own leader.
  */
 export function ModeratorsLeague() {
-    const { activeBusiness } = useBusiness();
+    const { activeBusiness, userRole, isSystemAdmin } = useBusiness();
     const { t } = useLanguage();
+
+    // Someone being measured against a number should not be able to move it.
+    // Enforced in RLS too — this only decides whether the button is worth
+    // showing. Role spellings vary across the app's history ('super_admin'
+    // from seed data, 'super admin' from the team screen), so normalise.
+    const canSetTargets = isSystemAdmin || ["owner", "admin", "super admin"]
+        .includes((userRole || "").toLowerCase().replace(/_/g, " "));
 
     const [rows, setRows] = useState<LeagueRow[]>([]);
     const [targets, setTargets] = useState<Targets>(DEFAULT_TARGETS);
@@ -106,17 +114,24 @@ export function ModeratorsLeague() {
 
     useEffect(() => { load(); }, [load]);
 
-    // Totals come from the same rows the table shows, so the progress bar can
-    // never disagree with the standings underneath it.
+    // The standings rank people, so only claimed orders belong in the table.
+    const ranked = useMemo(() => rows.filter(r => r.closed_by), [rows]);
+    const unassigned = useMemo(() => rows.find(r => !r.closed_by) || null, [rows]);
+
+    // The meter measures the month, not how much of it has been labelled, so it
+    // counts every order — including the ones placed before attribution existed
+    // and any confirmed since without a moderator picked. Both come from the
+    // same query as the table, so the two can never disagree.
     const totals = useMemo(() => {
-        const orders = rows.reduce((s, r) => s + Number(r.orders_count || 0), 0);
-        const items = rows.reduce((s, r) => s + Number(r.items_count || 0), 0);
-        const sales = rows.reduce((s, r) => s + Number(r.sales_value || 0), 0);
-        const delivered = rows.reduce((s, r) => s + Number(r.delivered_count || 0), 0);
-        const returned = rows.reduce((s, r) => s + Number(r.returned_count || 0), 0);
+        const sum = (k: keyof LeagueRow) => rows.reduce((s, r) => s + Number(r[k] || 0), 0);
+        const orders = sum("orders_count");
+        const items = sum("items_count");
+        const delivered = sum("delivered_count");
+        const returned = sum("returned_count");
         const resolved = delivered + returned;
         return {
-            orders, items, sales, delivered, returned,
+            orders, items, delivered, returned,
+            sales: sum("sales_value"),
             deliveryRate: resolved ? (100 * delivered) / resolved : null,
             itemsPerOrder: orders ? items / orders : 0,
         };
@@ -126,11 +141,11 @@ export function ModeratorsLeague() {
     // prize — one order with three items is not a track record.
     const CROSS_SELL_MIN_ORDERS = 10;
     const crossSellLeader = useMemo(() => {
-        const eligible = rows.filter(r => Number(r.orders_count) >= CROSS_SELL_MIN_ORDERS);
+        const eligible = ranked.filter(r => Number(r.orders_count) >= CROSS_SELL_MIN_ORDERS);
         if (!eligible.length) return null;
         return eligible.reduce((best, r) =>
             Number(r.items_per_order) > Number(best.items_per_order) ? r : best);
-    }, [rows]);
+    }, [ranked]);
 
     async function saveTargets() {
         if (!activeBusiness) return;
@@ -174,14 +189,16 @@ export function ModeratorsLeague() {
                         {format(from, "MMMM yyyy")} — {t("orders confirmed with customers this month")}
                     </CardDescription>
                 </div>
-                <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => { setDraft(targets); setDialogOpen(true); }}
-                >
-                    <Settings2 className="h-4 w-4 mr-2" />
-                    {t("Targets")}
-                </Button>
+                {canSetTargets && (
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => { setDraft(targets); setDialogOpen(true); }}
+                    >
+                        <Settings2 className="h-4 w-4 mr-2" />
+                        {t("Targets")}
+                    </Button>
+                )}
             </CardHeader>
 
             <CardContent className="space-y-6">
@@ -233,9 +250,13 @@ export function ModeratorsLeague() {
                     <div className="py-10 flex justify-center">
                         <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
                     </div>
-                ) : rows.length === 0 ? (
+                ) : ranked.length === 0 ? (
                     <div className="py-10 text-center text-sm text-muted-foreground space-y-1">
-                        <p>{t("No orders have been attributed to a moderator yet this month.")}</p>
+                        <p>
+                            {unassigned
+                                ? `${Number(unassigned.orders_count).toLocaleString()} ${t("orders this month, none assigned to a moderator yet.")}`
+                                : t("No orders have been attributed to a moderator yet this month.")}
+                        </p>
                         <p className="text-xs">
                             {t("Pick who closed the order in Platform Orders, or when creating and editing an order.")}
                         </p>
@@ -254,7 +275,7 @@ export function ModeratorsLeague() {
                             </TableRow>
                         </TableHeader>
                         <TableBody>
-                            {rows.map((r, i) => {
+                            {ranked.map((r, i) => {
                                 const isCrossSellLeader = crossSellLeader?.closed_by === r.closed_by;
                                 return (
                                     <TableRow key={r.closed_by}>
@@ -303,12 +324,42 @@ export function ModeratorsLeague() {
                                 );
                             })}
                         </TableBody>
+                        {unassigned && (
+                            <TableBody>
+                                {/* Counted in the meter above but deliberately outside the
+                                    ranking — these are orders, not someone's work. Shown
+                                    rather than hidden so the gap between the two is visible
+                                    instead of looking like the numbers disagree. */}
+                                <TableRow className="bg-muted/30">
+                                    <TableCell />
+                                    <TableCell className="text-muted-foreground italic">
+                                        {t("Not assigned")}
+                                    </TableCell>
+                                    <TableCell className="text-right text-muted-foreground">
+                                        {Number(unassigned.orders_count).toLocaleString()}
+                                    </TableCell>
+                                    <TableCell className="text-right text-muted-foreground hidden sm:table-cell">
+                                        {Number(unassigned.items_count).toLocaleString()}
+                                    </TableCell>
+                                    <TableCell className="text-right text-muted-foreground">
+                                        {Number(unassigned.items_per_order).toFixed(2)}
+                                    </TableCell>
+                                    <TableCell className="text-right text-muted-foreground hidden lg:table-cell">
+                                        {unassigned.delivery_rate === null
+                                            ? "—" : `${Number(unassigned.delivery_rate).toFixed(1)}%`}
+                                    </TableCell>
+                                    <TableCell className="text-right text-muted-foreground">
+                                        {formatCurrency(Number(unassigned.sales_value))}
+                                    </TableCell>
+                                </TableRow>
+                            </TableBody>
+                        )}
                     </Table>
                 )}
 
                 {rows.length > 0 && (
                     <p className="text-xs text-muted-foreground">
-                        {t("Delivery rate counts delivered against returned. Cancelled orders are left out — the parcel never shipped, so it is not a failed delivery. Orders with nobody assigned do not appear here.")}
+                        {t("The meters count every order this month, assigned or not. The ranking only counts orders someone was assigned to. Delivery rate is delivered against returned; cancelled orders are left out, since the parcel never shipped.")}
                     </p>
                 )}
             </CardContent>
