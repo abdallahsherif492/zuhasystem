@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useBusiness } from "@/contexts/BusinessContext";
 import { useLanguage } from "@/contexts/LanguageContext";
@@ -19,8 +19,11 @@ type ActionLogRecord = {
     id: string;
     business_id: string;
     user_email: string;
-    action_type: "create" | "update_status" | "edit" | "delete" | "stock_adjust";
-    entity_type: "order" | "product" | "inventory" | "transaction" | "customer" | "team";
+    // Deliberately widened to string. The database triggers write entity types
+    // this page does not enumerate (supplier, invoice, treasury, settings...),
+    // and a union here would be a lie that silently mislabels rows.
+    action_type: string;
+    entity_type: string;
     entity_id: string;
     entity_name: string;
     changes: ActionDiff[];
@@ -28,70 +31,161 @@ type ActionLogRecord = {
     created_at: string;
 };
 
+const PAGE_SIZE = 100;
+
 export default function ActionsLogPage() {
     const { activeBusiness } = useBusiness();
     const { t } = useLanguage();
     const [loading, setLoading] = useState(true);
+    const [loadingMore, setLoadingMore] = useState(false);
     const [logs, setLogs] = useState<ActionLogRecord[]>([]);
+    const [total, setTotal] = useState(0);
+    const [breakdown, setBreakdown] = useState<Record<string, number>>({});
+    const [facets, setFacets] = useState<{ users: string[]; entities: string[]; actions: string[] }>({
+        users: [], entities: [], actions: [],
+    });
+
     const [searchQuery, setSearchQuery] = useState("");
     const [entityFilter, setEntityFilter] = useState("all");
     const [actionFilter, setActionFilter] = useState("all");
-    const [dateFilter, setDateFilter] = useState("");
+    const [userFilter, setUserFilter] = useState("all");
+    const [fromDate, setFromDate] = useState("");
+    const [toDate, setToDate] = useState("");
 
+    // Debounced so typing does not fire a query per keystroke against 12k rows.
+    const [debouncedSearch, setDebouncedSearch] = useState("");
     useEffect(() => {
-        if (activeBusiness) {
-            fetchLogs();
-        }
-    }, [activeBusiness]);
+        const id = setTimeout(() => setDebouncedSearch(searchQuery.trim()), 400);
+        return () => clearTimeout(id);
+    }, [searchQuery]);
 
-    async function fetchLogs() {
+    /**
+     * Every filter is applied in SQL.
+     *
+     * This page used to pull the newest 300 rows and filter them in the
+     * browser. There are 12,165 rows and the newest 1,000 cover under two
+     * days, so "last 300" was a few hours: filtering by a user or a date
+     * earlier than that searched a window that had already scrolled past, and
+     * found nothing, which read as "this was never logged".
+     */
+    const buildQuery = useCallback((forCount: boolean) => {
+        let q = supabase
+            .from("actions_log")
+            .select("*", forCount ? { count: "exact", head: true } : undefined)
+            .eq("business_id", activeBusiness!.id);
+
+        if (entityFilter !== "all") q = q.eq("entity_type", entityFilter);
+        if (actionFilter !== "all") q = q.eq("action_type", actionFilter);
+        if (userFilter !== "all") q = q.eq("user_email", userFilter);
+        if (fromDate) q = q.gte("created_at", new Date(fromDate + "T00:00:00").toISOString());
+        // Inclusive of the whole end day, which is what picking a date means.
+        if (toDate) q = q.lt("created_at", new Date(new Date(toDate + "T00:00:00").getTime() + 86400000).toISOString());
+        if (debouncedSearch) {
+            const safe = debouncedSearch.replace(/[%,()]/g, " ");
+            q = q.or(`entity_name.ilike.%${safe}%,entity_id.ilike.%${safe}%,user_email.ilike.%${safe}%,action_type.ilike.%${safe}%`);
+        }
+        return q;
+    }, [activeBusiness, entityFilter, actionFilter, userFilter, fromDate, toDate, debouncedSearch]);
+
+    const fetchLogs = useCallback(async () => {
         if (!activeBusiness) return;
         setLoading(true);
-
-        const { data, error } = await supabase
-            .from("actions_log")
-            .select("*")
-            .eq("business_id", activeBusiness.id)
-            .order("created_at", { ascending: false })
-            .limit(300);
-
-        if (error) {
-            console.error("Error fetching actions log:", error);
-            // If table doesn't exist yet, gracefully set empty list
+        try {
+            const [rowsRes, countRes] = await Promise.all([
+                buildQuery(false).order("created_at", { ascending: false }).range(0, PAGE_SIZE - 1),
+                buildQuery(true),
+            ]);
+            if (rowsRes.error) throw rowsRes.error;
+            setLogs((rowsRes.data as ActionLogRecord[]) || []);
+            setTotal(countRes.count ?? 0);
+        } catch (e) {
+            console.error("Error fetching actions log:", e);
             setLogs([]);
-        } else {
-            setLogs((data as ActionLogRecord[]) || []);
+            setTotal(0);
+        } finally {
+            setLoading(false);
         }
-        setLoading(false);
+    }, [activeBusiness, buildQuery]);
+
+    async function loadMore() {
+        if (!activeBusiness || loadingMore) return;
+        setLoadingMore(true);
+        try {
+            const { data, error } = await buildQuery(false)
+                .order("created_at", { ascending: false })
+                .range(logs.length, logs.length + PAGE_SIZE - 1);
+            if (error) throw error;
+            setLogs(prev => [...prev, ...((data as ActionLogRecord[]) || [])]);
+        } catch (e) {
+            console.error("Error loading more:", e);
+        } finally {
+            setLoadingMore(false);
+        }
     }
 
-    // Filtering logic
-    const filteredLogs = logs.filter(log => {
-        // Search Query
-        const matchesQuery = 
-            !searchQuery.trim() ||
-            (log.user_email || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
-            (log.entity_name || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
-            (log.entity_id || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
-            (log.action_type || "").toLowerCase().includes(searchQuery.toLowerCase());
+    useEffect(() => { fetchLogs(); }, [fetchLogs]);
 
-        // Entity Filter
-        const matchesEntity = entityFilter === "all" || log.entity_type === entityFilter;
+    // Dropdown options come from what is actually in the log, so a filter can
+    // never offer a value that returns nothing, and never hides one it should.
+    useEffect(() => {
+        if (!activeBusiness) return;
+        let cancelled = false;
+        (async () => {
+            const { data, error } = await supabase.rpc("get_actions_log_facets", {
+                p_business_id: activeBusiness.id,
+            });
+            if (cancelled || error || !data) return;
+            const pick = (k: string) => (data as any[]).filter(r => r.kind === k).map(r => r.value).sort();
+            setFacets({ users: pick("user"), entities: pick("entity"), actions: pick("action") });
+        })();
+        return () => { cancelled = true; };
+    }, [activeBusiness]);
 
-        // Action Filter
-        const matchesAction = actionFilter === "all" || log.action_type === actionFilter;
+    // Headline counts are per-entity totals across the whole log, not across
+    // the page of rows on screen — counting the loaded rows made the cards
+    // change every time someone pressed "load more".
+    useEffect(() => {
+        if (!activeBusiness) return;
+        let cancelled = false;
+        (async () => {
+            const entities = ["order", "product", "inventory", "transaction", "customer", "team"];
+            const counts = await Promise.all(entities.map(async e => {
+                const { count } = await supabase
+                    .from("actions_log")
+                    .select("id", { count: "exact", head: true })
+                    .eq("business_id", activeBusiness.id)
+                    .eq("entity_type", e);
+                return [e, count ?? 0] as const;
+            }));
+            if (!cancelled) setBreakdown(Object.fromEntries(counts));
+        })();
+        return () => { cancelled = true; };
+    }, [activeBusiness]);
 
-        // Date Filter
-        const matchesDate = !dateFilter || log.created_at.startsWith(dateFilter);
+    const filteredLogs = logs;
+    const totalCount = total;
+    const orderLogsCount = breakdown.order ?? 0;
+    const productStockLogsCount = (breakdown.product ?? 0) + (breakdown.inventory ?? 0);
+    const financialLogsCount = breakdown.transaction ?? 0;
 
-        return matchesQuery && matchesEntity && matchesAction && matchesDate;
-    });
+    const activeFilters =
+        (entityFilter !== "all" ? 1 : 0) + (actionFilter !== "all" ? 1 : 0) +
+        (userFilter !== "all" ? 1 : 0) + (fromDate ? 1 : 0) + (toDate ? 1 : 0) +
+        (debouncedSearch ? 1 : 0);
 
-    // Summary Metric Calculations
-    const totalCount = logs.length;
-    const orderLogsCount = logs.filter(l => l.entity_type === "order").length;
-    const productStockLogsCount = logs.filter(l => l.entity_type === "product" || l.entity_type === "inventory").length;
-    const financialLogsCount = logs.filter(l => l.entity_type === "transaction").length;
+    function clearFilters() {
+        setSearchQuery(""); setEntityFilter("all"); setActionFilter("all");
+        setUserFilter("all"); setFromDate(""); setToDate("");
+    }
+
+    const LABELS: Record<string, string> = {
+        create: "Creation", update_status: "Status Change", edit: "Edit Details",
+        stock_adjust: "Stock Adjust", delete: "Deletion",
+        order: "Orders", product: "Products", inventory: "Inventory",
+        transaction: "Transactions", customer: "Customers", team: "Team",
+        supplier: "Suppliers", invoice: "Supplier Invoices", shipping: "Couriers",
+        treasury: "Treasuries", settings: "Settings", target: "Targets",
+    };
 
     // Helper Badge Generators
     const getActionBadge = (type: string) => {
@@ -121,8 +215,12 @@ export default function ActionsLogPage() {
                 return <Badge variant="outline" className="text-[10px] gap-1 font-mono"><Package className="h-3 w-3 text-purple-500" /> {t("Inventory")}</Badge>;
             case "transaction":
                 return <Badge variant="outline" className="text-[10px] gap-1 font-mono"><DollarSign className="h-3 w-3 text-emerald-500" /> {t("Transactions")}</Badge>;
+            case "customer":
+                return <Badge variant="outline" className="text-[10px] gap-1 font-mono"><UserCheck className="h-3 w-3 text-cyan-500" /> {t("Customers")}</Badge>;
+            case "team":
+                return <Badge variant="outline" className="text-[10px] gap-1 font-mono"><UserCheck className="h-3 w-3 text-orange-500" /> {t("Team")}</Badge>;
             default:
-                return <Badge variant="outline" className="text-[10px] font-mono">{entity}</Badge>;
+                return <Badge variant="outline" className="text-[10px] font-mono">{t(LABELS[entity] || entity)}</Badge>;
         }
     };
 
@@ -187,56 +285,83 @@ export default function ActionsLogPage() {
                 </Card>
             </div>
 
-            {/* Filter Bar */}
-            <div className="grid gap-3 md:grid-cols-4 bg-muted/20 p-3 rounded-xl border border-border/50">
-                {/* Search Bar */}
-                <div className="relative">
-                    <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-                    <Input
-                        placeholder={t("Search by user, entity, ID...")}
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        className="pl-9 text-xs h-9"
-                    />
+            {/* Filter Bar — every control below narrows the query in SQL, not
+                a page of already-fetched rows. */}
+            <div className="space-y-3 bg-muted/20 p-3 rounded-xl border border-border/50">
+                <div className="grid gap-3 md:grid-cols-4">
+                    <div className="relative">
+                        <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                        <Input
+                            placeholder={t("Search by user, entity, ID...")}
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            className="pl-9 text-xs h-9"
+                        />
+                    </div>
+
+                    <Select value={entityFilter} onValueChange={setEntityFilter}>
+                        <SelectTrigger className="h-9 text-xs bg-background">
+                            <SelectValue placeholder={t("Filter by Entity")} />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all">{t("All Entities")}</SelectItem>
+                            {facets.entities.map(v => (
+                                <SelectItem key={v} value={v}>{t(LABELS[v] || v)}</SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+
+                    <Select value={actionFilter} onValueChange={setActionFilter}>
+                        <SelectTrigger className="h-9 text-xs bg-background">
+                            <SelectValue placeholder={t("Filter by Action")} />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all">{t("All Actions")}</SelectItem>
+                            {facets.actions.map(v => (
+                                <SelectItem key={v} value={v}>{t(LABELS[v] || v)}</SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+
+                    <Select value={userFilter} onValueChange={setUserFilter}>
+                        <SelectTrigger className="h-9 text-xs bg-background">
+                            <SelectValue placeholder={t("Filter by User")} />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all">{t("All Users")}</SelectItem>
+                            {facets.users.map(v => (
+                                <SelectItem key={v} value={v}>{v}</SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
                 </div>
 
-                {/* Entity Filter */}
-                <Select value={entityFilter} onValueChange={setEntityFilter}>
-                    <SelectTrigger className="h-9 text-xs bg-background">
-                        <SelectValue placeholder={t("Filter by Entity")} />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="all">{t("All Entities")}</SelectItem>
-                        <SelectItem value="order">{t("Orders")}</SelectItem>
-                        <SelectItem value="product">{t("Products")}</SelectItem>
-                        <SelectItem value="inventory">{t("Inventory")}</SelectItem>
-                        <SelectItem value="transaction">{t("Transactions")}</SelectItem>
-                    </SelectContent>
-                </Select>
-
-                {/* Action Filter */}
-                <Select value={actionFilter} onValueChange={setActionFilter}>
-                    <SelectTrigger className="h-9 text-xs bg-background">
-                        <SelectValue placeholder={t("Filter by Action")} />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="all">{t("All Actions")}</SelectItem>
-                        <SelectItem value="create">{t("Creation")}</SelectItem>
-                        <SelectItem value="update_status">{t("Status Change")}</SelectItem>
-                        <SelectItem value="edit">{t("Edit Details")}</SelectItem>
-                        <SelectItem value="stock_adjust">{t("Stock Adjust")}</SelectItem>
-                        <SelectItem value="delete">{t("Deletion")}</SelectItem>
-                    </SelectContent>
-                </Select>
-
-                {/* Date Picker */}
-                <div className="relative">
-                    <Input
-                        type="date"
-                        value={dateFilter}
-                        onChange={(e) => setDateFilter(e.target.value)}
-                        className="text-xs h-9 bg-background"
-                    />
+                <div className="grid gap-3 md:grid-cols-4 items-center">
+                    <div className="space-y-1">
+                        <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-bold">{t("From")}</label>
+                        <Input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} className="text-xs h-9 bg-background" />
+                    </div>
+                    <div className="space-y-1">
+                        <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-bold">{t("To")}</label>
+                        <Input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} className="text-xs h-9 bg-background" />
+                    </div>
+                    <div className="md:col-span-2 flex items-end justify-between gap-2 h-full pb-0.5">
+                        <p className="text-xs text-muted-foreground">
+                            {loading ? t("Searching...") : (
+                                <>
+                                    <span className="font-bold text-foreground">{total.toLocaleString()}</span>{" "}
+                                    {activeFilters > 0 ? t("matching actions") : t("actions logged")}
+                                    {logs.length < total && <> — {t("showing")} {logs.length.toLocaleString()}</>}
+                                </>
+                            )}
+                        </p>
+                        {activeFilters > 0 && (
+                            <Button variant="ghost" size="sm" onClick={clearFilters} className="h-8 text-xs gap-1.5">
+                                <Filter className="h-3.5 w-3.5" />
+                                {t("Clear")} ({activeFilters})
+                            </Button>
+                        )}
+                    </div>
                 </div>
             </div>
 
@@ -317,6 +442,14 @@ export default function ActionsLogPage() {
                                 )}
                             </TableBody>
                         </Table>
+                    )}
+                    {!loading && logs.length < total && (
+                        <div className="p-4 border-t flex justify-center">
+                            <Button variant="outline" size="sm" onClick={loadMore} disabled={loadingMore} className="text-xs gap-2">
+                                {loadingMore && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                                {t("Load older")} ({(total - logs.length).toLocaleString()} {t("remaining")})
+                            </Button>
+                        </div>
                     )}
                 </CardContent>
             </Card>

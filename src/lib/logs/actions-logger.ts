@@ -14,7 +14,12 @@ export interface LogBusinessActionParams {
     businessId: string;
     userEmail?: string | null;
     actionType: "create" | "update_status" | "edit" | "delete" | "stock_adjust";
-    entityType: "order" | "product" | "inventory" | "transaction" | "customer" | "team";
+    // The db triggers in 20260816 also write supplier / invoice / shipping /
+    // treasury / settings / target. Those are listed so app-side callers can
+    // use the same vocabulary rather than inventing a parallel one.
+    entityType:
+        | "order" | "product" | "inventory" | "transaction" | "customer" | "team"
+        | "supplier" | "invoice" | "shipping" | "treasury" | "settings" | "target";
     entityId: string;
     entityName: string;
     changes?: ActionDiff[];

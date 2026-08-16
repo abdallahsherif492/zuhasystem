@@ -44,10 +44,11 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { useBusiness } from "@/contexts/BusinessContext";
+import { logBusinessAction } from "@/lib/logs/actions-logger";
 import { useLanguage } from "@/contexts/LanguageContext";
 
 export default function InventoryPage() {
-    const { activeBusiness } = useBusiness();
+    const { activeBusiness, currentUser } = useBusiness();
     const { t } = useLanguage();
     const [loading, setLoading] = useState(true);
     const [stockItems, setStockItems] = useState<any[]>([]);
@@ -203,6 +204,33 @@ export default function InventoryPage() {
                 note: `Action: ${restockForm.type}. Note: ${restockForm.supplier || 'N/A'}`
             });
             if (logError) throw logError;
+
+            // Also to the actions log. inventory_transactions is the stock
+            // ledger and answers "how did this number get here"; the actions
+            // log answers "who touched what today", and a manual recount is
+            // exactly the kind of thing someone goes looking for there. No
+            // trigger does this for us — variants move on every order status
+            // change, so auditing that table would bury everything else.
+            logBusinessAction({
+                businessId: activeBusiness!.id,
+                userEmail: currentUser?.email || "Staff",
+                actionType: "stock_adjust",
+                entityType: "inventory",
+                entityId: selectedVariant.id,
+                entityName: `${selectedVariant.product?.name || "Product"} — ${selectedVariant.title || ""}`.trim(),
+                changes: [
+                    {
+                        field: "Stock",
+                        old_value: selectedVariant.stock_qty,
+                        new_value: selectedVariant.stock_qty + changeAmount,
+                    },
+                ],
+                metadata: {
+                    adjustment: restockForm.type,
+                    change: changeAmount,
+                    note: restockForm.supplier || null,
+                },
+            });
 
             toast.success("Stock updated successfully");
             setIsRestockOpen(false);
