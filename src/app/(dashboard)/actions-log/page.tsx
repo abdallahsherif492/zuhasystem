@@ -9,7 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2, History, Search, Filter, Calendar, ArrowRight, UserCheck, ShoppingBag, Package, DollarSign, RefreshCw } from "lucide-react";
+import { Loader2, History, Search, Filter, Calendar, ArrowRight, UserCheck, ShoppingBag, Package, DollarSign, RefreshCw, Eye, EyeOff, ChevronDown, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { format, parseISO } from "date-fns";
@@ -33,6 +33,32 @@ type ActionLogRecord = {
 
 const PAGE_SIZE = 100;
 
+/**
+ * Render a logged value for a human.
+ *
+ * Values arrive from JSONB, so a change can carry a null, a boolean, a number,
+ * or a whole nested object — a trigger diffing customer_info hands over the
+ * entire JSON. Calling String() on those gives "[object Object]", which is how
+ * a detail panel ends up telling you nothing.
+ */
+function fmtVal(v: any): string {
+    if (v === null || v === undefined || v === "") return "—";
+    if (typeof v === "boolean") return v ? "yes" : "no";
+    if (typeof v === "object") {
+        try { return JSON.stringify(v); } catch { return "—"; }
+    }
+    return String(v);
+}
+
+function Detail({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
+    return (
+        <div className="space-y-0.5 min-w-0">
+            <p className="font-bold uppercase tracking-wider text-[10px] text-muted-foreground">{label}</p>
+            <p className={`text-xs break-all ${mono ? "font-mono" : ""}`}>{value || "—"}</p>
+        </div>
+    );
+}
+
 export default function ActionsLogPage() {
     const { activeBusiness } = useBusiness();
     const { t } = useLanguage();
@@ -50,6 +76,10 @@ export default function ActionsLogPage() {
     const [actionFilter, setActionFilter] = useState("all");
     const [userFilter, setUserFilter] = useState("all");
     const [fromDate, setFromDate] = useState("");
+    const [expanded, setExpanded] = useState<string | null>(null);
+    // Auto-sync, webhooks and cron write a lot of rows. Hiding them is the
+    // difference between reading the log and scrolling past it.
+    const [hideSystem, setHideSystem] = useState(false);
     const [toDate, setToDate] = useState("");
 
     // Debounced so typing does not fire a query per keystroke against 12k rows.
@@ -77,6 +107,9 @@ export default function ActionsLogPage() {
         if (entityFilter !== "all") q = q.eq("entity_type", entityFilter);
         if (actionFilter !== "all") q = q.eq("action_type", actionFilter);
         if (userFilter !== "all") q = q.eq("user_email", userFilter);
+        // Anything not attributable to a person. "System" is what the logger
+        // records with no user; the sync writes its own label.
+        if (hideSystem) q = q.not("user_email", "ilike", "%System%");
         if (fromDate) q = q.gte("created_at", new Date(fromDate + "T00:00:00").toISOString());
         // Inclusive of the whole end day, which is what picking a date means.
         if (toDate) q = q.lt("created_at", new Date(new Date(toDate + "T00:00:00").getTime() + 86400000).toISOString());
@@ -85,7 +118,7 @@ export default function ActionsLogPage() {
             q = q.or(`entity_name.ilike.%${safe}%,entity_id.ilike.%${safe}%,user_email.ilike.%${safe}%,action_type.ilike.%${safe}%`);
         }
         return q;
-    }, [activeBusiness, entityFilter, actionFilter, userFilter, fromDate, toDate, debouncedSearch]);
+    }, [activeBusiness, entityFilter, actionFilter, userFilter, fromDate, toDate, debouncedSearch, hideSystem]);
 
     const fetchLogs = useCallback(async () => {
         if (!activeBusiness) return;
@@ -171,11 +204,11 @@ export default function ActionsLogPage() {
     const activeFilters =
         (entityFilter !== "all" ? 1 : 0) + (actionFilter !== "all" ? 1 : 0) +
         (userFilter !== "all" ? 1 : 0) + (fromDate ? 1 : 0) + (toDate ? 1 : 0) +
-        (debouncedSearch ? 1 : 0);
+        (debouncedSearch ? 1 : 0) + (hideSystem ? 1 : 0);
 
     function clearFilters() {
         setSearchQuery(""); setEntityFilter("all"); setActionFilter("all");
-        setUserFilter("all"); setFromDate(""); setToDate("");
+        setUserFilter("all"); setFromDate(""); setToDate(""); setHideSystem(false);
     }
 
     const LABELS: Record<string, string> = {
@@ -356,12 +389,24 @@ export default function ActionsLogPage() {
                                 </>
                             )}
                         </p>
-                        {activeFilters > 0 && (
-                            <Button variant="ghost" size="sm" onClick={clearFilters} className="h-8 text-xs gap-1.5">
-                                <Filter className="h-3.5 w-3.5" />
-                                {t("Clear")} ({activeFilters})
+                        <div className="flex items-center gap-1">
+                            <Button
+                                variant={hideSystem ? "default" : "outline"}
+                                size="sm"
+                                onClick={() => setHideSystem(v => !v)}
+                                className="h-8 text-xs gap-1.5"
+                                title={t("Hide actions performed automatically by syncs, webhooks and the cron")}
+                            >
+                                {hideSystem ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                                {hideSystem ? t("People only") : t("Hide system")}
                             </Button>
-                        )}
+                            {activeFilters > 0 && (
+                                <Button variant="ghost" size="sm" onClick={clearFilters} className="h-8 text-xs gap-1.5">
+                                    <Filter className="h-3.5 w-3.5" />
+                                    {t("Clear")} ({activeFilters})
+                                </Button>
+                            )}
+                        </div>
                     </div>
                 </div>
             </div>
@@ -393,10 +438,21 @@ export default function ActionsLogPage() {
                                     filteredLogs.map((log) => {
                                         const emailPrefix = (log.user_email || "SYS").substring(0, 2).toUpperCase();
 
+                                        const isOpen = expanded === log.id;
+                                        const bulkOrders: any[] = Array.isArray(log.metadata?.orders) ? log.metadata.orders : [];
+
                                         return (
-                                            <TableRow key={log.id} className="hover:bg-muted/20 text-xs">
+                                        <>
+                                            <TableRow
+                                                key={log.id}
+                                                className="hover:bg-muted/20 text-xs cursor-pointer"
+                                                onClick={() => setExpanded(isOpen ? null : log.id)}
+                                            >
                                                 <TableCell className="w-[180px]">
                                                     <div className="flex items-center gap-2.5">
+                                                        {isOpen
+                                                            ? <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                                                            : <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />}
                                                         <Avatar className="h-7 w-7 bg-primary/10 text-primary border border-primary/20">
                                                             <AvatarFallback className="font-bold text-[10px]">{emailPrefix}</AvatarFallback>
                                                         </Avatar>
@@ -419,7 +475,7 @@ export default function ActionsLogPage() {
                                                 <TableCell className="max-w-[350px]">
                                                     {log.changes && log.changes.length > 0 ? (
                                                         <div className="space-y-1">
-                                                            {log.changes.map((c, idx) => (
+                                                            {log.changes.slice(0, 3).map((c, idx) => (
                                                                 <div key={idx} className="flex items-center gap-1.5 text-[11px] bg-muted/40 px-2 py-0.5 rounded border border-border/40 w-fit">
                                                                     <span className="font-bold text-muted-foreground">{c.field}:</span>
                                                                     <span className="line-through text-red-500/80">{String(c.old_value ?? "none")}</span>
@@ -427,7 +483,16 @@ export default function ActionsLogPage() {
                                                                     <span className="font-semibold text-emerald-600 dark:text-emerald-400">{String(c.new_value ?? "none")}</span>
                                                                 </div>
                                                             ))}
+                                                            {log.changes.length > 3 && (
+                                                                <span className="text-[10px] text-muted-foreground">
+                                                                    +{log.changes.length - 3} {t("more — open to see all")}
+                                                                </span>
+                                                            )}
                                                         </div>
+                                                    ) : log.metadata?.bulk ? (
+                                                        <span className="text-[11px] text-muted-foreground">
+                                                            {log.metadata.count} {t("orders — open to see them")}
+                                                        </span>
                                                     ) : log.metadata?.note ? (
                                                         <span className="text-xs text-muted-foreground italic">{log.metadata.note}</span>
                                                     ) : (
@@ -438,6 +503,103 @@ export default function ActionsLogPage() {
                                                     {log.created_at ? format(parseISO(log.created_at), "dd/MM/yyyy hh:mm a") : "—"}
                                                 </TableCell>
                                             </TableRow>
+
+                                            {isOpen && (
+                                                <TableRow key={`${log.id}-detail`} className="bg-muted/20 hover:bg-muted/20">
+                                                    <TableCell colSpan={5} className="p-4">
+                                                        <div className="space-y-4 text-xs">
+                                                            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                                                                <Detail label={t("Performed by")} value={log.user_email} />
+                                                                <Detail label={t("When")} value={
+                                                                    log.created_at
+                                                                        ? format(parseISO(log.created_at), "EEEE dd MMM yyyy, hh:mm:ss a")
+                                                                        : "—"} />
+                                                                <Detail label={t("Entity")} value={`${t(LABELS[log.entity_type] || log.entity_type)} — ${log.entity_name}`} />
+                                                                <Detail label={t("Record ID")} value={log.entity_id} mono />
+                                                            </div>
+
+                                                            {log.changes?.length > 0 && (
+                                                                <div className="space-y-1.5">
+                                                                    <p className="font-bold uppercase tracking-wider text-[10px] text-muted-foreground">
+                                                                        {t("What changed")} ({log.changes.length})
+                                                                    </p>
+                                                                    <div className="rounded-md border bg-background overflow-x-auto">
+                                                                        <table className="w-full text-[11px]">
+                                                                            <thead className="text-muted-foreground">
+                                                                                <tr className="border-b">
+                                                                                    <th className="text-start p-2 font-semibold">{t("Field")}</th>
+                                                                                    <th className="text-start p-2 font-semibold">{t("From")}</th>
+                                                                                    <th className="text-start p-2 font-semibold">{t("To")}</th>
+                                                                                </tr>
+                                                                            </thead>
+                                                                            <tbody>
+                                                                                {log.changes.map((c, i) => (
+                                                                                    <tr key={i} className="border-b last:border-0">
+                                                                                        <td className="p-2 font-medium whitespace-nowrap">{c.field}</td>
+                                                                                        <td className="p-2 text-red-500/90 break-all">{fmtVal(c.old_value)}</td>
+                                                                                        <td className="p-2 text-emerald-600 dark:text-emerald-400 break-all">{fmtVal(c.new_value)}</td>
+                                                                                    </tr>
+                                                                                ))}
+                                                                            </tbody>
+                                                                        </table>
+                                                                    </div>
+                                                                </div>
+                                                            )}
+
+                                                            {/* A bulk edit is one row here; this is the list it stands for. */}
+                                                            {bulkOrders.length > 0 && (
+                                                                <div className="space-y-1.5">
+                                                                    <p className="font-bold uppercase tracking-wider text-[10px] text-muted-foreground">
+                                                                        {t("Orders in this batch")} ({bulkOrders.length})
+                                                                    </p>
+                                                                    <div className="rounded-md border bg-background max-h-64 overflow-y-auto">
+                                                                        <table className="w-full text-[11px]">
+                                                                            <thead className="text-muted-foreground sticky top-0 bg-background">
+                                                                                <tr className="border-b">
+                                                                                    <th className="text-start p-2 font-semibold">#</th>
+                                                                                    <th className="text-start p-2 font-semibold">{t("Order")}</th>
+                                                                                    <th className="text-start p-2 font-semibold">{t("Customer")}</th>
+                                                                                    <th className="text-start p-2 font-semibold">{t("Was")}</th>
+                                                                                </tr>
+                                                                            </thead>
+                                                                            <tbody>
+                                                                                {bulkOrders.map((o, i) => (
+                                                                                    <tr key={o.id || i} className="border-b last:border-0">
+                                                                                        <td className="p-2 text-muted-foreground">{i + 1}</td>
+                                                                                        <td className="p-2 font-mono">{o.reference || String(o.id || "").slice(0, 8)}</td>
+                                                                                        <td className="p-2">{o.customer || "—"}</td>
+                                                                                        <td className="p-2 text-muted-foreground">{o.from || "—"}</td>
+                                                                                    </tr>
+                                                                                ))}
+                                                                            </tbody>
+                                                                        </table>
+                                                                    </div>
+                                                                </div>
+                                                            )}
+
+                                                            {/* Everything else the action carried, shown rather than dropped. */}
+                                                            {log.metadata && Object.keys(log.metadata).filter(k => k !== "orders").length > 0 && (
+                                                                <div className="space-y-1.5">
+                                                                    <p className="font-bold uppercase tracking-wider text-[10px] text-muted-foreground">
+                                                                        {t("Context")}
+                                                                    </p>
+                                                                    <div className="flex flex-wrap gap-1.5">
+                                                                        {Object.entries(log.metadata)
+                                                                            .filter(([k]) => k !== "orders")
+                                                                            .map(([k, v]) => (
+                                                                                <span key={k} className="rounded border bg-background px-2 py-0.5 text-[10px]">
+                                                                                    <span className="text-muted-foreground">{k}: </span>
+                                                                                    <span className="font-medium break-all">{fmtVal(v)}</span>
+                                                                                </span>
+                                                                            ))}
+                                                                    </div>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    </TableCell>
+                                                </TableRow>
+                                            )}
+                                        </>
                                         );
                                     })
                                 )}

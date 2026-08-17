@@ -66,6 +66,10 @@ export default function EditProductPage() {
     const [saving, setSaving] = useState(false);
     const [deleting, setDeleting] = useState(false);
     const [initialVariantIds, setInitialVariantIds] = useState<string[]>([]);
+    // What the product looked like when the form opened. Without this the
+    // actions log could only say "details changed" — which is what it used to
+    // say, and it told nobody which field moved or what it moved from.
+    const [original, setOriginal] = useState<{ name: string; description: string; variants: any[] } | null>(null);
 
     const form = useForm<any>({
         resolver: zodResolver(formSchema),
@@ -119,6 +123,15 @@ export default function EditProductPage() {
             });
 
             setInitialVariantIds(product.variants.map((v: any) => v.id));
+            setOriginal({
+                name: product.name,
+                description: product.description || "",
+                variants: product.variants.map((v: any) => ({
+                    id: v.id, title: v.title, sku: v.sku || "",
+                    sale_price: v.sale_price, cost_price: v.cost_price,
+                    track_inventory: v.track_inventory, stock_qty: v.stock_qty,
+                })),
+            });
         } catch (error) {
             console.error("Error fetching product:", error);
         } finally {
@@ -232,17 +245,80 @@ export default function EditProductPage() {
             }
 
             if (activeBusiness) {
-                logBusinessAction({
-                    businessId: activeBusiness.id,
-                    userEmail: currentUser?.email || "Staff",
-                    actionType: "edit",
-                    entityType: "product",
-                    entityId: id,
-                    entityName: values.name,
-                    changes: [
-                        { field: "Product Details", old_value: productName || "Previous Details", new_value: `${values.name} (${values.variants.length} variants)` }
-                    ]
-                });
+                // A real diff: which fields moved, and from what to what. Built
+                // against the snapshot taken when the form loaded, so it
+                // survives a save that only touches one variant's price.
+                const diffs: ActionDiff[] = [];
+                const money = (n: any) => `${Number(n ?? 0)} EGP`;
+
+                if (original) {
+                    if (original.name !== values.name) {
+                        diffs.push({ field: "Name", old_value: original.name, new_value: values.name });
+                    }
+                    if ((original.description || "") !== (values.description || "")) {
+                        diffs.push({
+                            field: "Description",
+                            old_value: original.description || "(empty)",
+                            new_value: values.description || "(empty)",
+                        });
+                    }
+
+                    const before = new Map(original.variants.map((v: any) => [v.id, v]));
+                    for (const v of values.variants) {
+                        const label = v.title || v.sku || "variant";
+                        const prev = v.id ? before.get(v.id) : null;
+
+                        if (!prev) {
+                            diffs.push({
+                                field: `Variant added — ${label}`,
+                                old_value: null,
+                                new_value: `${money(v.sale_price)}, stock ${v.stock_qty ?? 0}`,
+                            });
+                            continue;
+                        }
+
+                        const fields: [string, any, any][] = [
+                            ["title", prev.title, v.title],
+                            ["SKU", prev.sku || "(none)", v.sku || "(none)"],
+                            ["sale price", money(prev.sale_price), money(v.sale_price)],
+                            ["cost price", money(prev.cost_price), money(v.cost_price)],
+                            ["stock", prev.stock_qty, v.track_inventory ? v.stock_qty : 0],
+                            ["tracking", prev.track_inventory, v.track_inventory],
+                        ];
+                        for (const [name, oldV, newV] of fields) {
+                            if (String(oldV) !== String(newV)) {
+                                diffs.push({ field: `${label} — ${name}`, old_value: oldV, new_value: newV });
+                            }
+                        }
+                    }
+
+                    for (const removedId of toDelete) {
+                        const prev = before.get(removedId);
+                        diffs.push({
+                            field: `Variant removed — ${prev?.title || removedId.slice(0, 8)}`,
+                            old_value: prev ? `${money(prev.sale_price)}, stock ${prev.stock_qty}` : "removed",
+                            new_value: null,
+                        });
+                    }
+                }
+
+                // A save that changed nothing is not worth a log entry.
+                if (diffs.length > 0) {
+                    logBusinessAction({
+                        businessId: activeBusiness.id,
+                        userEmail: currentUser?.email || "Staff",
+                        actionType: "edit",
+                        entityType: "product",
+                        entityId: id,
+                        entityName: values.name,
+                        changes: diffs,
+                        metadata: {
+                            variant_count: values.variants.length,
+                            variants_added: values.variants.filter(v => !v.id).length,
+                            variants_removed: toDelete.length,
+                        },
+                    });
+                }
             }
 
             router.push("/products");

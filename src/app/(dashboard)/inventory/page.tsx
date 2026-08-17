@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, normalizeSearchText } from "@/lib/utils";
 import {
     Card,
     CardContent,
@@ -53,8 +53,9 @@ export default function InventoryPage() {
     const [loading, setLoading] = useState(true);
     const [stockItems, setStockItems] = useState<any[]>([]);
     const [transactions, setTransactions] = useState<any[]>([]);
-    const [mismatches, setMismatches] = useState<any[]>([]);
     const [searchQuery, setSearchQuery] = useState("");
+    const [sortBy, setSortBy] = useState("stock_asc");
+    const [stockFilter, setStockFilter] = useState("all");
 
     useEffect(() => {
         fetchData();
@@ -96,14 +97,6 @@ export default function InventoryPage() {
             } else {
                 setTransactions(trans || []);
             }
-
-            // 3. Reconciliation: variants whose counter disagrees with the
-            //    ledger. Expected empty; anything here is stock that moved
-            //    without going through the triggers. Ignored gracefully if the
-            //    inventory-ledger migration has not run yet.
-            const { data: recon, error: reconError } = await supabase
-                .rpc("get_inventory_reconciliation", { p_business_id: activeBusiness.id });
-            if (!reconError) setMismatches(recon || []);
 
         } catch (error) {
             console.error("Error fetching inventory:", error);
@@ -224,6 +217,16 @@ export default function InventoryPage() {
                         old_value: selectedVariant.stock_qty,
                         new_value: selectedVariant.stock_qty + changeAmount,
                     },
+                    // The same dialog can change the unit cost, which moves the
+                    // value of everything already on the shelf. Recorded only
+                    // when it actually moved.
+                    ...(restockForm.costPrice !== selectedVariant.cost_price && restockForm.type !== 'reduce'
+                        ? [{
+                            field: "Unit cost",
+                            old_value: `${selectedVariant.cost_price ?? 0} EGP`,
+                            new_value: `${restockForm.costPrice} EGP`,
+                        }]
+                        : []),
                 ],
                 metadata: {
                     adjustment: restockForm.type,
@@ -255,17 +258,57 @@ export default function InventoryPage() {
 
             // Optimistic update
             setStockItems(prev => prev.map(i => i.id === item.id ? { ...i, track_inventory: newValue } : i));
+
+            // Turning tracking off stops stock moving on this variant at all,
+            // which is exactly the kind of change someone later cannot explain.
+            logBusinessAction({
+                businessId: activeBusiness!.id,
+                userEmail: currentUser?.email || "Staff",
+                actionType: "edit",
+                entityType: "inventory",
+                entityId: item.id,
+                entityName: `${item.product?.name || "Product"} — ${item.title || ""}`.trim(),
+                changes: [{ field: "Track inventory", old_value: !newValue, new_value: newValue }],
+            });
+
             toast.success(`Inventory tracking ${newValue ? 'enabled' : 'disabled'}`);
         } catch (error) {
             toast.error("Failed to update tracking");
         }
     };
 
-    // Calculations
-    const filteredStock = stockItems.filter(item =>
-        item.product?.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        item.title?.toLowerCase().includes(searchQuery.toLowerCase())
-    );
+    // Search folds Arabic the way people type it — without this, "احمر" never
+    // finds "أحمر" and the box looks broken on a product that plainly exists.
+    const filteredStock = (() => {
+        const q = normalizeSearchText(searchQuery);
+        let rows = stockItems.filter(item => {
+            if (q) {
+                const hay = normalizeSearchText(
+                    `${item.product?.name || ""} ${item.title || ""} ${item.sku || ""}`);
+                if (!hay.includes(q)) return false;
+            }
+            const qty = Number(item.stock_qty) || 0;
+            if (stockFilter === "out") return qty <= 0;
+            if (stockFilter === "low") return item.track_inventory && qty > 0 && qty <= 5;
+            if (stockFilter === "in") return qty > 0;
+            if (stockFilter === "untracked") return !item.track_inventory;
+            return true;
+        });
+
+        const name = (i: any) => `${i.product?.name || ""} ${i.title || ""}`.trim();
+        const value = (i: any) => (Number(i.stock_qty) || 0) * (Number(i.cost_price) || 0);
+        const cmp: Record<string, (a: any, b: any) => number> = {
+            stock_asc:  (a, b) => (a.stock_qty || 0) - (b.stock_qty || 0),
+            stock_desc: (a, b) => (b.stock_qty || 0) - (a.stock_qty || 0),
+            name_asc:   (a, b) => name(a).localeCompare(name(b), "ar"),
+            name_desc:  (a, b) => name(b).localeCompare(name(a), "ar"),
+            value_desc: (a, b) => value(b) - value(a),
+            value_asc:  (a, b) => value(a) - value(b),
+            cost_desc:  (a, b) => (b.cost_price || 0) - (a.cost_price || 0),
+            cost_asc:   (a, b) => (a.cost_price || 0) - (b.cost_price || 0),
+        };
+        return [...rows].sort(cmp[sortBy] || cmp.stock_asc);
+    })();
 
     const totalStockValue = filteredStock.reduce((acc, item) => acc + (item.stock_qty * item.cost_price), 0);
     const totalItems = filteredStock.reduce((acc, item) => acc + item.stock_qty, 0);
@@ -311,50 +354,6 @@ export default function InventoryPage() {
                 </Card>
             </div>
 
-            {/* Reconciliation: on-hand vs ledger. Empty = healthy. */}
-            {mismatches.length > 0 && (
-                <Card className="border-amber-400 bg-amber-50 dark:bg-amber-950/30">
-                    <CardHeader className="pb-3">
-                        <CardTitle className="text-base flex items-center gap-2 text-amber-800 dark:text-amber-300">
-                            <AlertTriangle className="h-5 w-5" />
-                            {t("Stock mismatch")} ({mismatches.length})
-                        </CardTitle>
-                        <p className="text-sm text-amber-700 dark:text-amber-400">
-                            {t("These variants' on-hand count disagrees with the movement log — stock changed without going through the system. Recount and adjust.")}
-                        </p>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="rounded-md border border-amber-200 dark:border-amber-900 overflow-x-auto bg-white dark:bg-slate-950">
-                            <table className="w-full text-sm">
-                                <thead>
-                                    <tr className="border-b text-muted-foreground text-xs">
-                                        <th className="text-start p-2.5">{t("Product")}</th>
-                                        <th className="text-start p-2.5">{t("Variant")}</th>
-                                        <th className="text-end p-2.5">{t("On Hand")}</th>
-                                        <th className="text-end p-2.5">{t("Ledger")}</th>
-                                        <th className="text-end p-2.5">{t("Difference")}</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {mismatches.map((m: any) => (
-                                        <tr key={m.variant_id} className="border-b last:border-0">
-                                            <td className="p-2.5 font-medium">{m.product_name}</td>
-                                            <td className="p-2.5 text-muted-foreground">{m.variant_title}</td>
-                                            <td className="p-2.5 text-end tabular-nums">{m.stock_qty}</td>
-                                            <td className="p-2.5 text-end tabular-nums">{m.ledger_qty}</td>
-                                            <td className={cn("p-2.5 text-end tabular-nums font-bold",
-                                                m.difference > 0 ? "text-green-600" : "text-red-600")}>
-                                                {m.difference > 0 ? "+" : ""}{m.difference}
-                                            </td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
-                    </CardContent>
-                </Card>
-            )}
-
             <Tabs defaultValue="stock">
                 <TabsList>
                     <TabsTrigger value="stock">{t("Current Stock")}</TabsTrigger>
@@ -372,6 +371,39 @@ export default function InventoryPage() {
                                 className="pl-8"
                             />
                         </div>
+
+                        <Select value={stockFilter} onValueChange={setStockFilter}>
+                            <SelectTrigger className="w-[170px]">
+                                <SelectValue placeholder={t("Show")} />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="all">{t("All variants")}</SelectItem>
+                                <SelectItem value="in">{t("In stock")}</SelectItem>
+                                <SelectItem value="low">{t("Low stock (5 or less)")}</SelectItem>
+                                <SelectItem value="out">{t("Out of stock")}</SelectItem>
+                                <SelectItem value="untracked">{t("Not tracked")}</SelectItem>
+                            </SelectContent>
+                        </Select>
+
+                        <Select value={sortBy} onValueChange={setSortBy}>
+                            <SelectTrigger className="w-[190px]">
+                                <SelectValue placeholder={t("Sort by")} />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="stock_asc">{t("Quantity: low to high")}</SelectItem>
+                                <SelectItem value="stock_desc">{t("Quantity: high to low")}</SelectItem>
+                                <SelectItem value="value_desc">{t("Stock value: high to low")}</SelectItem>
+                                <SelectItem value="value_asc">{t("Stock value: low to high")}</SelectItem>
+                                <SelectItem value="cost_desc">{t("Unit cost: high to low")}</SelectItem>
+                                <SelectItem value="cost_asc">{t("Unit cost: low to high")}</SelectItem>
+                                <SelectItem value="name_asc">{t("Name: A to Z")}</SelectItem>
+                                <SelectItem value="name_desc">{t("Name: Z to A")}</SelectItem>
+                            </SelectContent>
+                        </Select>
+
+                        <span className="text-xs text-muted-foreground whitespace-nowrap">
+                            {filteredStock.length} / {stockItems.length}
+                        </span>
                     </div>
 
                     <Card>

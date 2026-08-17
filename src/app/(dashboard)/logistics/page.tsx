@@ -305,25 +305,65 @@ function LogisticsContent() {
             // orders.status — the UPDATE above already applied it, idempotently
             // and for every order regardless of which path changed the status.
             // This loop only fires the side integrations.
-            for (const oid of orderIds) {
-                const order = orders.find(o => o.id === oid);
-                if (!order) continue;
-                const oldStatus = order.status;
+            // One log entry for the whole batch rather than one per order.
+            // Marking 50 orders shipped used to write 50 rows and push
+            // everything else off the actions log; the orders are carried in
+            // metadata so the entry can still be opened to see exactly which.
+            if (activeBusiness) {
+                const affected = orderIds.map(oid => {
+                    const o = orders.find(x => x.id === oid);
+                    return {
+                        id: oid,
+                        reference: (o as any)?.easyorders_id || oid.substring(0, 8),
+                        customer: (o?.customer_info as any)?.name || "Customer",
+                        from: o?.status ?? null,
+                    };
+                });
 
-                // Sync with EasyOrders if applicable
-                if (activeBusiness) {
+                const distinctFrom = Array.from(new Set(affected.map(a => a.from).filter(Boolean)));
+                const fromLabel = distinctFrom.length === 1
+                    ? distinctFrom[0]
+                    : `${distinctFrom.length} different statuses`;
+
+                if (affected.length === 1) {
+                    const a = affected[0];
                     logBusinessAction({
                         businessId: activeBusiness.id,
                         userEmail: currentUser?.email || "Staff",
                         actionType: "update_status",
                         entityType: "order",
-                        entityId: oid,
-                        entityName: `Order #${oid.substring(0, 8)} (${(order.customer_info as any)?.name || "Customer"})`,
-                        changes: [
-                            { field: "Status", old_value: oldStatus, new_value: newStatus }
-                        ]
+                        entityId: a.id,
+                        entityName: `Order #${a.reference} (${a.customer})`,
+                        changes: [{ field: "Status", old_value: a.from, new_value: newStatus }],
+                        metadata: companyId ? { shipping_company_id: companyId } : {},
                     });
+                } else {
+                    logBusinessAction({
+                        businessId: activeBusiness.id,
+                        userEmail: currentUser?.email || "Staff",
+                        actionType: "update_status",
+                        entityType: "order",
+                        entityId: orderIds[0],
+                        entityName: `${affected.length} orders → ${newStatus}`,
+                        changes: [{ field: "Status", old_value: fromLabel, new_value: newStatus }],
+                        metadata: {
+                            bulk: true,
+                            count: affected.length,
+                            new_status: newStatus,
+                            from_statuses: distinctFrom,
+                            shipping_company_id: companyId || null,
+                            orders: affected,
+                        },
+                    });
+                }
+            }
 
+            for (const oid of orderIds) {
+                const order = orders.find(o => o.id === oid);
+                if (!order) continue;
+
+                // Sync with EasyOrders if applicable
+                if (activeBusiness) {
                     syncStatusToEasyOrders(oid, newStatus, activeBusiness.id).catch(err => {
 
                         console.error("Failed to sync status to EasyOrders:", err);
