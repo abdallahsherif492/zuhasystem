@@ -1,567 +1,669 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, Suspense } from "react";
 import { supabase } from "@/lib/supabase";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import {
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableHeader,
-    TableRow,
+    Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Loader2, UserPlus, FileText, CheckCircle, Plus } from "lucide-react";
+import {
+    Loader2, UserPlus, FileText, Plus, ArrowLeft, Pencil, Trash2,
+    TrendingDown, TrendingUp, Wallet,
+} from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import {
-    Dialog,
-    DialogContent,
-    DialogDescription,
-    DialogFooter,
-    DialogHeader,
-    DialogTitle,
-    DialogTrigger,
+    Dialog, DialogContent, DialogDescription, DialogFooter,
+    DialogHeader, DialogTitle, DialogTrigger,
 } from "@/components/ui/dialog";
 import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
+    Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { DateRangePicker } from "@/components/date-range-picker";
-import { useSearchParams } from "next/navigation";
-import { Suspense } from "react";
 import { Checkbox } from "@/components/ui/checkbox";
-
 import { useBusiness } from "@/contexts/BusinessContext";
 
+type EntryType = "invoice" | "payment";
+
+interface Balance {
+    supplier_id: string;
+    supplier_name: string;
+    phone: string | null;
+    invoiced_total: number;
+    paid_total: number;
+    balance: number;
+    entry_count: number;
+    last_entry_date: string | null;
+}
+
+interface LedgerEntry {
+    id: string;
+    supplier_id: string;
+    entry_type: EntryType;
+    entry_date: string;
+    amount: number;
+    description: string | null;
+    reference: string | null;
+    account_name: string | null;
+    created_by: string | null;
+    created_at: string;
+}
+
+const todayStr = () => format(new Date(), "yyyy-MM-dd");
+
 function PayableContent() {
-    const { activeBusiness } = useBusiness();
-    const searchParams = useSearchParams();
-    const [activeTab, setActiveTab] = useState("invoices");
+    const { activeBusiness, currentUser } = useBusiness();
+
     const [loading, setLoading] = useState(true);
-
+    const [balances, setBalances] = useState<Balance[]>([]);
+    const [accounts, setAccounts] = useState<{ id: string; name: string }[]>([]);
     const [suppliers, setSuppliers] = useState<any[]>([]);
-    const [invoices, setInvoices] = useState<any[]>([]);
 
-    // New Supplier State
-    const [newSupplierName, setNewSupplierName] = useState("");
-    const [newSupplierPhone, setNewSupplierPhone] = useState("");
-    const [isSubmittingSupplier, setIsSubmittingSupplier] = useState(false);
+    // When set, the page shows that supplier's statement instead of the list.
+    const [openSupplier, setOpenSupplier] = useState<Balance | null>(null);
+    const [entries, setEntries] = useState<LedgerEntry[]>([]);
+    const [entriesLoading, setEntriesLoading] = useState(false);
+
+    const [activeTab, setActiveTab] = useState("accounts");
+
+    // --- dialogs -----------------------------------------------------------
+    const [entryDialog, setEntryDialog] = useState<{
+        open: boolean; type: EntryType; editing: LedgerEntry | null;
+    }>({ open: false, type: "invoice", editing: null });
+
+    const [form, setForm] = useState({
+        supplierId: "", amount: "", date: todayStr(),
+        reference: "", description: "", accountName: "", postToTreasury: true,
+    });
+    const [saving, setSaving] = useState(false);
+
     const [supplierDialogOpen, setSupplierDialogOpen] = useState(false);
+    const [newSupplier, setNewSupplier] = useState({ name: "", phone: "" });
+    const [savingSupplier, setSavingSupplier] = useState(false);
 
-    // Invoices and payments are almost always entered after the fact — the
-    // paper arrives days later, the transfer went out last week. Both dates
-    // start at today and can be moved back.
-    const today = () => format(new Date(), "yyyy-MM-dd");
-
-    // New Invoice State
-    const [invoiceSupplierId, setInvoiceSupplierId] = useState("");
-    const [invoiceNumber, setInvoiceNumber] = useState("");
-    const [invoiceAmount, setInvoiceAmount] = useState("");
-    const [invoiceDate, setInvoiceDate] = useState(today);
-    const [isSubmittingInvoice, setIsSubmittingInvoice] = useState(false);
-    const [invoiceDialogOpen, setInvoiceDialogOpen] = useState(false);
-
-    // Payment Dialog State
-    const [paymentInvoice, setPaymentInvoice] = useState<any>(null); // The invoice being paid
-    const [paymentStatus, setPaymentStatus] = useState<"Partially Paid" | "Fully Paid">("Partially Paid");
-    const [paymentAmount, setPaymentAmount] = useState("");
-    const [paymentDate, setPaymentDate] = useState(today);
-    const [paymentTreasury, setPaymentTreasury] = useState("Abdallah Sherif");
-    const [addToTransactions, setAddToTransactions] = useState(true);
-    const [isSubmittingPayment, setIsSubmittingPayment] = useState(false);
-
-    useEffect(() => {
-        fetchData();
-    }, [activeBusiness]);
-
-    async function fetchData() {
+    // --- data --------------------------------------------------------------
+    const load = useCallback(async () => {
         if (!activeBusiness) return;
         setLoading(true);
         try {
-            const [supRes, invRes] = await Promise.all([
-                supabase.from("suppliers").select("*").eq('business_id', activeBusiness.id).order("name"),
-                supabase.from("supplier_invoices").select("*, suppliers(name)").eq('business_id', activeBusiness.id).order("invoice_date", { ascending: false }).order("created_at", { ascending: false })
+            const [balRes, supRes, accRes] = await Promise.all([
+                supabase.rpc("get_supplier_balances", { p_business_id: activeBusiness.id }),
+                supabase.from("suppliers").select("*").eq("business_id", activeBusiness.id).order("name"),
+                supabase.from("financial_accounts").select("id, name")
+                    .eq("business_id", activeBusiness.id).order("name"),
             ]);
-
-            if (supRes.error) throw supRes.error;
-            if (invRes.error) throw invRes.error;
-
+            if (balRes.error) throw balRes.error;
+            setBalances((balRes.data as Balance[]) || []);
             setSuppliers(supRes.data || []);
-            setInvoices(invRes.data || []);
-        } catch (error: any) {
-            toast.error("Failed to load accounts payable: Make sure to run SQL migration script!");
-            console.error(error);
+            // Treasuries used to be three names written into the source, which
+            // meant every other business on the platform saw them.
+            setAccounts(accRes.data?.length ? accRes.data : [{ id: "default", name: "الخزينة الرئيسية" }]);
+        } catch (e: any) {
+            console.error(e);
+            toast.error("Failed to load payables. Run the supplier ledger migration.");
         } finally {
             setLoading(false);
         }
+    }, [activeBusiness]);
+
+    useEffect(() => { load(); }, [load]);
+
+    const loadEntries = useCallback(async (supplierId: string) => {
+        if (!activeBusiness) return;
+        setEntriesLoading(true);
+        const { data, error } = await supabase
+            .from("supplier_ledger")
+            .select("*")
+            .eq("business_id", activeBusiness.id)
+            .eq("supplier_id", supplierId)
+            .order("entry_date", { ascending: false })
+            .order("created_at", { ascending: false });
+        if (error) toast.error("Failed to load the statement");
+        setEntries((data as LedgerEntry[]) || []);
+        setEntriesLoading(false);
+    }, [activeBusiness]);
+
+    useEffect(() => {
+        if (openSupplier) loadEntries(openSupplier.supplier_id);
+    }, [openSupplier, loadEntries]);
+
+    // --- derived -----------------------------------------------------------
+    const totals = useMemo(() => {
+        const owed = balances.reduce((s, b) => s + Number(b.balance || 0), 0);
+        return {
+            owed,
+            invoiced: balances.reduce((s, b) => s + Number(b.invoiced_total || 0), 0),
+            paid: balances.reduce((s, b) => s + Number(b.paid_total || 0), 0),
+            withBalance: balances.filter(b => Number(b.balance) > 0.005).length,
+        };
+    }, [balances]);
+
+    // Oldest first, so the running balance reads the way a statement should.
+    const statement = useMemo(() => {
+        const asc = [...entries].sort((a, b) =>
+            a.entry_date === b.entry_date
+                ? a.created_at.localeCompare(b.created_at)
+                : a.entry_date.localeCompare(b.entry_date));
+        let running = 0;
+        const withRunning = asc.map(e => {
+            running += e.entry_type === "invoice" ? Number(e.amount) : -Number(e.amount);
+            return { ...e, running };
+        });
+        return withRunning.reverse();
+    }, [entries]);
+
+    // --- actions -----------------------------------------------------------
+    function openEntryDialog(type: EntryType, editing: LedgerEntry | null, supplierId?: string) {
+        setForm({
+            supplierId: editing?.supplier_id || supplierId || openSupplier?.supplier_id || "",
+            amount: editing ? String(editing.amount) : "",
+            date: editing?.entry_date || todayStr(),
+            reference: editing?.reference || "",
+            description: editing?.description || "",
+            accountName: editing?.account_name || accounts[0]?.name || "",
+            postToTreasury: !editing,
+        });
+        setEntryDialog({ open: true, type: editing?.entry_type || type, editing });
     }
 
-    // --- Actions ---
+    async function saveEntry() {
+        if (!activeBusiness) return;
+        const amount = Number(form.amount);
+        if (!form.supplierId) return toast.error("Pick a supplier");
+        if (!amount || amount <= 0) return toast.error("Amount must be greater than zero");
 
-    async function handleAddSupplier() {
-        if (!newSupplierName) return toast.error("Supplier name is required");
-
-        setIsSubmittingSupplier(true);
+        setSaving(true);
         try {
-            const { error } = await supabase.from("suppliers").insert([
-                { business_id: activeBusiness!.id, name: newSupplierName, phone: newSupplierPhone }
-            ]);
-            if (error) throw error;
-            toast.success("Supplier added successfully");
-            setSupplierDialogOpen(false);
-            setNewSupplierName("");
-            setNewSupplierPhone("");
-            fetchData();
-        } catch (error: any) {
-            toast.error(error.message || "Failed to add supplier");
-        } finally {
-            setIsSubmittingSupplier(false);
-        }
-    }
+            const isPayment = entryDialog.type === "payment";
+            const payload: any = {
+                business_id: activeBusiness.id,
+                supplier_id: form.supplierId,
+                entry_type: entryDialog.type,
+                entry_date: form.date,
+                amount,
+                description: form.description.trim() || null,
+                reference: form.reference.trim() || null,
+                account_name: isPayment ? (form.accountName || null) : null,
+                updated_at: new Date().toISOString(),
+            };
 
-    async function handleAddInvoice() {
-        if (!invoiceSupplierId || !invoiceAmount) return toast.error("Supplier and Amount are required");
+            if (entryDialog.editing) {
+                // The trigger records the field-level diff, so an amount being
+                // corrected shows what it was and what it became.
+                const { error } = await supabase
+                    .from("supplier_ledger")
+                    .update(payload)
+                    .eq("id", entryDialog.editing.id)
+                    .eq("business_id", activeBusiness.id)
+                    .select("id");
+                if (error) throw error;
+                toast.success("Entry updated");
+            } else {
+                payload.created_by = currentUser?.email || "Staff";
+                const { error } = await supabase.from("supplier_ledger").insert(payload).select("id");
+                if (error) throw error;
 
-        setIsSubmittingInvoice(true);
-        try {
-            const { error } = await supabase.from("supplier_invoices").insert([
-                {
-                    business_id: activeBusiness!.id,
-                    supplier_id: invoiceSupplierId,
-                    invoice_number: invoiceNumber,
-                    invoice_date: invoiceDate,
-                    total_amount: Number(invoiceAmount),
-                    paid_amount: 0,
-                    status: "Not Paid"
+                // A payment leaves a treasury, so it belongs in the books too.
+                // Only on create — editing a ledger row must not silently post
+                // a second expense.
+                if (isPayment && form.postToTreasury) {
+                    const supplierName =
+                        balances.find(b => b.supplier_id === form.supplierId)?.supplier_name || "Supplier";
+                    const { error: txError } = await supabase.from("transactions").insert({
+                        business_id: activeBusiness.id,
+                        transaction_date: form.date,
+                        amount: -Math.abs(amount),
+                        type: "expense",
+                        category: "Purchases",
+                        sub_category: "Supplier Payment",
+                        account_name: form.accountName,
+                        description: `Payment to ${supplierName}${form.reference ? ` (#${form.reference})` : ""}`,
+                    });
+                    if (txError) throw txError;
                 }
-            ]);
-            if (error) throw error;
-            toast.success("Invoice created successfully");
-            setInvoiceDialogOpen(false);
-            setInvoiceSupplierId("");
-            setInvoiceNumber("");
-            setInvoiceAmount("");
-            setInvoiceDate(today());
-            fetchData();
-        } catch (error: any) {
-            toast.error(error.message || "Failed to add invoice");
+                toast.success(isPayment ? "Payment recorded" : "Invoice recorded");
+            }
+
+            setEntryDialog({ open: false, type: "invoice", editing: null });
+            await load();
+            if (openSupplier) loadEntries(openSupplier.supplier_id);
+        } catch (e: any) {
+            toast.error(e.message || "Failed to save");
         } finally {
-            setIsSubmittingInvoice(false);
+            setSaving(false);
         }
     }
 
-    async function handlePayInvoice() {
-        if (!paymentInvoice || !paymentTreasury) return toast.error("Treasury is required");
-        let amountToPay = 0;
-        let newPaidAmount = Number(paymentInvoice.paid_amount);
+    async function deleteEntry(entry: LedgerEntry) {
+        if (!activeBusiness) return;
+        if (!confirm(`Delete this ${entry.entry_type} of ${formatCurrency(Number(entry.amount))}? The balance will change.`)) return;
+        const { error } = await supabase
+            .from("supplier_ledger").delete()
+            .eq("id", entry.id).eq("business_id", activeBusiness.id);
+        if (error) return toast.error("Failed to delete");
+        toast.success("Entry deleted");
+        await load();
+        if (openSupplier) loadEntries(openSupplier.supplier_id);
+    }
 
-        if (paymentStatus === "Partially Paid") {
-            if (!paymentAmount) return toast.error("Amount is required for partial payment");
-            amountToPay = Number(paymentAmount);
-            newPaidAmount += amountToPay;
-
-            if (newPaidAmount > paymentInvoice.total_amount) {
-                return toast.error("Total paid cannot exceed total invoice amount");
-            }
-        } else if (paymentStatus === "Fully Paid") {
-            amountToPay = paymentInvoice.total_amount - paymentInvoice.paid_amount;
-            newPaidAmount = paymentInvoice.total_amount;
-        }
-
-        if (amountToPay <= 0) return toast.error("No amount left to pay");
-
-        setIsSubmittingPayment(true);
+    async function addSupplier() {
+        if (!activeBusiness || !newSupplier.name.trim()) return toast.error("Name is required");
+        setSavingSupplier(true);
         try {
-            // Determine final status
-            const finalStatus = newPaidAmount >= paymentInvoice.total_amount ? "Fully Paid" : "Partially Paid";
-
-            // 1. Update Invoice
-            const { error: invError } = await supabase
-                .from("supplier_invoices")
-                .update({
-                    paid_amount: newPaidAmount,
-                    status: finalStatus
-                })
-                .eq("id", paymentInvoice.id);
-            if (invError) throw invError;
-
-            // 2. Create Transaction (if requested)
-            if (addToTransactions) {
-                const supplierName = paymentInvoice.suppliers?.name || "Supplier";
-                const { error: transError } = await supabase
-                    .from("transactions")
-                    .insert([
-                        {
-                            business_id: activeBusiness!.id,
-                            transaction_date: paymentDate,
-                            amount: -Math.abs(amountToPay), // Negative for expense
-                            type: "expense",
-                            category: "Purchases",
-                            sub_category: "Supplier Invoice",
-                            account_name: paymentTreasury,
-                            description: `Payment for Invoice #${paymentInvoice.invoice_number || paymentInvoice.id.slice(0, 8)} to ${supplierName}`
-                        }
-                    ]);
-
-                if (transError) throw transError;
-            }
-
-            toast.success(addToTransactions ? `Payment registered and deducted from ${paymentTreasury}` : "Payment registered successfully");
-            setPaymentInvoice(null);
-            fetchData();
-        } catch (error: any) {
-            toast.error("Failed to process payment");
-            console.error(error);
+            const { error } = await supabase.from("suppliers").insert({
+                business_id: activeBusiness.id,
+                name: newSupplier.name.trim(),
+                phone: newSupplier.phone.trim() || null,
+            });
+            if (error) throw error;
+            toast.success("Supplier added");
+            setSupplierDialogOpen(false);
+            setNewSupplier({ name: "", phone: "" });
+            load();
+        } catch (e: any) {
+            toast.error(e.message || "Failed to add supplier");
         } finally {
-            setIsSubmittingPayment(false);
+            setSavingSupplier(false);
         }
     }
 
-    // --- Renderers ---
+    // --- render ------------------------------------------------------------
+    if (loading) {
+        return <div className="flex justify-center p-20"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
+    }
 
-    const totalDebts = invoices.reduce((sum, inv) => sum + (inv.total_amount - inv.paid_amount), 0);
-    const paidDebts = invoices.reduce((sum, inv) => sum + inv.paid_amount, 0);
+    const supplierName = (id: string) =>
+        balances.find(b => b.supplier_id === id)?.supplier_name || "—";
 
     return (
         <div className="space-y-6">
-            <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-                <h1 className="text-3xl font-bold tracking-tight">Accounts Payable</h1>
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                <div>
+                    <h1 className="text-3xl font-bold tracking-tight">Accounts Payable</h1>
+                    <p className="text-sm text-muted-foreground mt-1">
+                        Every supplier is an account. Invoices add to what you owe, payments reduce it.
+                    </p>
+                </div>
                 <div className="flex gap-2">
-                    {/* Placeholder for DateRangePicker if needed later, matching Insights */}
+                    <Button variant="outline" onClick={() => openEntryDialog("payment", null)}>
+                        <TrendingDown className="h-4 w-4 mr-2" /> Record Payment
+                    </Button>
+                    <Button onClick={() => openEntryDialog("invoice", null)}>
+                        <Plus className="h-4 w-4 mr-2" /> New Invoice
+                    </Button>
                 </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between pb-2">
-                        <CardTitle className="text-sm font-medium">Total Active Debts</CardTitle>
-                        <FileText className="h-4 w-4 text-red-500" />
+            <div className="grid gap-4 md:grid-cols-4">
+                <Card className="border-red-500/20 bg-gradient-to-br from-red-500/10 to-transparent">
+                    <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
+                        <CardTitle className="text-xs font-bold uppercase tracking-wider text-red-700 dark:text-red-300">
+                            Total Owed
+                        </CardTitle>
+                        <Wallet className="h-4 w-4 text-red-600" />
                     </CardHeader>
                     <CardContent>
-                        <div className="text-2xl font-bold text-red-500">{formatCurrency(totalDebts)}</div>
-                        <p className="text-xs text-muted-foreground mt-1">Outstanding unpaid amounts</p>
+                        <div className="text-2xl font-black text-red-700 dark:text-red-300">
+                            {formatCurrency(totals.owed)}
+                        </div>
+                        <p className="text-[11px] text-muted-foreground mt-1">
+                            across {totals.withBalance} supplier{totals.withBalance === 1 ? "" : "s"}
+                        </p>
                     </CardContent>
                 </Card>
                 <Card>
-                    <CardHeader className="flex flex-row items-center justify-between pb-2">
-                        <CardTitle className="text-sm font-medium">Total Paid</CardTitle>
-                        <CheckCircle className="h-4 w-4 text-green-500" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold text-green-500">{formatCurrency(paidDebts)}</div>
-                        <p className="text-xs text-muted-foreground mt-1">Amounts already settled</p>
-                    </CardContent>
+                    <CardHeader className="pb-2"><CardTitle className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Invoiced</CardTitle></CardHeader>
+                    <CardContent><div className="text-2xl font-bold">{formatCurrency(totals.invoiced)}</div></CardContent>
                 </Card>
                 <Card>
-                    <CardHeader className="flex flex-row items-center justify-between pb-2">
-                        <CardTitle className="text-sm font-medium">Total Suppliers</CardTitle>
-                        <UserPlus className="h-4 w-4 text-primary" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold">{suppliers.length}</div>
-                    </CardContent>
+                    <CardHeader className="pb-2"><CardTitle className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Paid</CardTitle></CardHeader>
+                    <CardContent><div className="text-2xl font-bold text-emerald-600">{formatCurrency(totals.paid)}</div></CardContent>
+                </Card>
+                <Card>
+                    <CardHeader className="pb-2"><CardTitle className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Suppliers</CardTitle></CardHeader>
+                    <CardContent><div className="text-2xl font-bold">{balances.length}</div></CardContent>
                 </Card>
             </div>
 
-            <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-                <TabsList>
-                    <TabsTrigger value="invoices">Supplier Invoices</TabsTrigger>
-                    <TabsTrigger value="suppliers">Suppliers List</TabsTrigger>
-                </TabsList>
-
-                <TabsContent value="invoices" className="space-y-4">
-                    <div className="flex justify-end">
-                        <Dialog open={invoiceDialogOpen} onOpenChange={setInvoiceDialogOpen}>
-                            <DialogTrigger asChild>
-                                <Button>
-                                    <Plus className="mr-2 h-4 w-4" /> Add Invoice
+            {openSupplier ? (
+                <Card>
+                    <CardHeader>
+                        <div className="flex items-start justify-between gap-4">
+                            <div className="space-y-1">
+                                <Button variant="ghost" size="sm" className="-ml-2 h-7 text-xs gap-1"
+                                        onClick={() => setOpenSupplier(null)}>
+                                    <ArrowLeft className="h-3.5 w-3.5" /> All accounts
                                 </Button>
-                            </DialogTrigger>
-                            <DialogContent>
-                                <DialogHeader>
-                                    <DialogTitle>Add Supplier Invoice</DialogTitle>
-                                    <DialogDescription>Record a new debt from a supplier.</DialogDescription>
-                                </DialogHeader>
-                                <div className="space-y-4 pt-4">
-                                    <div className="space-y-2">
-                                        <Label>Supplier</Label>
-                                        <Select value={invoiceSupplierId} onValueChange={setInvoiceSupplierId}>
-                                            <SelectTrigger>
-                                                <SelectValue placeholder="Select supplier..." />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                {suppliers.map(s => (
-                                                    <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
-                                                ))}
-                                            </SelectContent>
-                                        </Select>
-                                    </div>
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <div className="space-y-2">
-                                            <Label>Invoice Number (Optional)</Label>
-                                            <Input value={invoiceNumber} onChange={e => setInvoiceNumber(e.target.value)} placeholder="#INV-123" />
-                                        </div>
-                                        <div className="space-y-2">
-                                            <Label>Total Amount (EGP)</Label>
-                                            <Input type="number" value={invoiceAmount} onChange={e => setInvoiceAmount(e.target.value)} placeholder="0.00" />
-                                        </div>
-                                    </div>
-                                    <div className="space-y-2">
-                                        <Label>Invoice Date</Label>
-                                        <Input type="date" value={invoiceDate} onChange={e => setInvoiceDate(e.target.value)} />
-                                        <p className="text-xs text-muted-foreground">
-                                            The date on the supplier&apos;s invoice, not the day it was entered.
-                                        </p>
-                                    </div>
-                                </div>
-                                <DialogFooter>
-                                    <Button variant="outline" onClick={() => setInvoiceDialogOpen(false)}>Cancel</Button>
-                                    <Button onClick={handleAddInvoice} disabled={isSubmittingInvoice}>
-                                        {isSubmittingInvoice && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                                        Save Invoice
+                                <CardTitle>{openSupplier.supplier_name}</CardTitle>
+                                <CardDescription>
+                                    {openSupplier.phone || "No phone"} · statement, oldest first
+                                </CardDescription>
+                            </div>
+                            <div className="text-right">
+                                <p className="text-xs text-muted-foreground uppercase tracking-wider font-bold">Balance</p>
+                                <p className={cn("text-2xl font-black",
+                                    Number(openSupplier.balance) > 0.005 ? "text-red-600" : "text-emerald-600")}>
+                                    {formatCurrency(Number(openSupplier.balance))}
+                                </p>
+                                <div className="flex gap-2 mt-2">
+                                    <Button size="sm" variant="outline"
+                                            onClick={() => openEntryDialog("payment", null, openSupplier.supplier_id)}>
+                                        Pay
                                     </Button>
-                                </DialogFooter>
-                            </DialogContent>
-                        </Dialog>
-                    </div>
-
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>Invoice Records</CardTitle>
-                        </CardHeader>
-                        <CardContent>
+                                    <Button size="sm"
+                                            onClick={() => openEntryDialog("invoice", null, openSupplier.supplier_id)}>
+                                        Invoice
+                                    </Button>
+                                </div>
+                            </div>
+                        </div>
+                    </CardHeader>
+                    <CardContent className="p-0">
+                        {entriesLoading ? (
+                            <div className="flex justify-center p-10"><Loader2 className="h-6 w-6 animate-spin" /></div>
+                        ) : (
                             <Table>
                                 <TableHeader>
                                     <TableRow>
                                         <TableHead>Date</TableHead>
-                                        <TableHead>Supplier</TableHead>
-                                        <TableHead>Inv #</TableHead>
-                                        <TableHead>Total</TableHead>
-                                        <TableHead>Paid</TableHead>
-                                        <TableHead>Remaining</TableHead>
-                                        <TableHead>Status</TableHead>
-                                        <TableHead className="text-right">Actions</TableHead>
+                                        <TableHead>Type</TableHead>
+                                        <TableHead className="hidden md:table-cell">Ref</TableHead>
+                                        <TableHead className="hidden lg:table-cell">Description</TableHead>
+                                        <TableHead className="text-right">Invoiced</TableHead>
+                                        <TableHead className="text-right">Paid</TableHead>
+                                        <TableHead className="text-right">Balance</TableHead>
+                                        <TableHead className="w-[90px]" />
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
-                                    {loading ? (
-                                        <TableRow>
-                                            <TableCell colSpan={8} className="text-center py-8"><Loader2 className="h-6 w-6 animate-spin mx-auto text-muted-foreground" /></TableCell>
-                                        </TableRow>
-                                    ) : invoices.length === 0 ? (
-                                        <TableRow>
-                                            <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">No invoices recorded yet.</TableCell>
-                                        </TableRow>
-                                    ) : invoices.map(inv => {
-                                        const remaining = inv.total_amount - inv.paid_amount;
-                                        return (
-                                            <TableRow key={inv.id}>
-                                                {/* The invoice's own date, not the day it was keyed in —
-                                                    otherwise backdating an invoice has no visible effect. */}
-                                                <TableCell>{format(new Date(inv.invoice_date || inv.created_at), "yyyy-MM-dd")}</TableCell>
-                                                <TableCell className="font-medium">{inv.suppliers?.name}</TableCell>
-                                                <TableCell>{inv.invoice_number || "-"}</TableCell>
-                                                <TableCell>{formatCurrency(inv.total_amount)}</TableCell>
-                                                <TableCell className="text-green-600">{formatCurrency(inv.paid_amount)}</TableCell>
-                                                <TableCell className="text-red-500 font-medium">{formatCurrency(remaining)}</TableCell>
-                                                <TableCell>
-                                                    <Badge variant={inv.status === "Fully Paid" ? "default" : inv.status === "Partially Paid" ? "secondary" : "destructive"}>
-                                                        {inv.status}
-                                                    </Badge>
-                                                </TableCell>
-                                                <TableCell className="text-right">
-                                                    {inv.status !== "Fully Paid" && (
-                                                        <Button size="sm" variant="outline" onClick={() => {
-                                                            // Reset per-invoice, so a date typed for the last
-                                                            // payment isn't silently reused for this one.
-                                                            setPaymentDate(today());
-                                                            setPaymentAmount("");
-                                                            setPaymentStatus("Partially Paid");
-                                                            setPaymentInvoice(inv);
-                                                        }}>
-                                                            Register Payment
-                                                        </Button>
-                                                    )}
-                                                </TableCell>
-                                            </TableRow>
-                                        );
-                                    })}
-                                </TableBody>
-                            </Table>
-                        </CardContent>
-                    </Card>
-                </TabsContent>
-
-                <TabsContent value="suppliers" className="space-y-4">
-                    <div className="flex justify-end">
-                        <Dialog open={supplierDialogOpen} onOpenChange={setSupplierDialogOpen}>
-                            <DialogTrigger asChild>
-                                <Button>
-                                    <UserPlus className="mr-2 h-4 w-4" /> Add Supplier
-                                </Button>
-                            </DialogTrigger>
-                            <DialogContent>
-                                <DialogHeader>
-                                    <DialogTitle>Add Supplier</DialogTitle>
-                                    <DialogDescription>Add a new supplier to your directory.</DialogDescription>
-                                </DialogHeader>
-                                <div className="space-y-4 pt-4">
-                                    <div className="space-y-2">
-                                        <Label>Company / Name</Label>
-                                        <Input value={newSupplierName} onChange={e => setNewSupplierName(e.target.value)} placeholder="e.g. Al-Ahram Packaging" />
-                                    </div>
-                                    <div className="space-y-2">
-                                        <Label>Phone Number</Label>
-                                        <Input value={newSupplierPhone} onChange={e => setNewSupplierPhone(e.target.value)} placeholder="01..." />
-                                    </div>
-                                </div>
-                                <DialogFooter>
-                                    <Button variant="outline" onClick={() => setSupplierDialogOpen(false)}>Cancel</Button>
-                                    <Button onClick={handleAddSupplier} disabled={isSubmittingSupplier}>
-                                        {isSubmittingSupplier && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                                        Save Supplier
-                                    </Button>
-                                </DialogFooter>
-                            </DialogContent>
-                        </Dialog>
-                    </div>
-
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>Suppliers Directory</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                            <Table>
-                                <TableHeader>
-                                    <TableRow>
-                                        <TableHead>Name</TableHead>
-                                        <TableHead>Phone</TableHead>
-                                        <TableHead>Added On</TableHead>
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {loading ? (
-                                        <TableRow>
-                                            <TableCell colSpan={3} className="text-center py-8"><Loader2 className="h-6 w-6 animate-spin mx-auto text-muted-foreground" /></TableCell>
-                                        </TableRow>
-                                    ) : suppliers.length === 0 ? (
-                                        <TableRow>
-                                            <TableCell colSpan={3} className="text-center py-8 text-muted-foreground">No suppliers created yet.</TableCell>
-                                        </TableRow>
-                                    ) : suppliers.map(s => (
-                                        <TableRow key={s.id}>
-                                            <TableCell className="font-bold">{s.name}</TableCell>
-                                            <TableCell>{s.phone}</TableCell>
-                                            <TableCell>{format(new Date(s.created_at), "yyyy-MM-dd")}</TableCell>
+                                    {statement.length === 0 ? (
+                                        <TableRow><TableCell colSpan={8} className="text-center py-10 text-sm text-muted-foreground">
+                                            No movements on this account yet.
+                                        </TableCell></TableRow>
+                                    ) : statement.map(e => (
+                                        <TableRow key={e.id}>
+                                            <TableCell className="whitespace-nowrap">{e.entry_date}</TableCell>
+                                            <TableCell>
+                                                <Badge variant="outline" className={e.entry_type === "invoice"
+                                                    ? "bg-red-500/10 text-red-600 border-red-500/20"
+                                                    : "bg-emerald-500/10 text-emerald-600 border-emerald-500/20"}>
+                                                    {e.entry_type === "invoice" ? "Invoice" : "Payment"}
+                                                </Badge>
+                                            </TableCell>
+                                            <TableCell className="hidden md:table-cell font-mono text-xs">{e.reference || "—"}</TableCell>
+                                            <TableCell className="hidden lg:table-cell max-w-[260px]">
+                                                <span className="text-xs text-muted-foreground line-clamp-2">
+                                                    {e.description || "—"}
+                                                </span>
+                                                {e.account_name && (
+                                                    <span className="block text-[10px] text-muted-foreground mt-0.5">
+                                                        from {e.account_name}
+                                                    </span>
+                                                )}
+                                            </TableCell>
+                                            <TableCell className="text-right">
+                                                {e.entry_type === "invoice" ? formatCurrency(Number(e.amount)) : "—"}
+                                            </TableCell>
+                                            <TableCell className="text-right text-emerald-600">
+                                                {e.entry_type === "payment" ? formatCurrency(Number(e.amount)) : "—"}
+                                            </TableCell>
+                                            <TableCell className="text-right font-semibold tabular-nums">
+                                                {formatCurrency(e.running)}
+                                            </TableCell>
+                                            <TableCell className="text-right">
+                                                <Button size="icon" variant="ghost" className="h-7 w-7"
+                                                        onClick={() => openEntryDialog(e.entry_type, e)}>
+                                                    <Pencil className="h-3.5 w-3.5" />
+                                                </Button>
+                                                <Button size="icon" variant="ghost" className="h-7 w-7 text-red-500"
+                                                        onClick={() => deleteEntry(e)}>
+                                                    <Trash2 className="h-3.5 w-3.5" />
+                                                </Button>
+                                            </TableCell>
                                         </TableRow>
                                     ))}
                                 </TableBody>
                             </Table>
-                        </CardContent>
-                    </Card>
-                </TabsContent>
-            </Tabs>
+                        )}
+                    </CardContent>
+                </Card>
+            ) : (
+                <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
+                    <TabsList>
+                        <TabsTrigger value="accounts">Supplier Accounts</TabsTrigger>
+                        <TabsTrigger value="suppliers">Manage Suppliers</TabsTrigger>
+                    </TabsList>
 
-            {/* Payment Dialog */}
-            <Dialog open={!!paymentInvoice} onOpenChange={(open) => !open && setPaymentInvoice(null)}>
+                    <TabsContent value="accounts">
+                        <Card>
+                            <CardContent className="p-0">
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow>
+                                            <TableHead>Supplier</TableHead>
+                                            <TableHead className="text-right">Invoiced</TableHead>
+                                            <TableHead className="text-right">Paid</TableHead>
+                                            <TableHead className="text-right">Balance</TableHead>
+                                            <TableHead className="hidden md:table-cell text-right">Last movement</TableHead>
+                                            <TableHead className="w-[120px]" />
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {balances.length === 0 ? (
+                                            <TableRow><TableCell colSpan={6} className="text-center py-10 text-sm text-muted-foreground">
+                                                No suppliers yet.
+                                            </TableCell></TableRow>
+                                        ) : balances.map(b => (
+                                            <TableRow key={b.supplier_id} className="cursor-pointer hover:bg-muted/40"
+                                                      onClick={() => setOpenSupplier(b)}>
+                                                <TableCell className="font-medium">
+                                                    {b.supplier_name}
+                                                    <span className="block text-xs text-muted-foreground">
+                                                        {b.entry_count} movement{Number(b.entry_count) === 1 ? "" : "s"}
+                                                    </span>
+                                                </TableCell>
+                                                <TableCell className="text-right">{formatCurrency(Number(b.invoiced_total))}</TableCell>
+                                                <TableCell className="text-right text-emerald-600">{formatCurrency(Number(b.paid_total))}</TableCell>
+                                                <TableCell className={cn("text-right font-bold tabular-nums",
+                                                    Number(b.balance) > 0.005 ? "text-red-600"
+                                                        : Number(b.balance) < -0.005 ? "text-amber-600" : "text-muted-foreground")}>
+                                                    {formatCurrency(Number(b.balance))}
+                                                    {Number(b.balance) < -0.005 && (
+                                                        <span className="block text-[10px] font-normal">overpaid</span>
+                                                    )}
+                                                </TableCell>
+                                                <TableCell className="hidden md:table-cell text-right text-xs text-muted-foreground">
+                                                    {b.last_entry_date || "—"}
+                                                </TableCell>
+                                                <TableCell className="text-right" onClick={ev => ev.stopPropagation()}>
+                                                    <Button size="sm" variant="outline"
+                                                            onClick={() => openEntryDialog("payment", null, b.supplier_id)}>
+                                                        Pay
+                                                    </Button>
+                                                </TableCell>
+                                            </TableRow>
+                                        ))}
+                                    </TableBody>
+                                </Table>
+                            </CardContent>
+                        </Card>
+                    </TabsContent>
+
+                    <TabsContent value="suppliers" className="space-y-4">
+                        <div className="flex justify-end">
+                            <Dialog open={supplierDialogOpen} onOpenChange={setSupplierDialogOpen}>
+                                <DialogTrigger asChild>
+                                    <Button variant="outline"><UserPlus className="h-4 w-4 mr-2" /> Add Supplier</Button>
+                                </DialogTrigger>
+                                <DialogContent>
+                                    <DialogHeader><DialogTitle>Add Supplier</DialogTitle></DialogHeader>
+                                    <div className="space-y-4 py-2">
+                                        <div className="space-y-2">
+                                            <Label>Company / Name</Label>
+                                            <Input value={newSupplier.name}
+                                                   onChange={e => setNewSupplier({ ...newSupplier, name: e.target.value })}
+                                                   placeholder="e.g. Al-Ahram Packaging" />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Label>Phone Number</Label>
+                                            <Input value={newSupplier.phone}
+                                                   onChange={e => setNewSupplier({ ...newSupplier, phone: e.target.value })}
+                                                   placeholder="01..." />
+                                        </div>
+                                    </div>
+                                    <DialogFooter>
+                                        <Button variant="outline" onClick={() => setSupplierDialogOpen(false)}>Cancel</Button>
+                                        <Button onClick={addSupplier} disabled={savingSupplier}>
+                                            {savingSupplier && <Loader2 className="h-4 w-4 mr-2 animate-spin" />} Save
+                                        </Button>
+                                    </DialogFooter>
+                                </DialogContent>
+                            </Dialog>
+                        </div>
+                        <Card>
+                            <CardContent className="p-0">
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow>
+                                            <TableHead>Name</TableHead>
+                                            <TableHead>Phone</TableHead>
+                                            <TableHead className="text-right">Balance</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {suppliers.map(s => {
+                                            const bal = balances.find(b => b.supplier_id === s.id);
+                                            return (
+                                                <TableRow key={s.id}>
+                                                    <TableCell className="font-medium">{s.name}</TableCell>
+                                                    <TableCell>{s.phone || "—"}</TableCell>
+                                                    <TableCell className="text-right font-semibold">
+                                                        {formatCurrency(Number(bal?.balance || 0))}
+                                                    </TableCell>
+                                                </TableRow>
+                                            );
+                                        })}
+                                    </TableBody>
+                                </Table>
+                            </CardContent>
+                        </Card>
+                    </TabsContent>
+                </Tabs>
+            )}
+
+            {/* Invoice / payment dialog — one form, since the two differ only in
+                direction and whether a treasury is involved. */}
+            <Dialog open={entryDialog.open}
+                    onOpenChange={(o) => !o && setEntryDialog({ open: false, type: "invoice", editing: null })}>
                 <DialogContent>
                     <DialogHeader>
-                        <DialogTitle>Register Payment</DialogTitle>
+                        <DialogTitle>
+                            {entryDialog.editing ? "Edit " : ""}
+                            {entryDialog.type === "invoice" ? "Purchase Invoice" : "Payment"}
+                        </DialogTitle>
                         <DialogDescription>
-                            Paying {paymentInvoice?.suppliers?.name} for Invoice #{paymentInvoice?.invoice_number || "-"}
+                            {entryDialog.type === "invoice"
+                                ? "What you bought from this supplier. Adds to what you owe them."
+                                : "What you paid this supplier. Reduces what you owe them."}
                         </DialogDescription>
                     </DialogHeader>
-                    <div className="space-y-4 pt-4">
-                        <div className="flex bg-muted p-3 rounded-md justify-between font-medium">
-                            <span>Remaining Balance:</span>
-                            <span className="text-red-500">{formatCurrency(paymentInvoice ? paymentInvoice.total_amount - paymentInvoice.paid_amount : 0)}</span>
-                        </div>
 
+                    <div className="space-y-4 py-2">
                         <div className="space-y-2">
-                            <Label>Action Type</Label>
-                            <Select value={paymentStatus} onValueChange={(val: any) => setPaymentStatus(val)}>
-                                <SelectTrigger>
-                                    <SelectValue />
-                                </SelectTrigger>
+                            <Label>Supplier</Label>
+                            <Select value={form.supplierId}
+                                    onValueChange={v => setForm({ ...form, supplierId: v })}
+                                    disabled={!!entryDialog.editing}>
+                                <SelectTrigger><SelectValue placeholder="Select supplier..." /></SelectTrigger>
                                 <SelectContent>
-                                    <SelectItem value="Partially Paid">Pay Partial Amount</SelectItem>
-                                    <SelectItem value="Fully Paid">Pay Remaining Unpaid (Close Invoice)</SelectItem>
+                                    {suppliers.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
                                 </SelectContent>
                             </Select>
                         </div>
 
-                        {paymentStatus === "Partially Paid" && (
-                            <div className="space-y-2 relative">
-                                <Label>Amount Paid Now</Label>
-                                <div className="flex items-center gap-2">
-                                    <Input
-                                        type="number"
-                                        value={paymentAmount}
-                                        onChange={e => setPaymentAmount(e.target.value)}
-                                        placeholder="0"
-                                    />
-                                    <span className="text-muted-foreground text-sm font-medium">EGP</span>
-                                </div>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                                <Label>Amount (EGP)</Label>
+                                <Input type="number" value={form.amount}
+                                       onChange={e => setForm({ ...form, amount: e.target.value })}
+                                       placeholder="0.00" />
                             </div>
+                            <div className="space-y-2">
+                                <Label>Date</Label>
+                                <Input type="date" value={form.date}
+                                       onChange={e => setForm({ ...form, date: e.target.value })} />
+                            </div>
+                        </div>
+
+                        <div className="space-y-2">
+                            <Label>{entryDialog.type === "invoice" ? "Invoice Number" : "Reference"} (optional)</Label>
+                            <Input value={form.reference}
+                                   onChange={e => setForm({ ...form, reference: e.target.value })}
+                                   placeholder={entryDialog.type === "invoice" ? "#INV-123" : "transfer ref"} />
+                        </div>
+
+                        <div className="space-y-2">
+                            <Label>Description (optional)</Label>
+                            <Textarea rows={2} value={form.description}
+                                      onChange={e => setForm({ ...form, description: e.target.value })}
+                                      placeholder="What this covers" />
+                        </div>
+
+                        {entryDialog.type === "payment" && (
+                            <>
+                                <div className="space-y-2">
+                                    <Label>From Treasury</Label>
+                                    <Select value={form.accountName}
+                                            onValueChange={v => setForm({ ...form, accountName: v })}>
+                                        <SelectTrigger><SelectValue placeholder="Select treasury" /></SelectTrigger>
+                                        <SelectContent>
+                                            {accounts.map(a => <SelectItem key={a.id} value={a.name}>{a.name}</SelectItem>)}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                                {!entryDialog.editing && (
+                                    <div className="flex items-start space-x-2">
+                                        <Checkbox checked={form.postToTreasury}
+                                                  onCheckedChange={c => setForm({ ...form, postToTreasury: !!c })} />
+                                        <div className="grid gap-1 leading-none">
+                                            <Label className="text-sm">Also record it as an expense</Label>
+                                            <p className="text-xs text-muted-foreground">
+                                                Deducts from the treasury in accounting. Leave off if you
+                                                already entered it there.
+                                            </p>
+                                        </div>
+                                    </div>
+                                )}
+                            </>
                         )}
 
-                        <div className="space-y-2">
-                            <Label>Payment Date</Label>
-                            <Input type="date" value={paymentDate} onChange={e => setPaymentDate(e.target.value)} />
-                            <p className="text-xs text-muted-foreground">
-                                The day the money actually left the treasury. This is the date the
-                                expense is booked under.
+                        {entryDialog.editing && (
+                            <p className="text-xs text-muted-foreground border-t pt-3">
+                                The change is recorded in the actions log with the old and new values.
+                                {entryDialog.editing.entry_type === "payment" &&
+                                    " Editing here does not change any expense already posted to accounting."}
                             </p>
-                        </div>
-
-                        <div className="space-y-2">
-                            <Label>From Treasury</Label>
-                            <Select value={paymentTreasury} onValueChange={setPaymentTreasury}>
-                                <SelectTrigger>
-                                    <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="Abdallah Sherif">Abdallah Sherif</SelectItem>
-                                    <SelectItem value="Mohamed Adel">Mohamed Adel</SelectItem>
-                                    <SelectItem value="Safe">Safe</SelectItem>
-                                </SelectContent>
-                            </Select>
-                        </div>
-
-                        <div className="flex items-center space-x-2 pt-2">
-                            <Checkbox 
-                                id="addToTrans" 
-                                checked={addToTransactions} 
-                                onCheckedChange={(checked) => setAddToTransactions(checked as boolean)}
-                            />
-                            <label
-                                htmlFor="addToTrans"
-                                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                            >
-                                Add this payment to Transactions Log?
-                            </label>
-                        </div>
+                        )}
                     </div>
+
                     <DialogFooter>
-                        <Button variant="outline" onClick={() => setPaymentInvoice(null)}>Cancel</Button>
-                        <Button onClick={handlePayInvoice} disabled={isSubmittingPayment}>
-                            {isSubmittingPayment && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                            Process Transaction
+                        <Button variant="outline"
+                                onClick={() => setEntryDialog({ open: false, type: "invoice", editing: null })}>
+                            Cancel
+                        </Button>
+                        <Button onClick={saveEntry} disabled={saving}>
+                            {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                            {entryDialog.editing ? "Save changes" : "Record"}
                         </Button>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
-
         </div>
     );
 }

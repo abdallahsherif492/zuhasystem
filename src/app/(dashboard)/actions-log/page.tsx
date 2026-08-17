@@ -185,6 +185,7 @@ export default function ActionsLogPage() {
         transaction: "Transactions", customer: "Customers", team: "Team",
         supplier: "Suppliers", invoice: "Supplier Invoices", shipping: "Couriers",
         treasury: "Treasuries", settings: "Settings", target: "Targets",
+        payable: "Supplier Ledger",
     };
 
     // Helper Badge Generators

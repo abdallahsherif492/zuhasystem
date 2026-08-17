@@ -274,7 +274,7 @@ function InsightsContent() {
                 { data: balancesData },
                 { data: accountsData },
                 stockData,
-                supplierInvoicesData
+                payablesRes
             ] = await Promise.all([
                 // 1. Total Investment
                 fetchAll((from, to) =>
@@ -301,14 +301,13 @@ function InsightsContent() {
                         .select('cost_price, stock_qty')
                         .range(from, to)
                 ),
-                // 5. Total Debts
-                fetchAll((from, to) =>
-                    supabase.from('supplier_invoices')
-                        .select('total_amount, paid_amount')
-                        .eq('business_id', activeBusiness.id)
-                        .neq('status', 'Fully Paid')
-                        .range(from, to)
-                )
+                // 5. What we owe suppliers, from the ledger.
+                //    This used to sum (total_amount - paid_amount) over invoices
+                //    not marked Fully Paid, which missed two things: an overpaid
+                //    invoice still flagged paid, and any payment that was never
+                //    tied to a single invoice. The ledger has one answer and
+                //    every screen now reads it.
+                supabase.rpc('get_total_payables', { p_business_id: activeBusiness.id })
             ]);
 
 
@@ -334,7 +333,7 @@ function InsightsContent() {
             }
 
             const stockVal = stockData?.reduce((sum, row) => sum + ((Number(row.cost_price) || 0) * (Number(row.stock_qty) || 0)), 0) || 0;
-            const totalDebtsVal = supplierInvoicesData?.reduce((sum, row) => sum + ((Number(row.total_amount) || 0) - (Number(row.paid_amount) || 0)), 0) || 0;
+            const totalDebtsVal = Number(payablesRes?.data ?? 0) || 0;
 
             const estimatedVal = totalTreasuryVal + stockVal + pendingVal - totalDebtsVal;
             const growthRatio = investVal ? ((estimatedVal - investVal) / investVal) * 100 : 0;
@@ -407,7 +406,7 @@ function InsightsContent() {
                             {Object.entries(businessValue.treasuries).map(([name, val]) => (
                                 <MetricCard key={name} title={`Treasury: ${name}`} value={formatCurrency(val)} sub="Cash Balance" />
                             ))}
-                            <MetricCard title="Total Debts" value={formatCurrency(businessValue.totalDebts)} sub="Unpaid Supplier Invoices" neg className="bg-red-50/50" />
+                            <MetricCard title="Supplier Debt" value={formatCurrency(businessValue.totalDebts)} sub="Owed to suppliers (ledger balance)" neg className="bg-red-50/50" />
                         </div>
                     </div>
                 </TabsContent>
