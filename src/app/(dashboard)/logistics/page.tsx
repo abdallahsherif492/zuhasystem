@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, cn } from "@/lib/utils";
 import { syncStatusToEasyOrders } from "@/lib/easyorders";
 import { processOrderForVrobo } from "@/lib/vrobo/api";
 import { logBusinessAction } from "@/lib/logs/actions-logger";
+import { useBarcodeScanner, useScanFeedback } from "@/hooks/use-barcode-scanner";
 import { STOCK_OUT_STATUSES } from "@/lib/inventory";
 
 import { Button } from "@/components/ui/button";
@@ -35,7 +36,7 @@ import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid
 } from 'recharts';
 
-import { ChevronsUpDown, FilterX, Truck, Upload, X } from "lucide-react";
+import { ChevronsUpDown, FilterX, Truck, Upload, X, ScanLine, Check } from "lucide-react";
 import Papa from "papaparse";
 import { Checkbox } from "@/components/ui/checkbox";
 import { MultiSelect, Option } from "@/components/ui/multi-select";
@@ -120,6 +121,11 @@ function LogisticsContent() {
     const [productFilter, setProductFilter] = useState<string[]>([]);
     const [companyFilter, setCompanyFilter] = useState<string[]>([]);
     const [selectedOrders, setSelectedOrders] = useState<Set<string>>(new Set());
+
+    // --- scanner mode -----------------------------------------------------
+    const [scannerOn, setScannerOn] = useState(false);
+    const [scanLog, setScanLog] = useState<{ code: string; ok: boolean; label: string }[]>([]);
+    const beep = useScanFeedback();
 
     // Data for Filters/Actions
     const [productsOptions, setProductsOptions] = useState<Option[]>([]);
@@ -575,6 +581,71 @@ function LogisticsContent() {
         setSelectedOrders(newSet);
     };
 
+    /**
+     * A barcode came in. Find the order and tick it.
+     *
+     * Matched against every loaded order rather than the filtered view: an
+     * order that exists but is hidden by the current filters must not report
+     * itself as "not found" — that reads as missing data and sends someone
+     * hunting for a parcel that is sitting right there. It gets selected and
+     * the mismatch is called out instead.
+     *
+     * The waybill this system prints carries `order.id.slice(0, 8)` (see
+     * orders/print), so that prefix is the primary match. The others cover
+     * labels that came from somewhere else.
+     */
+    const handleScan = useCallback((raw: string) => {
+        const code = raw.trim().toLowerCase();
+        if (!code) return;
+
+        const digits = code.replace(/\D/g, "");
+        const match = orders.find(o => {
+            const id = String(o.id || "").toLowerCase();
+            if (id === code || id.startsWith(code)) return true;
+            if (o.easyorders_id && String(o.easyorders_id).toLowerCase() === code) return true;
+            // Some couriers print the recipient's phone as the only barcode.
+            const phone = String(o.customer_info?.phone || "").replace(/\D/g, "");
+            if (digits.length >= 8 && phone && phone === digits) return true;
+            return false;
+        });
+
+        if (!match) {
+            beep(false);
+            setScanLog(prev => [{ code: raw, ok: false, label: t("No order matches this code") }, ...prev].slice(0, 40));
+            toast.error(`${t("No order found for")} ${raw}`);
+            return;
+        }
+
+        const name = match.customer_info?.name || t("Customer");
+
+        if (selectedOrders.has(match.id)) {
+            // Scanning the same parcel twice is a real thing at a packing
+            // bench. Say so rather than silently doing nothing.
+            beep(true);
+            setScanLog(prev => [{ code: raw, ok: true, label: `${name} — ${t("already selected")}` }, ...prev].slice(0, 40));
+            toast.info(`${name} — ${t("already selected")}`);
+            return;
+        }
+
+        setSelectedOrders(prev => new Set(prev).add(match.id));
+        beep(true);
+        setScanLog(prev => [{ code: raw, ok: true, label: `${name} · ${match.status}` }, ...prev].slice(0, 40));
+
+        const hidden = !filteredOrders.some(o => o.id === match.id);
+        if (hidden) {
+            toast.warning(`${name} — ${t("selected, but hidden by the current filters")}`);
+        } else {
+            toast.success(`${name} · ${match.status}`);
+            // Bring it into view so the tick is visible on a long list.
+            requestAnimationFrame(() => {
+                document.querySelector(`[data-order-row="${match.id}"]`)
+                    ?.scrollIntoView({ block: "center", behavior: "smooth" });
+            });
+        }
+    }, [orders, filteredOrders, selectedOrders, beep, t]);
+
+    useBarcodeScanner({ enabled: scannerOn, onScan: handleScan });
+
     // 2. Net Value (Total - Shipping - 10)
     const calculateNetValue = (order: any) => {
         return Math.max(0, (order.total_amount || 0) - (order.shipping_cost || 0) - 10);
@@ -659,12 +730,81 @@ function LogisticsContent() {
                     <h1 className="text-3xl font-bold tracking-tight">{t("Logistics")}</h1>
                 </div>
                 <div className="flex items-center gap-2 bg-background">
+                    <Button
+                        variant={scannerOn ? "default" : "outline"}
+                        onClick={() => {
+                            const next = !scannerOn;
+                            setScannerOn(next);
+                            if (next) {
+                                // The scanner types wherever the caret is, so a
+                                // focused search box would swallow the barcode.
+                                (document.activeElement as HTMLElement)?.blur?.();
+                                setScanLog([]);
+                                toast.success(t("Scanner mode on — scan a waybill"));
+                            }
+                        }}
+                        className="gap-2"
+                    >
+                        <ScanLine className="h-4 w-4" />
+                        {scannerOn ? t("Scanner on") : t("Scanner mode")}
+                    </Button>
                     {activeBusiness && (
                         <ShippingSyncModal businessId={activeBusiness.id} onSyncComplete={fetchOrders} />
                     )}
                     <DateRangePicker />
                 </div>
             </div>
+
+            {scannerOn && (
+                <div className="rounded-xl border-2 border-primary/40 bg-primary/5 p-4 space-y-3">
+                    <div className="flex items-start justify-between gap-4">
+                        <div className="flex items-center gap-3">
+                            <span className="relative flex h-3 w-3">
+                                <span className="animate-ping absolute h-full w-full rounded-full bg-primary/60" />
+                                <span className="relative rounded-full h-3 w-3 bg-primary" />
+                            </span>
+                            <div>
+                                <p className="font-bold text-sm">{t("Scanner mode is on")}</p>
+                                <p className="text-xs text-muted-foreground">
+                                    {t("Scan a waybill and its order is ticked automatically. Keep the cursor out of text boxes — click here first if you have been typing.")}
+                                </p>
+                            </div>
+                        </div>
+                        <div className="text-right shrink-0">
+                            <p className="text-2xl font-black text-primary tabular-nums">{selectedOrders.size}</p>
+                            <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-bold">{t("Selected")}</p>
+                        </div>
+                    </div>
+
+                    {scanLog.length > 0 && (
+                        <div className="max-h-40 overflow-y-auto rounded-lg border bg-background divide-y">
+                            {scanLog.map((sc, i) => (
+                                <div key={`${sc.code}-${i}`} className="flex items-center gap-2 px-3 py-1.5 text-xs">
+                                    {sc.ok
+                                        ? <Check className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                                        : <X className="h-3.5 w-3.5 text-red-500 shrink-0" />}
+                                    <span className="font-mono text-[11px] text-muted-foreground shrink-0">{sc.code}</span>
+                                    <span className={cn("truncate", !sc.ok && "text-red-500")}>{sc.label}</span>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+
+                    <div className="flex items-center gap-2">
+                        <Button variant="outline" size="sm" onClick={() => setScanLog([])}
+                                disabled={scanLog.length === 0}>
+                            {t("Clear list")}
+                        </Button>
+                        <Button variant="outline" size="sm" onClick={() => setSelectedOrders(new Set())}
+                                disabled={selectedOrders.size === 0}>
+                            {t("Deselect all")}
+                        </Button>
+                        <span className="text-xs text-muted-foreground ms-auto">
+                            {t("Set the status for everything selected from the bar below.")}
+                        </span>
+                    </div>
+                </div>
+            )}
 
             {/* Filters Bar */}
             <div id="logistics-filters" className="bg-muted/40 p-4 rounded-lg space-y-4">
@@ -954,7 +1094,7 @@ function LogisticsContent() {
                         </TableHeader>
                         <TableBody>
                             {filteredOrders.map((order) => (
-                                <TableRow key={order.id} data-state={selectedOrders.has(order.id) ? "selected" : ""}>
+                                <TableRow key={order.id} data-order-row={order.id} data-state={selectedOrders.has(order.id) ? "selected" : ""}>
                                     <TableCell>
                                         <Checkbox
                                             checked={selectedOrders.has(order.id)}
