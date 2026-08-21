@@ -557,6 +557,11 @@ function DashboardContent() {
         </Card>
       </div>
 
+      {/* Moderators League — directly under the KPIs rather than at the foot of
+          the page. It is a scoreboard, and a scoreboard nobody scrolls to is
+          not one. */}
+      <ModeratorsLeague />
+
       {/* Main Content Grid */}
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-7">
 
@@ -684,7 +689,6 @@ function DashboardContent() {
         </Card>
       </div>
 
-      <ModeratorsLeague />
     </div>
   );
 }

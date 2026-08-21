@@ -9,6 +9,7 @@ import { formatCurrency } from "@/lib/utils";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Loader2, DollarSign, ArrowDownRight, ArrowUpRight, Percent, Package, Wallet, TrendingDown, Truck, AlertTriangle } from "lucide-react";
 import { DateRangePicker } from "@/components/date-range-picker";
+import { MonthlyPerformance } from "@/components/insights/monthly-performance";
 import {
     BarChart,
     Bar,
@@ -407,6 +408,9 @@ export default function ActualReturnsPage() {
                     <DateRangePicker />
                 </div>
                 <ActualReturnsContent />
+
+                {/* Its own year, not the range picker's — see the component. */}
+                <MonthlyPerformance />
             </div>
         </Suspense>
     );
