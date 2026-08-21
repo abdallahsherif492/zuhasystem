@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useBusiness } from "@/contexts/BusinessContext";
 import { useLanguage } from "@/contexts/LanguageContext";
@@ -66,6 +66,14 @@ function monthBounds() {
 export function ModeratorsLeague() {
     const { activeBusiness, userRole, isSystemAdmin } = useBusiness();
     const { t } = useLanguage();
+    // LanguageContext rebuilds `t` on every render and hands down a fresh
+    // context object with it. Depending on `t` inside the fetch callback would
+    // therefore give `load` a new identity whenever anything above re-renders,
+    // and the effect that calls it would fire again — a refetch loop driven by
+    // an unrelated part of the tree. It is only used for toast text, so read it
+    // through a ref and keep it out of the dependency list.
+    const tRef = useRef(t);
+    tRef.current = t;
 
     // Someone being measured against a number should not be able to move it.
     // Enforced in RLS too — this only decides whether the button is worth
@@ -106,11 +114,11 @@ export function ModeratorsLeague() {
             if (targetRes.data) setTargets(targetRes.data as Targets);
         } catch (e: any) {
             console.error("Moderators league failed to load:", e);
-            toast.error(t("Failed to load the moderators league"));
+            toast.error(tRef.current("Failed to load the moderators league"));
         } finally {
             setLoading(false);
         }
-    }, [activeBusiness, from, to, monthKey, t]);
+    }, [activeBusiness, from, to, monthKey]);
 
     useEffect(() => { load(); }, [load]);
 
