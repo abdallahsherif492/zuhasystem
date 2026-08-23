@@ -126,7 +126,14 @@ export const BusinessProvider = ({ children }: { children: React.ReactNode }) =>
             subscription_end_date
           )
         `)
-        .eq('user_email', user.email);
+        .eq('user_email', user.email)
+        // Deterministic, oldest membership first. Without an ORDER BY, Postgres
+        // returns these in physical row order, which changes whenever a row is
+        // updated — and the fallback below takes the first one. That is how an
+        // account whose real store holds 9,636 orders can open the dashboard on
+        // a two-order test store and read as though every number is missing,
+        // with no error anywhere to explain it.
+        .order('created_at', { ascending: true });
 
       if (userBusinesses && userBusinesses.length > 0) {
         // Formatted to match TS Interfaces
@@ -162,7 +169,17 @@ export const BusinessProvider = ({ children }: { children: React.ReactNode }) =>
             }
         }
         
+        // Falls back to the oldest membership, which for anyone with more than
+        // one is the account they actually work in — the extras are test or
+        // secondary stores added later.
         active = active || formatted[0];
+
+        if (!savedId && formatted.length > 1) {
+            console.info(
+                `[BusinessContext] No saved store; defaulting to "${active.business.name}" ` +
+                `out of ${formatted.length}. Use the switcher in the header to change it.`
+            );
+        }
         
         setActiveBusinessState(active.business);
         setUserRole(active.role);

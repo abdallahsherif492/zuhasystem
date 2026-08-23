@@ -3,18 +3,24 @@ import { createClient } from '@supabase/supabase-js';
 import { logIntegrationActivity } from '@/lib/logs/integration-logger';
 
 // Dictionary for Governorate mapping (Arabic to English)
+// Values here MUST match the courier rate card keys and the governorate
+// dropdown in platform-orders. They did not: this table produced 'Al Sharqia',
+// 'Gharbia', 'Qalyubia', 'Kafr El Sheikh', 'Asyut' and 'Faiyum' while the rest
+// of the app uses 'Sharkia', 'Gharbiya', 'Qaliubiya', 'Kafr Al Sheikh',
+// 'Assiut' and 'Fayoum'. Those orders matched no shipping rate and could not be
+// filtered by governorate either.
 const GOVERNORATE_MAPPING: Record<string, string> = {
     'القاهرة': 'Cairo',
     'الاسكندرية': 'Alexandria',
     'الإسكندرية': 'Alexandria',
     'الجيزة': 'Giza',
-    'القليوبية': 'Qalyubia',
+    'القليوبية': 'Qaliubiya',
     'الدقهلية': 'Dakahlia',
-    'الشرقية': 'Al Sharqia',
+    'الشرقية': 'Sharkia',
     'المنوفية': 'Monufia',
-    'الغربية': 'Gharbia',
+    'الغربية': 'Gharbiya',
     'البحيرة': 'Beheira',
-    'كفر الشيخ': 'Kafr El Sheikh',
+    'كفر الشيخ': 'Kafr Al Sheikh',
     'دمياط': 'Damietta',
     'بورسعيد': 'Port Said',
     'الإسماعيلية': 'Ismailia',
@@ -27,9 +33,9 @@ const GOVERNORATE_MAPPING: Record<string, string> = {
     'جنوب سيناء': 'South Sinai',
     'بني سويف': 'Beni Suef',
     'المنيا': 'Minya',
-    'الفيوم': 'Faiyum',
-    'أسيوط': 'Asyut',
-    'اسيوط': 'Asyut',
+    'الفيوم': 'Fayoum',
+    'أسيوط': 'Assiut',
+    'اسيوط': 'Assiut',
     'سوهاج': 'Sohag',
     'قنا': 'Qena',
     'الأقصر': 'Luxor',
@@ -177,6 +183,30 @@ export async function POST(request: Request) {
 
         // 4. Calculate Shipping and Total
         const shippingCost = parseFloat(payload.shipping_cost || payload.shipping || 0);
+
+        // What the courier charges us, as opposed to shippingCost which is what
+        // the customer was charged. Nothing set this for platform orders, so the
+        // courier's fee was missing from the books on every order that came in
+        // this way — 4,388 collected orders and roughly 336,100 EGP of real cost
+        // that never appeared, which flatters profit on every report that uses it.
+        let actualShippingCost = 0;
+        try {
+            const { data: defaultCourier } = await supabase
+                .from('shipping_companies')
+                .select('rates')
+                .eq('business_id', businessId)
+                .eq('is_default', true)
+                .maybeSingle();
+
+            const rate = defaultCourier?.rates?.[mappedGov];
+            if (rate !== undefined && rate !== null && rate !== '') {
+                actualShippingCost = Number(rate) || 0;
+            }
+        } catch (e) {
+            // A missing rate must not cost us the order. It stays 0 and the
+            // backfill migration can pick it up later.
+            console.error('[EasyOrders] Could not resolve courier rate:', e);
+        }
         let calculatedSubtotal = 0;
         let calculatedTotalCost = 0;
 
@@ -302,6 +332,7 @@ export async function POST(request: Request) {
                 tags: totalMismatch ? ['easyorders', 'total-mismatch'] : ['easyorders'],
                 subtotal: calculatedSubtotal,
                 shipping_cost: shippingCost,
+                actual_shipping_cost: actualShippingCost,
                 total_amount: totalAmount,
                 total_cost: calculatedTotalCost,
                 easyorders_id: easyOrderId,
