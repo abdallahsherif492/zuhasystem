@@ -45,6 +45,9 @@ interface Order {
     total_amount: number;
     total_cost: number;
     profit: number;
+    actual_shipping_cost?: number;
+    /** True when the courier fee behind `profit` came from the rate card, not an invoice. */
+    shipping_cost_estimated?: boolean;
     order_type?: string;
     customer_info: any;
     channel?: string;
@@ -680,8 +683,32 @@ function OrdersContent() {
                                         </div>
                                     </TableCell>
                                     <TableCell>{formatCurrency(order.total_amount)}</TableCell>
-                                    <TableCell className="text-green-600 font-medium">
-                                        +{formatCurrency(order.profit)}
+                                    {/* The sign was hardcoded: a loss rendered as
+                                        "+-910 EGP" in green, and 108 orders are
+                                        currently negative. Colour and sign now
+                                        follow the number.
+
+                                        The asterisk marks a profit resting on an
+                                        estimated courier fee rather than a real
+                                        invoice — true for most orders, since the
+                                        fee was never recorded for anything coming
+                                        from EasyOrders and had to be backfilled
+                                        from the rate card. */}
+                                    <TableCell
+                                        className={cn(
+                                            "font-medium",
+                                            Number(order.profit) < 0 ? "text-red-600" : "text-green-600"
+                                        )}
+                                        title={
+                                            order.shipping_cost_estimated
+                                                ? `Includes an estimated courier fee of ${formatCurrency(Number(order.actual_shipping_cost) || 0)} taken from the rate card, not a recorded invoice.`
+                                                : undefined
+                                        }
+                                    >
+                                        {Number(order.profit) < 0 ? "" : "+"}{formatCurrency(Number(order.profit) || 0)}
+                                        {order.shipping_cost_estimated && (
+                                            <span className="text-muted-foreground font-normal ms-0.5" aria-label="estimated shipping">*</span>
+                                        )}
                                     </TableCell>
                                     <TableCell>
                                         <div className="flex items-center gap-1">

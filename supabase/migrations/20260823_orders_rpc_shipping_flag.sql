@@ -1,3 +1,25 @@
+-- Migration: expose the courier fee and whether it is an estimate
+-- Created At: 2026-08-23
+--
+-- The orders list shows a profit per order. profit is a generated column,
+-- total_amount - total_cost - COALESCE(actual_shipping_cost, 0), so it was
+-- never wrong arithmetically — but actual_shipping_cost was missing on 4,388
+-- collected orders, and a missing courier fee reads as extra profit. That is
+-- fixed by 20260822, which filled it from the rate card and flagged every row
+-- it touched.
+--
+-- The consequence is that most orders now show a profit that depends on an
+-- ESTIMATED courier fee: 4,444 of 7,136 collected orders. The list had no way
+-- to say so, so it returns the flag and the fee alongside the profit.
+--
+-- The return type changes, so this has to be dropped rather than replaced.
+-- Regenerated from supabase/orders_pagination_rpc.sql with two columns added;
+-- everything else is byte-for-byte the existing function.
+
+DROP FUNCTION IF EXISTS get_orders_paginated(
+    UUID, INT, INT, TEXT, TEXT[], TEXT[], TEXT[], UUID[], TIMESTAMPTZ, TIMESTAMPTZ, BOOLEAN
+);
+
 -- Function to get paginated and filtered orders
 CREATE OR REPLACE FUNCTION get_orders_paginated(
     p_business_id UUID,
