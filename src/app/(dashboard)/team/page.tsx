@@ -14,7 +14,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
-import { Loader2, Users, UserPlus, Trash2, Edit2, Shield, Clock, Key, Calendar } from "lucide-react";
+import { Loader2, Users, UserPlus, Trash2, Edit2, Shield, Clock, Key, Calendar, Wallet } from "lucide-react";
+import { formatCurrency } from "@/lib/utils";
 import { toast } from "sonner";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 
@@ -30,9 +31,18 @@ type BusinessUser = {
 };
 
 export default function TeamManagementPage() {
-    const { activeBusiness } = useBusiness();
+    const { activeBusiness, userRole, isSystemAdmin, currentUser } = useBusiness();
     const { t } = useLanguage();
     const [team, setTeam] = useState<BusinessUser[]>([]);
+
+    // Pay lives in its own table, readable only by managers — see
+    // 20260824_employee_salaries.sql. This page reads business_users with
+    // select('*') for the whole business, so a salary column there would have
+    // shown every member of staff what their colleagues earn.
+    const [salaries, setSalaries] = useState<Record<string, number>>({});
+    const [salaryDraft, setSalaryDraft] = useState<string>("");
+    const canSeePay = isSystemAdmin || ["owner", "admin", "super admin"]
+        .includes((userRole || "").toLowerCase().replace(/_/g, " "));
     const [loading, setLoading] = useState(true);
     
     // Add user state
@@ -84,7 +94,42 @@ export default function TeamManagementPage() {
 
         if (error) console.error("Error fetching team:", error);
         setTeam((data as BusinessUser[]) || []);
+
+        // RLS returns nothing here for non-managers, so this needs no guard of
+        // its own — but skipping the request for them avoids a pointless call.
+        if (canSeePay) {
+            const { data: pay } = await supabase
+                .from("employee_salaries")
+                .select("business_user_id, monthly_salary")
+                .eq("business_id", activeBusiness.id);
+            setSalaries(Object.fromEntries(
+                (pay || []).map((r: any) => [r.business_user_id, Number(r.monthly_salary) || 0])
+            ));
+        }
+
         setLoading(false);
+    }
+
+    async function saveSalary(member: BusinessUser, raw: string) {
+        if (!activeBusiness) return;
+        const amount = Math.max(0, Number(raw) || 0);
+        const { error } = await supabase
+            .from("employee_salaries")
+            .upsert({
+                business_id: activeBusiness.id,
+                business_user_id: member.id,
+                user_email: member.user_email,
+                monthly_salary: amount,
+                updated_by: currentUser?.email || null,
+                updated_at: new Date().toISOString(),
+            }, { onConflict: "business_user_id" })
+            .select("business_user_id");
+        if (error) {
+            toast.error("Failed to save salary: " + error.message);
+            return false;
+        }
+        setSalaries(prev => ({ ...prev, [member.id]: amount }));
+        return true;
     }
 
     async function handleAddMember(e: React.FormEvent) {
@@ -148,6 +193,12 @@ export default function TeamManagementPage() {
                 toast.error("You cannot change the role of the only owner.");
                 return;
             }
+        }
+
+        // Pay is written to its own table, not through the membership update.
+        if (canSeePay && salaryDraft !== "") {
+            const ok = await saveSalary(editingMember, salaryDraft);
+            if (!ok) return;
         }
 
         const updatesToSend = {
@@ -415,6 +466,12 @@ export default function TeamManagementPage() {
                                                 {getRoleBadge(member.role)}
                                             </TableCell>
                                             <TableCell>
+                                                {canSeePay && salaries[member.id] > 0 && (
+                                                    <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded px-1.5 py-0.5 me-2">
+                                                        <Wallet className="h-3 w-3" />
+                                                        {formatCurrency(salaries[member.id])}
+                                                    </span>
+                                                )}
                                                 {member.shift_start && member.shift_end ? (
                                                     <Badge variant="outline" className="text-[10px] font-mono gap-1">
                                                         <Clock className="h-3 w-3 text-muted-foreground" />
@@ -454,7 +511,7 @@ export default function TeamManagementPage() {
                                                     variant="ghost" 
                                                     size="sm" 
                                                     className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground mr-1"
-                                                    onClick={() => setEditingMember(member)}
+                                                    onClick={() => { setEditingMember(member); setSalaryDraft(salaries[member.id] != null ? String(salaries[member.id]) : ""); }}
                                                 >
                                                     <Edit2 className="h-4 w-4" />
                                                 </Button>
@@ -548,6 +605,26 @@ export default function TeamManagementPage() {
                                     </div>
                                 </div>
                                 
+                                {canSeePay && (
+                                    <div>
+                                        <h4 className="text-xs font-bold text-foreground flex items-center gap-1.5 mb-2">
+                                            <Wallet className="h-3.5 w-3.5 text-primary" />
+                                            {t("Monthly Salary")}
+                                        </h4>
+                                        <Input
+                                            type="number"
+                                            min="0"
+                                            className="h-9 text-xs"
+                                            placeholder="0"
+                                            value={salaryDraft}
+                                            onChange={e => setSalaryDraft(e.target.value)}
+                                        />
+                                        <p className="text-[10px] text-muted-foreground mt-1">
+                                            {t("Visible to owners and admins only. Not written to the actions log, which the whole team can read.")}
+                                        </p>
+                                    </div>
+                                )}
+
                                 <div>
                                     <h4 className="text-xs font-bold text-foreground flex items-center gap-1.5 mb-2">
                                         <Calendar className="h-3.5 w-3.5 text-primary" />
