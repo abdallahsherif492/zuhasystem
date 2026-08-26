@@ -9,11 +9,7 @@ import {
 import { supabase } from "@/lib/supabase";
 import { useBusiness } from "@/contexts/BusinessContext";
 import { formatCurrency } from "@/lib/utils";
-import {
-    LayoutDashboard, ShoppingCart, Globe, Truck, Package, Box, Users,
-    Banknote, LineChart, Settings, Ticket, Megaphone, FileText, ShoppingBag,
-    Calendar, History, BookOpen, Wallet, AlertTriangle, Loader2, Search, Plus,
-} from "lucide-react";
+import { LayoutDashboard, ShoppingCart, Globe, Truck, Package, Box, Users, Banknote, LineChart, Settings, Ticket, Megaphone, FileText, ShoppingBag, Calendar, History, BookOpen, Wallet, AlertTriangle, Loader2, Search, Plus, LifeBuoy } from "lucide-react";
 
 /**
  * Global search, opened with Ctrl/Cmd+K from anywhere.
@@ -36,6 +32,7 @@ const DESTINATIONS: Dest[] = [
     { label: "أوردر جديد", hint: "إنشاء", href: "/orders/new", icon: Plus, keywords: "new order اوردر جديد انشاء create" },
     { label: "أوردرات المتاجر", hint: "محتاجة تأكيد", href: "/platform-orders", icon: Globe, keywords: "platform easyorders shopify منصات متاجر waiting" },
     { label: "التحضير والشحن", hint: "Logistics", href: "/logistics", icon: Truck, keywords: "logistics fulfilment تحضير شحن عمليات" },
+    { label: "مشاكل الشحن", hint: "أوردرات عالقة", href: "/logistics/issues", icon: LifeBuoy, keywords: "issues stuck returning hold مشاكل عالق مرتجع مؤجل متابعة" },
     { label: "شركات الشحن", href: "/shipping", icon: Truck, keywords: "shipping couriers شحن شركات" },
     { label: "تسوية حسابات الشحن", hint: "فلوسك عند الشركات", href: "/shipping/settlements", icon: Wallet, keywords: "settlement cod reconciliation تسوية تحصيل مستحقات" },
     { label: "تحديث الشحن جماعي", hint: "رفع ملف", href: "/shipping/update", icon: Truck, keywords: "bulk update csv تحديث جماعي رفع" },

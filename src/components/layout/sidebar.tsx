@@ -7,13 +7,7 @@ import { useBusiness } from "@/contexts/BusinessContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { 
-    LayoutDashboard, AlertTriangle, Package, ShoppingCart, Settings, Users, Truck, 
-    Banknote, LineChart, ShoppingBag, Megaphone, Box, DollarSign, ShieldCheck, 
-    FileText, Ticket, CreditCard, Clock, Inbox, Calendar, LogOut, Globe,
-    ChevronDown, ChevronRight, BarChart3, PieChart, History, BookOpen,
-    Wallet, Upload
-} from "lucide-react";
+import { LayoutDashboard, AlertTriangle, Package, ShoppingCart, Settings, Users, Truck, Banknote, LineChart, ShoppingBag, Megaphone, Box, DollarSign, ShieldCheck, FileText, Ticket, CreditCard, Clock, Inbox, Calendar, LogOut, Globe, ChevronDown, ChevronRight, BarChart3, PieChart, History, BookOpen, Wallet, Upload, LifeBuoy } from "lucide-react";
 
 import Image from "next/image";
 import { useState, useEffect } from "react";
@@ -170,6 +164,7 @@ export function SidebarContent({ onLinkClick }: { onLinkClick?: () => void }) {
                     subItems: [
                         { title: t("New from stores"), href: "/platform-orders", icon: Globe, badge: "platform-orders" },
                         { title: t("Fulfilment & shipping"), href: "/logistics", icon: Truck },
+                        { title: t("Shipping problems"), href: "/logistics/issues", icon: LifeBuoy },
                     ]
                 },
                 { title: t("Customers"), href: "/customers", icon: Users },
