@@ -12,9 +12,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
-    Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
-} from "@/components/ui/table";
-import {
     Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 import {
@@ -211,13 +208,18 @@ export default function ShippingIssuesPage() {
         }
     }
 
-    const digits = (p: string | null) => (p || "").replace(/\D/g, "");
-    const waLink = (p: string | null) => {
-        const d = digits(p);
-        if (!d) return null;
-        // Egyptian mobiles are stored as 01XXXXXXXXX; WhatsApp wants 20XXXXXXXXXX.
-        return `https://wa.me/${d.startsWith("0") ? "2" + d : d}`;
-    };
+    /**
+     * A customer's phone field sometimes holds more than one number —
+     * "0882232065 | 01159244278", a landline and a mobile. Stripping
+     * non-digits from the whole field would produce one impossible number and
+     * a dead call button, so split it and treat each number separately.
+     */
+    const phoneNumbers = (p: string | null): string[] =>
+        (p || "").split(/[^0-9]+/).map(x => x.trim()).filter(x => x.length >= 7);
+
+    // WhatsApp only makes sense for an Egyptian mobile, not a landline.
+    const waLink = (num: string) =>
+        /^01\d{9}$/.test(num) ? `https://wa.me/2${num}` : null;
 
     if (unavailable) {
         return (
@@ -294,151 +296,156 @@ export default function ShippingIssuesPage() {
                 </div>
             </div>
 
-            <Card>
-                <CardContent className="p-0">
-                    {loading ? (
-                        <div className="flex justify-center p-16"><Loader2 className="h-7 w-7 animate-spin text-muted-foreground" /></div>
-                    ) : filtered.length === 0 ? (
-                        <div className="p-16 text-center text-sm text-muted-foreground">
-                            مفيش أوردرات عالقة في الفلتر ده — شغل كويس.
-                        </div>
-                    ) : (
-                        <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead className="w-[46px]" />
-                                    <TableHead>الأوردر</TableHead>
-                                    <TableHead className="hidden md:table-cell">المحافظة</TableHead>
-                                    <TableHead>الحالة</TableHead>
-                                    <TableHead className="text-center">عالق من</TableHead>
-                                    <TableHead className="hidden lg:table-cell">آخر متابعة</TableHead>
-                                    <TableHead className="text-right hidden sm:table-cell">القيمة</TableHead>
-                                    <TableHead className="w-[130px]" />
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {filtered.map(r => {
-                                    const open = expanded === r.order_id;
-                                    const overdue = r.next_action_at && r.next_action_at < todayStr();
-                                    return (
-                                        <>
-                                            <TableRow key={r.order_id} className="cursor-pointer hover:bg-muted/30"
-                                                      onClick={() => { setExpanded(open ? null : r.order_id); if (!open) loadHistory(r.order_id); }}>
-                                                <TableCell>
-                                                    {open ? <ChevronDown className="h-4 w-4 text-muted-foreground" />
-                                                          : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
-                                                </TableCell>
-                                                <TableCell>
-                                                    <div className="font-medium">{r.customer_name || "—"}</div>
-                                                    <div className="text-xs text-muted-foreground font-mono">
-                                                        #{r.reference}{r.courier ? ` · ${r.courier}` : ""}
-                                                    </div>
-                                                </TableCell>
-                                                <TableCell className="hidden md:table-cell text-sm">{r.governorate || "—"}</TableCell>
-                                                <TableCell>
-                                                    <Badge variant="outline" className={cn(
-                                                        r.bucket === "returning" && "bg-red-500/10 text-red-600 border-red-500/20",
-                                                        r.bucket === "hold" && "bg-amber-500/10 text-amber-600 border-amber-500/20",
-                                                        r.bucket === "stale" && "bg-blue-500/10 text-blue-600 border-blue-500/20",
-                                                    )}>
-                                                        {r.status}
-                                                    </Badge>
-                                                </TableCell>
-                                                <TableCell className="text-center">
-                                                    <span className={cn("font-bold tabular-nums",
-                                                        r.days_stuck >= 14 ? "text-red-600"
-                                                            : r.days_stuck >= 7 ? "text-amber-600" : "text-muted-foreground")}>
-                                                        {r.days_stuck}
-                                                    </span>
-                                                    <span className="text-[11px] text-muted-foreground"> يوم</span>
-                                                </TableCell>
-                                                <TableCell className="hidden lg:table-cell text-xs">
-                                                    {Number(r.followup_count) === 0 ? (
-                                                        <span className="text-amber-600 font-medium">محدش لمسها</span>
-                                                    ) : (
-                                                        <>
-                                                            <div>{outcomeLabel(r.last_outcome)}</div>
-                                                            <div className="text-muted-foreground">
-                                                                {r.followup_count} متابعة
-                                                                {overdue && <span className="text-red-600 font-medium"> · فات الميعاد</span>}
-                                                            </div>
-                                                        </>
-                                                    )}
-                                                </TableCell>
-                                                <TableCell className="text-right hidden sm:table-cell tabular-nums">
-                                                    {formatCurrency(Number(r.total_amount))}
-                                                </TableCell>
-                                                <TableCell onClick={e => e.stopPropagation()}>
-                                                    <div className="flex items-center gap-1 justify-end">
-                                                        {r.customer_phone && (
-                                                            <>
-                                                                <Button asChild size="icon" variant="ghost" className="h-8 w-8" title="اتصل">
-                                                                    <a href={`tel:${digits(r.customer_phone)}`}><Phone className="h-3.5 w-3.5" /></a>
-                                                                </Button>
-                                                                <Button asChild size="icon" variant="ghost" className="h-8 w-8 text-emerald-600" title="واتساب">
-                                                                    <a href={waLink(r.customer_phone) || "#"} target="_blank" rel="noopener noreferrer">
-                                                                        <MessageCircle className="h-3.5 w-3.5" />
-                                                                    </a>
-                                                                </Button>
-                                                            </>
-                                                        )}
-                                                        <Button size="sm" variant="outline" className="h-8"
-                                                                onClick={() => openDialog(r)}>
-                                                            متابعة
-                                                        </Button>
-                                                    </div>
-                                                </TableCell>
-                                            </TableRow>
+            {loading ? (
+                <div className="flex justify-center p-16"><Loader2 className="h-7 w-7 animate-spin text-muted-foreground" /></div>
+            ) : filtered.length === 0 ? (
+                <Card><CardContent className="p-16 text-center text-sm text-muted-foreground">
+                    مفيش أوردرات عالقة في الفلتر ده — شغل كويس.
+                </CardContent></Card>
+            ) : (
+                <div className="space-y-4">
+                    {filtered.map(r => {
+                        const open = expanded === r.order_id;
+                        const overdue = r.next_action_at && r.next_action_at < todayStr();
+                        return (
+                            <Card key={r.order_id} className={cn(
+                                "overflow-hidden border-2",
+                                r.bucket === "returning" ? "border-red-500/30"
+                                    : r.bucket === "hold" ? "border-amber-500/30" : "border-blue-500/25"
+                            )}>
+                                <CardHeader className="bg-muted/30 pb-4">
+                                    <div className="flex flex-wrap items-start justify-between gap-4">
+                                        <div className="min-w-0">
+                                            {/* The reference people actually use: the same 8 characters
+                                                printed on the waybill barcode and shown in the orders
+                                                list, so the number on the parcel matches the screen. */}
+                                            <div className="font-mono text-3xl font-black tracking-wider leading-none">
+                                                #{r.reference}
+                                            </div>
+                                            <div className="text-lg font-semibold mt-2 truncate">
+                                                {r.customer_name || "—"}
+                                            </div>
+                                            <div className="text-sm text-muted-foreground mt-0.5">
+                                                {r.governorate || "—"}{r.courier ? ` · ${r.courier}` : ""}
+                                            </div>
+                                        </div>
 
-                                            {open && (
-                                                <TableRow key={`${r.order_id}-d`} className="bg-muted/20 hover:bg-muted/20">
-                                                    <TableCell colSpan={8} className="p-4">
-                                                        <div className="grid gap-4 md:grid-cols-3 text-xs mb-3">
-                                                            <div><span className="text-muted-foreground">التليفون: </span><span className="font-mono">{r.customer_phone || "—"}</span></div>
-                                                            <div><span className="text-muted-foreground">شركة الشحن: </span>{r.courier || "غير محددة"}</div>
-                                                            <div><span className="text-muted-foreground">اللي أكد الأوردر: </span>{r.closed_by || "غير محدد"}</div>
-                                                        </div>
-                                                        <p className="font-bold uppercase tracking-wider text-[10px] text-muted-foreground mb-2">
-                                                            سجل المتابعات
-                                                        </p>
-                                                        {!history[r.order_id] ? (
-                                                            <div className="py-3"><Loader2 className="h-4 w-4 animate-spin text-muted-foreground" /></div>
-                                                        ) : history[r.order_id].length === 0 ? (
-                                                            <p className="text-xs text-muted-foreground py-2">
-                                                                لسه محدش تابع الأوردر ده. دي أول مكالمة.
-                                                            </p>
-                                                        ) : (
-                                                            <div className="rounded-md border bg-background divide-y">
-                                                                {history[r.order_id].map(f => (
-                                                                    <div key={f.id} className="p-2.5 text-xs">
-                                                                        <div className="flex flex-wrap items-center gap-2">
-                                                                            <span className="font-semibold">{outcomeLabel(f.outcome)}</span>
-                                                                            <span className="text-muted-foreground">
-                                                                                {format(new Date(f.created_at), "dd/MM/yyyy hh:mm a")}
-                                                                            </span>
-                                                                            <span className="text-muted-foreground">· {f.created_by || "—"}</span>
-                                                                            {f.next_action_at && (
-                                                                                <Badge variant="outline" className="text-[10px] gap-1">
-                                                                                    <Clock className="h-3 w-3" /> متابعة {f.next_action_at}
-                                                                                </Badge>
-                                                                            )}
-                                                                        </div>
-                                                                        {f.note && <p className="text-muted-foreground mt-1">{f.note}</p>}
-                                                                    </div>
-                                                                ))}
+                                        <div className="flex flex-col items-end gap-2 shrink-0">
+                                            <Badge variant="outline" className={cn("text-sm px-3 py-1",
+                                                r.bucket === "returning" && "bg-red-500/10 text-red-600 border-red-500/25",
+                                                r.bucket === "hold" && "bg-amber-500/10 text-amber-600 border-amber-500/25",
+                                                r.bucket === "stale" && "bg-blue-500/10 text-blue-600 border-blue-500/25",
+                                            )}>
+                                                {r.status}
+                                            </Badge>
+                                            <div className={cn("text-sm font-bold",
+                                                r.days_stuck >= 14 ? "text-red-600"
+                                                    : r.days_stuck >= 7 ? "text-amber-600" : "text-muted-foreground")}>
+                                                عالق من {r.days_stuck} يوم
+                                            </div>
+                                            <div className="text-xl font-bold tabular-nums">
+                                                {formatCurrency(Number(r.total_amount))}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </CardHeader>
+
+                                <CardContent className="pt-5 space-y-4">
+                                    <div className="flex flex-wrap items-center gap-x-4 gap-y-3">
+                                        {phoneNumbers(r.customer_phone).length === 0 ? (
+                                            <span className="text-lg text-muted-foreground">مفيش رقم مسجل</span>
+                                        ) : phoneNumbers(r.customer_phone).map(num => (
+                                            <div key={num} className="flex items-center gap-2">
+                                                {/* Big and tappable — this screen exists to get someone on the phone. */}
+                                                <a href={`tel:${num}`}
+                                                   className="font-mono text-2xl font-bold tracking-wide hover:underline">
+                                                    {num}
+                                                </a>
+                                                <Button asChild size="sm" variant="outline" className="gap-1.5 h-9">
+                                                    <a href={`tel:${num}`}><Phone className="h-4 w-4" /> اتصل</a>
+                                                </Button>
+                                                {waLink(num) && (
+                                                    <Button asChild size="sm" variant="outline"
+                                                            className="gap-1.5 h-9 text-emerald-700 border-emerald-500/30 hover:bg-emerald-500/10">
+                                                        <a href={waLink(num)!} target="_blank" rel="noopener noreferrer">
+                                                            <MessageCircle className="h-4 w-4" /> واتساب
+                                                        </a>
+                                                    </Button>
+                                                )}
+                                            </div>
+                                        ))}
+                                        <Button size="sm" className="h-9 ms-auto" onClick={() => openDialog(r)}>
+                                            سجّل متابعة
+                                        </Button>
+                                    </div>
+
+                                    <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 text-sm border-t pt-3">
+                                        {Number(r.followup_count) === 0 ? (
+                                            <span className="text-amber-600 font-semibold">لسه محدش تابع الأوردر ده</span>
+                                        ) : (
+                                            <>
+                                                <span>
+                                                    <span className="text-muted-foreground">آخر متابعة: </span>
+                                                    <span className="font-medium">{outcomeLabel(r.last_outcome)}</span>
+                                                </span>
+                                                <span className="text-muted-foreground">{r.followup_count} متابعة</span>
+                                                {overdue && (
+                                                    <span className="text-red-600 font-semibold">
+                                                        فات ميعاد المتابعة ({r.next_action_at})
+                                                    </span>
+                                                )}
+                                                {!overdue && r.next_action_at && (
+                                                    <span className="text-muted-foreground">المتابعة الجاية {r.next_action_at}</span>
+                                                )}
+                                            </>
+                                        )}
+                                        {r.closed_by && (
+                                            <span className="text-muted-foreground">أكده {r.closed_by}</span>
+                                        )}
+                                        <Button variant="ghost" size="sm" className="h-8 gap-1 ms-auto text-xs"
+                                                onClick={() => { setExpanded(open ? null : r.order_id); if (!open) loadHistory(r.order_id); }}>
+                                            {open ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+                                            {open ? "اخفي السجل" : "شوف السجل"}
+                                        </Button>
+                                    </div>
+
+                                    {open && (
+                                        <div className="border-t pt-3">
+                                            {!history[r.order_id] ? (
+                                                <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                                            ) : history[r.order_id].length === 0 ? (
+                                                <p className="text-sm text-muted-foreground">
+                                                    لسه محدش تابع الأوردر ده. دي هتبقى أول مكالمة.
+                                                </p>
+                                            ) : (
+                                                <div className="rounded-lg border bg-muted/20 divide-y">
+                                                    {history[r.order_id].map(f => (
+                                                        <div key={f.id} className="p-3 text-sm">
+                                                            <div className="flex flex-wrap items-center gap-2">
+                                                                <span className="font-semibold">{outcomeLabel(f.outcome)}</span>
+                                                                <span className="text-xs text-muted-foreground">
+                                                                    {format(new Date(f.created_at), "dd/MM/yyyy hh:mm a")}
+                                                                </span>
+                                                                <span className="text-xs text-muted-foreground">· {f.created_by || "—"}</span>
+                                                                {f.next_action_at && (
+                                                                    <Badge variant="outline" className="text-[11px] gap-1">
+                                                                        <Clock className="h-3 w-3" /> متابعة {f.next_action_at}
+                                                                    </Badge>
+                                                                )}
                                                             </div>
-                                                        )}
-                                                    </TableCell>
-                                                </TableRow>
+                                                            {f.note && <p className="text-muted-foreground mt-1">{f.note}</p>}
+                                                        </div>
+                                                    ))}
+                                                </div>
                                             )}
-                                        </>
-                                    );
-                                })}
-                            </TableBody>
-                        </Table>
-                    )}
-                </CardContent>
-            </Card>
+                                        </div>
+                                    )}
+                                </CardContent>
+                            </Card>
+                        );
+                    })}
+                </div>
+            )}
 
             <Dialog open={!!dialog} onOpenChange={o => !o && setDialog(null)}>
                 <DialogContent>
@@ -453,7 +460,7 @@ export default function ShippingIssuesPage() {
                         <div className="space-y-2">
                             <Label>نتيجة المكالمة</Label>
                             <Select value={form.outcome} onValueChange={v => setForm({ ...form, outcome: v })}>
-                                <SelectTrigger><SelectValue placeholder="اختار..." /></SelectTrigger>
+                                <SelectTrigger className="w-full"><SelectValue placeholder="اختار..." /></SelectTrigger>
                                 <SelectContent>
                                     {OUTCOMES.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
                                 </SelectContent>
@@ -476,7 +483,7 @@ export default function ShippingIssuesPage() {
                             <div className="space-y-2">
                                 <Label>غيّر الحالة (اختياري)</Label>
                                 <Select value={form.newStatus} onValueChange={v => setForm({ ...form, newStatus: v })}>
-                                    <SelectTrigger><SelectValue placeholder="سيبها زي ما هي" /></SelectTrigger>
+                                    <SelectTrigger className="w-full"><SelectValue placeholder="سيبها زي ما هي" /></SelectTrigger>
                                     <SelectContent>
                                         <SelectItem value="Shipped">رجّعها للشحن</SelectItem>
                                         <SelectItem value="Hold To redeliver">مؤجل للتسليم</SelectItem>

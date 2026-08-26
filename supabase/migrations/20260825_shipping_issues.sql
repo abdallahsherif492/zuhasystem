@@ -162,7 +162,12 @@ BEGIN
     )
     SELECT
         s.id,
-        COALESCE(NULLIF(s.easyorders_id, ''), left(s.id::TEXT, 8)),
+        -- The reference every other screen shows: the first 8 characters of the
+        -- order id. It is what the orders list prints, what the CSV export
+        -- carries, and what the waybill barcode encodes — so the number on the
+        -- parcel in someone's hand matches the number on this screen. The
+        -- EasyOrders id is a full UUID and matches nothing a person can read.
+        left(s.id::TEXT, 8),
         s.status,
         CASE s.st
             WHEN 'returning'         THEN 'returning'
