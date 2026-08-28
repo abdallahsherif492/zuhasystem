@@ -58,6 +58,7 @@ import {
 } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
+import { toast } from "sonner";
 import { Calendar } from "@/components/ui/calendar";
 
 interface CartItem {
@@ -1012,76 +1013,95 @@ export default function NewOrderPage() {
                 </Card>
             </div>
 
-            {/* Transaction Dialog */}
-            <Dialog open={showTransactionDialog} onOpenChange={(open) => {
-                if (!open) {
-                    router.push("/orders");
-                    router.refresh();
-                }
-            }}>
-                <DialogContent>
+            {/* Deposit Dialog
+                Deliberately impossible to dismiss: no Skip, no close X, and Esc
+                and click-outside are both blocked. The money has already been
+                taken from the customer by this point — the only question left is
+                which treasury it landed in, and leaving that unanswered is how
+                a payment ends up recorded on the order but missing from the
+                books. */}
+            <Dialog open={showTransactionDialog}>
+                <DialogContent
+                    showCloseButton={false}
+                    onEscapeKeyDown={(e) => e.preventDefault()}
+                    onPointerDownOutside={(e) => e.preventDefault()}
+                    onInteractOutside={(e) => e.preventDefault()}
+                >
                     <DialogHeader>
-                        <DialogTitle>Add Payment to Revenue?</DialogTitle>
+                        <DialogTitle>تسجيل الدفعة في الخزينة</DialogTitle>
                         <DialogDescription>
-                            This order has a paid amount of {formatCurrency(completedOrder?.amount || 0)}.
-                            Would you like to automatically record this as a Revenue (Deposit) transaction?
+                            الأوردر ده اتدفع فيه {formatCurrency(completedOrder?.amount || 0)}.
+                            اختار الخزينة اللي الفلوس دخلت فيها عشان تتسجل في الحسابات.
                         </DialogDescription>
                     </DialogHeader>
                     <div className="space-y-4 py-4">
                         <div className="space-y-2">
-                            <Label>اختر الخزينة / الحساب (Treasury Account)</Label>
+                            <Label>الخزينة / الحساب</Label>
                             <Select value={transactionAccount} onValueChange={setTransactionAccount}>
-                                <SelectTrigger><SelectValue placeholder="اختر الخزينة" /></SelectTrigger>
+                                <SelectTrigger className="w-full"><SelectValue placeholder="اختر الخزينة" /></SelectTrigger>
                                 <SelectContent>
                                     {accounts.map((acc) => (
                                         <SelectItem key={acc.id} value={acc.name}>
                                             {acc.name}
                                         </SelectItem>
                                     ))}
-                                    <SelectItem value="Split">Split (تقسيم مناصفة 50/50)</SelectItem>
+                                    {/* Splitting needs two real treasuries to split between. */}
+                                    {accounts.length >= 2 && (
+                                        <SelectItem value="Split">
+                                            تقسيم 50/50 بين {accounts[0].name} و {accounts[1].name}
+                                        </SelectItem>
+                                    )}
                                 </SelectContent>
                             </Select>
-
                         </div>
                     </div>
                     <DialogFooter>
-                        <Button variant="outline" onClick={() => {
-                            router.push("/orders");
-                            router.refresh();
-                        }}>Skip</Button>
-                        <Button disabled={!transactionAccount || transactionLoading} onClick={async () => {
-                            setTransactionLoading(true);
-                            try {
-                                const payload = {
-                                    business_id: activeBusiness!.id,
-                                    transaction_date: new Date().toISOString(),
-                                    type: "revenue",
-                                    category: "Deposits",
-                                    description: `Order #${completedOrder?.id} - ${completedOrder?.cName} - ${completedOrder?.cPhone}`,
-                                };
+                        <Button
+                            className="w-full"
+                            disabled={!transactionAccount || transactionLoading}
+                            onClick={async () => {
+                                setTransactionLoading(true);
+                                try {
+                                    const payload = {
+                                        business_id: activeBusiness!.id,
+                                        transaction_date: new Date().toISOString(),
+                                        type: "revenue",
+                                        category: "Deposits",
+                                        description: `Order #${completedOrder?.id?.slice(0, 8)} - ${completedOrder?.cName} - ${completedOrder?.cPhone}`,
+                                    };
 
-                                if (transactionAccount === "Split") {
-                                    const half = (completedOrder?.amount || 0) / 2;
-                                    await supabase.from("transactions").insert([
-                                        { ...payload, amount: half, account_name: "Mohamed Adel" },
-                                        { ...payload, amount: half, account_name: "Abdallah Sherif" },
-                                    ]);
-                                } else {
-                                    await supabase.from("transactions").insert({
-                                        ...payload,
-                                        amount: completedOrder?.amount || 0,
-                                        account_name: transactionAccount
-                                    });
+                                    // The insert is checked. It used to be fired and
+                                    // forgotten, so a rejected write navigated away
+                                    // exactly like a successful one and the deposit
+                                    // silently never reached the books.
+                                    const rows = transactionAccount === "Split"
+                                        ? [
+                                            { ...payload, amount: (completedOrder?.amount || 0) / 2, account_name: accounts[0].name },
+                                            { ...payload, amount: (completedOrder?.amount || 0) / 2, account_name: accounts[1].name },
+                                          ]
+                                        : [{ ...payload, amount: completedOrder?.amount || 0, account_name: transactionAccount }];
+
+                                    const { data, error } = await supabase
+                                        .from("transactions").insert(rows).select("id");
+                                    if (error) throw error;
+                                    if (!data || data.length !== rows.length) {
+                                        throw new Error("الدفعة متسجلتش في الخزينة. حاول تاني.");
+                                    }
+
+                                    toast.success("تم تسجيل الدفعة في الخزينة");
+                                    router.push("/orders");
+                                    router.refresh();
+                                } catch (e: any) {
+                                    console.error(e);
+                                    // Stay on the dialog. Navigating away on a failure
+                                    // is what loses the payment in the first place.
+                                    toast.error(e.message || "فشل تسجيل الدفعة — الأوردر اتحفظ، جرب تاني");
+                                    setTransactionLoading(false);
                                 }
-                                router.push("/orders");
-                                router.refresh();
-                            } catch (e) {
-                                console.error(e);
-                                alert("Failed to add transaction");
-                            }
-                        }}>
+                            }}
+                        >
                             {transactionLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                            Add Transaction
+                            سجّل الدفعة
                         </Button>
                     </DialogFooter>
                 </DialogContent>
