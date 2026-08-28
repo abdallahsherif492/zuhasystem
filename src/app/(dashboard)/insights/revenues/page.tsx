@@ -45,6 +45,14 @@ function RevenuesContent() {
 
     const [dailyData, setDailyData] = useState<any[]>([]);
 
+    // How much of what was sold in this period has actually been collected.
+    // The cards above track money that arrived; this tracks what is still owed.
+    const [payment, setPayment] = useState<{
+        payment_status: string; orders_count: number; total_value: number;
+        paid_value: number; outstanding: number;
+    }[]>([]);
+    const [paymentMissing, setPaymentMissing] = useState(false);
+
     const fromDate = searchParams.get('from');
     const toDate = searchParams.get('to');
 
@@ -61,6 +69,17 @@ function RevenuesContent() {
 
             const start = fromDate || defaultStart;
             const end = toDate || defaultEnd;
+
+            if (activeBusiness) {
+                const { data: pay, error: payErr } = await supabase.rpc("get_payment_status_breakdown", {
+                    p_business_id: activeBusiness.id,
+                    p_from: new Date(start).toISOString(),
+                    // The picker's end date is inclusive; the RPC's bound is not.
+                    p_to: new Date(new Date(end).getTime() + 86400000).toISOString(),
+                });
+                if (payErr) { setPaymentMissing(true); setPayment([]); }
+                else { setPaymentMissing(false); setPayment((pay as any[]) || []); }
+            }
 
             // Fetch Revenue Transactions with fetchAll
             const revTrans = await fetchAll((from, to) => {
@@ -167,6 +186,22 @@ function RevenuesContent() {
         { name: 'Collections', value: collectionsCount },
         { name: 'Others', value: othersCount }
     ].filter(d => d.value > 0);
+
+    const payTotals = payment.reduce((a, r) => ({
+        orders: a.orders + Number(r.orders_count || 0),
+        value: a.value + Number(r.total_value || 0),
+        paid: a.paid + Number(r.paid_value || 0),
+        outstanding: a.outstanding + Number(r.outstanding || 0),
+    }), { orders: 0, value: 0, paid: 0, outstanding: 0 });
+
+    const PAY_STYLE: Record<string, { label: string; colour: string; bg: string }> = {
+        "Paid": { label: "مدفوع بالكامل", colour: "#10b981", bg: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400" },
+        "Partially Paid": { label: "مدفوع جزئياً", colour: "#f59e0b", bg: "bg-amber-500/10 text-amber-700 dark:text-amber-400" },
+        "Not Paid": { label: "غير مدفوع", colour: "#94a3b8", bg: "bg-slate-500/10 text-slate-700 dark:text-slate-300" },
+    };
+    const payOrder = ["Paid", "Partially Paid", "Not Paid"];
+    const paySorted = [...payment].sort(
+        (a, b) => payOrder.indexOf(a.payment_status) - payOrder.indexOf(b.payment_status));
 
     return (
         <div className="space-y-6">
@@ -327,6 +362,107 @@ function RevenuesContent() {
                             <span className="font-bold text-xl text-primary">{formatCurrency(totalRevenue)}</span>
                         </div>
                     </div>
+                </CardContent>
+            </Card>
+
+            {/* Collection status of the orders placed in this period.
+                The cards above count money that arrived; this counts what was
+                sold and whether it has been paid for. */}
+            <Card>
+                <CardHeader>
+                    <CardTitle>حالة تحصيل الأوردرات</CardTitle>
+                    <CardDescription>
+                        الأوردرات اللي اتعملت في الفترة دي، ومدفوع منها كام. الأوردرات الملغية
+                        مستبعدة — أوردر ماخرجش مش دين.
+                    </CardDescription>
+                </CardHeader>
+                <CardContent>
+                    {paymentMissing ? (
+                        <p className="text-sm text-muted-foreground">
+                            شغّل supabase/migrations/20260826_payment_status_breakdown.sql عشان القسم ده يشتغل.
+                        </p>
+                    ) : payment.length === 0 ? (
+                        <p className="text-sm text-muted-foreground py-6 text-center">
+                            مفيش أوردرات في الفترة دي.
+                        </p>
+                    ) : (
+                        <div className="space-y-5">
+                            <div className="grid gap-4 sm:grid-cols-3">
+                                {paySorted.map(r => {
+                                    const st = PAY_STYLE[r.payment_status] || PAY_STYLE["Not Paid"];
+                                    const pct = payTotals.orders
+                                        ? (Number(r.orders_count) / payTotals.orders) * 100 : 0;
+                                    return (
+                                        <div key={r.payment_status} className="rounded-xl border p-4 space-y-1">
+                                            <div className={`inline-flex text-xs font-semibold px-2 py-0.5 rounded ${st.bg}`}>
+                                                {st.label}
+                                            </div>
+                                            <div className="text-3xl font-bold tabular-nums">
+                                                {Number(r.orders_count).toLocaleString()}
+                                            </div>
+                                            <div className="text-xs text-muted-foreground">
+                                                {pct.toFixed(1)}% من الأوردرات · {formatCurrency(Number(r.total_value))}
+                                            </div>
+                                            {Number(r.outstanding) > 0 && (
+                                                <div className="text-xs font-medium text-amber-700 dark:text-amber-400 pt-1">
+                                                    متبقي {formatCurrency(Number(r.outstanding))}
+                                                </div>
+                                            )}
+                                        </div>
+                                    );
+                                })}
+                            </div>
+
+                            {/* One bar rather than a pie: three shares read faster
+                                side by side than as wedges, and the widths are
+                                directly comparable. */}
+                            <div className="space-y-2">
+                                <div className="flex h-4 w-full overflow-hidden rounded-full border">
+                                    {paySorted.map(r => {
+                                        const st = PAY_STYLE[r.payment_status] || PAY_STYLE["Not Paid"];
+                                        const pct = payTotals.orders
+                                            ? (Number(r.orders_count) / payTotals.orders) * 100 : 0;
+                                        return pct > 0 ? (
+                                            <div key={r.payment_status} style={{ width: `${pct}%`, background: st.colour }}
+                                                 title={`${st.label}: ${Number(r.orders_count)}`} />
+                                        ) : null;
+                                    })}
+                                </div>
+                                <div className="flex flex-wrap gap-4 text-xs text-muted-foreground">
+                                    {paySorted.map(r => {
+                                        const st = PAY_STYLE[r.payment_status] || PAY_STYLE["Not Paid"];
+                                        return (
+                                            <span key={r.payment_status} className="inline-flex items-center gap-1.5">
+                                                <span className="h-2.5 w-2.5 rounded-full" style={{ background: st.colour }} />
+                                                {st.label}
+                                            </span>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+
+                            <div className="grid gap-3 sm:grid-cols-3 border-t pt-4">
+                                <div>
+                                    <p className="text-xs text-muted-foreground">قيمة الأوردرات</p>
+                                    <p className="text-lg font-bold">{formatCurrency(payTotals.value)}</p>
+                                </div>
+                                <div>
+                                    <p className="text-xs text-muted-foreground">اتحصّل منها</p>
+                                    <p className="text-lg font-bold text-emerald-600">{formatCurrency(payTotals.paid)}</p>
+                                </div>
+                                <div>
+                                    <p className="text-xs text-muted-foreground">لسه متحصّلش</p>
+                                    <p className="text-lg font-bold text-amber-600">{formatCurrency(payTotals.outstanding)}</p>
+                                </div>
+                            </div>
+
+                            <p className="text-xs text-muted-foreground">
+                                أغلب أوردراتك دفع عند الاستلام، فـ«غير مدفوع» هنا طبيعي — الفلوس بتتحصّل
+                                مع التسليم. الرقم اللي يستاهل المتابعة هو «مدفوع جزئياً»: دول عملاء دفعوا
+                                عربون وباقي عليهم فلوس.
+                            </p>
+                        </div>
+                    )}
                 </CardContent>
             </Card>
         </div>
