@@ -669,9 +669,10 @@ function RevenuesContent() {
                     <CardTitle>عرابين متكررة أو زيادة</CardTitle>
                     <CardDescription>
                         الأوردرات اللي الخزينة مسجّل عليها أكتر من العربون المكتوب عليها.
-                        أخطرهم اللي نفس المبلغ اتسجل فيه مرتين أو أكتر — دي فلوس بتظهر في
-                        الحسابات وهي مدخلتش، فبتضخّم الإيراد. الأوردر اللي عربونه اتقسّم
-                        على دفعتين ومجموعهم مطابق مش هيظهر هنا.
+                        أكتر حالة بتحصل إن أوردر الموقع بيتسجل عربونه مرتين: مرة من شاشة
+                        أوردرات الموقع بالـEasyOrders id، ومرة من الأوردر نفسه بالرقم بتاع
+                        السيستم — فالاتنين مش شبه بعض في صفحة الحسابات ومحدش بياخد باله.
+                        الأوردر اللي عربونه اتقسّم على دفعتين ومجموعهم مطابق مش هيظهر هنا.
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
@@ -688,9 +689,14 @@ function RevenuesContent() {
                         // Only the first is money that never arrived; netting
                         // them into one figure would bury that.
                         const KINDS: Record<string, { label: string; note: string; tone: string }> = {
+                            two_screens: {
+                                label: "اتسجل من شاشتين مختلفتين",
+                                note: "مرة من أوردرات الموقع بالـEasyOrders id ومرة من الأوردر نفسه — نفس الفلوس",
+                                tone: "text-destructive",
+                            },
                             repeated: {
                                 label: "نفس المبلغ اتسجل أكتر من مرة",
-                                note: "فلوس زيادة في الخزينة مدخلتش — امسح المكرر",
+                                note: "نفس الشاشة، الزرار اتضغط تاني — فلوس مدخلتش",
                                 tone: "text-destructive",
                             },
                             extra: {
@@ -705,13 +711,13 @@ function RevenuesContent() {
                             },
                         };
                         const sum = (rows: any[]) => rows.reduce((a, r) => a + Number(r.excess || 0), 0);
-                        const groups = ["repeated", "extra", "overstated"]
+                        const groups = ["two_screens", "repeated", "extra", "overstated"]
                             .map(k => ({ k, rows: dupes.filter(d => d.kind === k) }))
                             .filter(g => g.rows.length > 0);
 
                         return (
                             <div className="space-y-4">
-                                <div className="grid gap-3 sm:grid-cols-3">
+                                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                                     {groups.map(g => (
                                         <div key={g.k} className="rounded-lg border bg-muted/20 p-4">
                                             <p className="text-xs text-muted-foreground mb-1">
@@ -760,6 +766,11 @@ function RevenuesContent() {
                                                                 </td>
                                                                 <td className="p-2.5 font-mono text-xs font-semibold">
                                                                     #{d.reference}
+                                                                    {d.easyorders_id && (
+                                                                        <span className="block font-normal text-[10px] text-muted-foreground">
+                                                                            EO {String(d.easyorders_id).slice(0, 8)}
+                                                                        </span>
+                                                                    )}
                                                                 </td>
                                                                 <td className="p-2.5">
                                                                     {d.customer_name || "—"}
@@ -803,6 +814,12 @@ function RevenuesContent() {
                                                                                     <span className="tabular-nums font-semibold w-24">
                                                                                         {formatCurrency(Number(x.amount))}
                                                                                     </span>
+                                                                                    {/* The category is what tells you which screen
+                                                                                        wrote it: orders_collection is Platform
+                                                                                        Orders, Deposits is the order screen. */}
+                                                                                    <span className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-muted">
+                                                                                        {x.category || "—"}
+                                                                                    </span>
                                                                                     <span className="text-muted-foreground">{x.account || "—"}</span>
                                                                                     <span className="text-muted-foreground">·</span>
                                                                                     <span className="text-muted-foreground tabular-nums">
@@ -815,8 +832,16 @@ function RevenuesContent() {
                                                                             ))}
                                                                         </div>
                                                                         <p className="text-xs text-muted-foreground mt-2">
-                                                                            ابحث عن <code className="font-mono">{d.reference}</code> في
-                                                                            صفحة الحسابات عشان تمسح المكرر.
+                                                                            في صفحة الحسابات ابحث عن{" "}
+                                                                            <code className="font-mono">{d.reference}</code>
+                                                                            {d.easyorders_id && (
+                                                                                <>
+                                                                                    {" "}أو{" "}
+                                                                                    <code className="font-mono">{d.easyorders_id}</code>
+                                                                                    {" "}— ده الرقم المكتوب في وصف الترانزاكشن الجاية من الموقع
+                                                                                </>
+                                                                            )}
+                                                                            {" "}عشان تمسح المكرر.
                                                                         </p>
                                                                     </td>
                                                                 </tr>
