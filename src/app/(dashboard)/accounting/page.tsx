@@ -6,7 +6,7 @@ import { useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { useBusiness } from "@/contexts/BusinessContext";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, normalizeSearchText } from "@/lib/utils";
 import { format } from "date-fns";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { AddTransactionDialog } from "@/components/accounting/add-transaction-dialog";
@@ -47,6 +47,26 @@ import {
 
 import { logBusinessAction } from "@/lib/logs/actions-logger";
 
+
+/** The short order number shown on the Orders list, the CSV and the waybill. */
+const orderRef = (id?: string | null) => (id ? id.slice(0, 8) : "");
+
+/**
+ * Everything a transaction can be searched by.
+ *
+ * The description of a deposit taken on a platform order holds the EasyOrders
+ * id, which appears on no other screen, so searching for the order number the
+ * rest of the system shows used to return nothing at all. The linked order
+ * fills that gap: its number, the customer, and the phone.
+ */
+function txnHaystack(t: any): string {
+    const info = t.orders?.customer_info || {};
+    return [
+        t.description, t.category, t.account_name,
+        orderRef(t.orders?.id || t.order_id),
+        info.name, info.phone, info.phone2,
+    ].filter(Boolean).join(" ");
+}
 
 function AccountingContent() {
     const { activeBusiness, currentUser } = useBusiness();
@@ -120,18 +140,43 @@ function AccountingContent() {
         if (!activeBusiness) return;
         try {
             setLoading(true);
-            let query = supabase
-                .from("transactions")
-                .select("*")
-                .eq("business_id", activeBusiness.id)
-                .order("transaction_date", { ascending: false });
 
-            if (fromDate) query = query.gte("transaction_date", fromDate);
-            if (toDate) query = query.lte("transaction_date", toDate);
+            // PostgREST caps an unbounded select at 1,000 rows and returns
+            // success, so the page used to drop every transaction older than
+            // the newest thousand without saying a word — with no date filter
+            // that hid two thirds of the ledger. Page through instead.
+            const PAGE = 1000;
+            // The embedded order is what makes a transaction findable by order
+            // number or customer name; the description only ever carried the
+            // platform's own id. It needs the foreign key from migration
+            // 20260831, so fall back to the plain columns until that has run —
+            // a missing search key is a nuisance, an empty ledger is not.
+            let columns = "*, orders(id, customer_info)";
+            const all: any[] = [];
+            for (let from = 0; ; from += PAGE) {
+                const page = async () => {
+                    let query = supabase
+                        .from("transactions")
+                        .select(columns)
+                        .eq("business_id", activeBusiness.id)
+                        .order("transaction_date", { ascending: false })
+                        .range(from, from + PAGE - 1);
+                    if (fromDate) query = query.gte("transaction_date", fromDate);
+                    if (toDate) query = query.lte("transaction_date", toDate);
+                    return query;
+                };
 
-            const { data, error } = await query;
-            if (error) throw error;
-            setTransactions(data || []);
+                let { data, error } = await page();
+                if (error && error.code === "PGRST200") {
+                    console.warn("Accounting: order link missing, run migration 20260831.");
+                    columns = "*";
+                    ({ data, error } = await page());
+                }
+                if (error) throw error;
+                all.push(...(data || []));
+                if (!data || data.length < PAGE) break;
+            }
+            setTransactions(all);
         } catch (error) {
             console.error("Error fetching transactions:", error);
         } finally {
@@ -288,10 +333,11 @@ function AccountingContent() {
                                             const filteredTransactions = transactions.filter(t => {
                                                 if (tab !== 'all' && t.type !== tab) return false;
 
-                                                const matchesSearch = !searchQuery ||
-                                                    t.description?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                                                    t.category?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                                                    t.account_name?.toLowerCase().includes(searchQuery.toLowerCase());
+                                                // Normalised so an Arabic name types the way it is
+                                                // spelled rather than the way it is stored.
+                                                const needle = normalizeSearchText(searchQuery);
+                                                const matchesSearch = !needle ||
+                                                    normalizeSearchText(txnHaystack(t)).includes(needle);
 
                                                 if (!matchesSearch) return false;
                                                 if (filterAccount !== 'all' && t.account_name !== filterAccount) return false;
@@ -324,7 +370,23 @@ function AccountingContent() {
                                                         </Badge>
                                                     </TableCell>
                                                     <TableCell>{txn.category}</TableCell>
-                                                    <TableCell>{txn.description}</TableCell>
+                                                    <TableCell>
+                                                        {txn.orders?.id && (
+                                                            <div className="flex items-center gap-2 mb-0.5">
+                                                                <span className="font-mono text-xs font-semibold">
+                                                                    #{orderRef(txn.orders.id)}
+                                                                </span>
+                                                                {txn.orders.customer_info?.name && (
+                                                                    <span className="text-xs text-muted-foreground">
+                                                                        {txn.orders.customer_info.name}
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                        )}
+                                                        <span className={cn(txn.orders?.id && "text-xs text-muted-foreground")}>
+                                                            {txn.description}
+                                                        </span>
+                                                    </TableCell>
                                                     <TableCell>{txn.account_name}</TableCell>
                                                     <TableCell className={cn("text-right font-medium", txn.amount > 0 ? "text-green-600" : "text-destructive")}>
                                                         {formatCurrency(txn.amount)}
