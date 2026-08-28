@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { supabase, fetchAll } from "@/lib/supabase";
 import { useBusiness } from "@/contexts/BusinessContext";
@@ -66,6 +66,11 @@ function RevenuesContent() {
     const [courier, setCourier] = useState<any[]>([]);
     const [courierMissing, setCourierMissing] = useState(false);
 
+    const [dupes, setDupes] = useState<any[]>([]);
+    const [dupesMissing, setDupesMissing] = useState(false);
+    const [showDupes, setShowDupes] = useState(false);
+    const [openDupe, setOpenDupe] = useState<string | null>(null);
+
     const fromDate = searchParams.get('from');
     const toDate = searchParams.get('to');
 
@@ -104,6 +109,10 @@ function RevenuesContent() {
                     supabase.rpc("get_deposit_discrepancies", args),
                 ]);
                 setDiscrepancies((discRes.data as any[]) || []);
+
+                const dupRes = await supabase.rpc("get_duplicate_deposits", args);
+                if (dupRes.error) { setDupesMissing(true); setDupes([]); }
+                else { setDupesMissing(false); setDupes((dupRes.data as any[]) || []); }
 
                 const courRes = await supabase.rpc("get_courier_net_due", args);
                 if (courRes.error) { setCourierMissing(true); setCourier([]); }
@@ -648,6 +657,180 @@ function RevenuesContent() {
                             })()}
                         </div>
                     )}
+                </CardContent>
+            </Card>
+
+            {/* The 'over' line above says the treasury holds more than the
+                orders claim. This says why: nearly always the same deposit
+                booked twice, which is money the treasury shows and never
+                actually received. */}
+            <Card>
+                <CardHeader>
+                    <CardTitle>عرابين متكررة أو زيادة</CardTitle>
+                    <CardDescription>
+                        الأوردرات اللي الخزينة مسجّل عليها أكتر من العربون المكتوب عليها.
+                        أخطرهم اللي نفس المبلغ اتسجل فيه مرتين أو أكتر — دي فلوس بتظهر في
+                        الحسابات وهي مدخلتش، فبتضخّم الإيراد. الأوردر اللي عربونه اتقسّم
+                        على دفعتين ومجموعهم مطابق مش هيظهر هنا.
+                    </CardDescription>
+                </CardHeader>
+                <CardContent>
+                    {dupesMissing ? (
+                        <p className="text-sm text-muted-foreground">
+                            شغّل مايجريشن <code className="text-xs">20260901_duplicate_deposits.sql</code> عشان القسم ده يشتغل.
+                        </p>
+                    ) : dupes.length === 0 ? (
+                        <p className="text-sm font-medium text-emerald-600">
+                            مفيش أي عربون مسجّل زيادة في الفترة دي — الخزينة مطابقة للأوردرات.
+                        </p>
+                    ) : (() => {
+                        // Three different mistakes with three different fixes.
+                        // Only the first is money that never arrived; netting
+                        // them into one figure would bury that.
+                        const KINDS: Record<string, { label: string; note: string; tone: string }> = {
+                            repeated: {
+                                label: "نفس المبلغ اتسجل أكتر من مرة",
+                                note: "فلوس زيادة في الخزينة مدخلتش — امسح المكرر",
+                                tone: "text-destructive",
+                            },
+                            extra: {
+                                label: "دفعة تانية والأوردر مااتحدّثش",
+                                note: "الفلوس وصلت بس الأوردر لسه مكتوب عليه القديم",
+                                tone: "text-amber-600",
+                            },
+                            overstated: {
+                                label: "ترانزاكشن أعلى من العربون المكتوب",
+                                note: "رقم اتكتب غلط، أو الأوردر اتعدّل بعد التسجيل",
+                                tone: "text-amber-600",
+                            },
+                        };
+                        const sum = (rows: any[]) => rows.reduce((a, r) => a + Number(r.excess || 0), 0);
+                        const groups = ["repeated", "extra", "overstated"]
+                            .map(k => ({ k, rows: dupes.filter(d => d.kind === k) }))
+                            .filter(g => g.rows.length > 0);
+
+                        return (
+                            <div className="space-y-4">
+                                <div className="grid gap-3 sm:grid-cols-3">
+                                    {groups.map(g => (
+                                        <div key={g.k} className="rounded-lg border bg-muted/20 p-4">
+                                            <p className="text-xs text-muted-foreground mb-1">
+                                                {KINDS[g.k].label}
+                                            </p>
+                                            <p className={`text-2xl font-bold tabular-nums ${KINDS[g.k].tone}`}>
+                                                {formatCurrency(sum(g.rows))}
+                                            </p>
+                                            <p className="text-xs text-muted-foreground mt-1">
+                                                {g.rows.length} أوردر — {KINDS[g.k].note}
+                                            </p>
+                                        </div>
+                                    ))}
+                                </div>
+
+                                <Button variant="outline" size="sm" onClick={() => setShowDupes(v => !v)}>
+                                    {showDupes ? "اخفي التفاصيل" : `شوف الـ${dupes.length} أوردر`}
+                                </Button>
+
+                                {showDupes && (
+                                    <div className="rounded-lg border overflow-x-auto max-h-[28rem] overflow-y-auto">
+                                        <table className="w-full text-sm min-w-[720px]">
+                                            <thead className="bg-muted/50 sticky top-0">
+                                                <tr>
+                                                    <th className="w-8 p-2.5"></th>
+                                                    <th className="text-start p-2.5 font-medium text-xs">الأوردر</th>
+                                                    <th className="text-start p-2.5 font-medium text-xs">العميل</th>
+                                                    <th className="text-start p-2.5 font-medium text-xs">السبب</th>
+                                                    <th className="text-end p-2.5 font-medium text-xs">مرات التسجيل</th>
+                                                    <th className="text-end p-2.5 font-medium text-xs">على الأوردر</th>
+                                                    <th className="text-end p-2.5 font-medium text-xs">في الخزينة</th>
+                                                    <th className="text-end p-2.5 font-medium text-xs">الزيادة</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {dupes.map(d => {
+                                                    const open = openDupe === d.order_id;
+                                                    return (
+                                                        <Fragment key={d.order_id}>
+                                                            <tr
+                                                                className="border-t cursor-pointer hover:bg-muted/30"
+                                                                onClick={() => setOpenDupe(open ? null : d.order_id)}
+                                                            >
+                                                                <td className="p-2.5 text-muted-foreground text-xs">
+                                                                    {open ? "▾" : "▸"}
+                                                                </td>
+                                                                <td className="p-2.5 font-mono text-xs font-semibold">
+                                                                    #{d.reference}
+                                                                </td>
+                                                                <td className="p-2.5">
+                                                                    {d.customer_name || "—"}
+                                                                    {d.order_status && (
+                                                                        <span className="block text-xs text-muted-foreground">
+                                                                            {d.order_status}
+                                                                        </span>
+                                                                    )}
+                                                                </td>
+                                                                <td className={`p-2.5 text-xs font-medium ${KINDS[d.kind]?.tone || ""}`}>
+                                                                    {KINDS[d.kind]?.label || d.kind}
+                                                                </td>
+                                                                <td className="p-2.5 text-end tabular-nums">
+                                                                    <span className={d.kind === "repeated" ? "font-semibold text-destructive" : ""}>
+                                                                        {d.txn_count}
+                                                                    </span>
+                                                                </td>
+                                                                <td className="p-2.5 text-end tabular-nums">
+                                                                    {formatCurrency(Number(d.paid_amount))}
+                                                                </td>
+                                                                <td className="p-2.5 text-end tabular-nums text-muted-foreground">
+                                                                    {formatCurrency(Number(d.booked_total))}
+                                                                </td>
+                                                                <td className="p-2.5 text-end tabular-nums font-semibold text-destructive">
+                                                                    {formatCurrency(Number(d.excess))}
+                                                                </td>
+                                                            </tr>
+                                                            {open && (
+                                                                <tr className="border-t bg-muted/20">
+                                                                    <td></td>
+                                                                    <td colSpan={7} className="p-3">
+                                                                        <p className="text-xs text-muted-foreground mb-2">
+                                                                            كل الترانزاكشنز المسجّلة على الأوردر ده:
+                                                                        </p>
+                                                                        <div className="space-y-1.5">
+                                                                            {(d.txns || []).map((x: any) => (
+                                                                                <div key={x.id} className="flex flex-wrap items-baseline gap-x-3 text-xs">
+                                                                                    <span className="tabular-nums text-muted-foreground w-20">
+                                                                                        {String(x.date).slice(0, 10)}
+                                                                                    </span>
+                                                                                    <span className="tabular-nums font-semibold w-24">
+                                                                                        {formatCurrency(Number(x.amount))}
+                                                                                    </span>
+                                                                                    <span className="text-muted-foreground">{x.account || "—"}</span>
+                                                                                    <span className="text-muted-foreground">·</span>
+                                                                                    <span className="text-muted-foreground tabular-nums">
+                                                                                        {String(x.created_at).slice(11, 16)}
+                                                                                    </span>
+                                                                                    <span className="text-muted-foreground/70 truncate max-w-[22rem]">
+                                                                                        {x.description || "—"}
+                                                                                    </span>
+                                                                                </div>
+                                                                            ))}
+                                                                        </div>
+                                                                        <p className="text-xs text-muted-foreground mt-2">
+                                                                            ابحث عن <code className="font-mono">{d.reference}</code> في
+                                                                            صفحة الحسابات عشان تمسح المكرر.
+                                                                        </p>
+                                                                    </td>
+                                                                </tr>
+                                                            )}
+                                                        </Fragment>
+                                                    );
+                                                })}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                )}
+                            </div>
+                        );
+                    })()}
                 </CardContent>
             </Card>
 
