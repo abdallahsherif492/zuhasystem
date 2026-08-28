@@ -160,6 +160,12 @@ function AccountingContent() {
                         .select(columns)
                         .eq("business_id", activeBusiness.id)
                         .order("transaction_date", { ascending: false })
+                        // transaction_date alone is not a total order — 90 rows
+                        // share 2026-06-28 — and a page boundary landing inside
+                        // a tied group lets the database return some of those
+                        // rows on both pages and others on neither. Paging an
+                        // unstable sort loses data; the id breaks every tie.
+                        .order("id", { ascending: false })
                         .range(from, from + PAGE - 1);
                     if (fromDate) query = query.gte("transaction_date", fromDate);
                     if (toDate) query = query.lte("transaction_date", toDate);
@@ -176,7 +182,13 @@ function AccountingContent() {
                 all.push(...(data || []));
                 if (!data || data.length < PAGE) break;
             }
-            setTransactions(all);
+
+            // Belt and braces. A repeated row would collide on the React key
+            // and make the table render entries the filter had excluded, which
+            // is how the unstable sort showed up in the first place: three
+            // June 28th rows appeared under a treasury they do not belong to.
+            const seen = new Set<string>();
+            setTransactions(all.filter(r => !seen.has(r.id) && seen.add(r.id)));
         } catch (error) {
             console.error("Error fetching transactions:", error);
         } finally {
