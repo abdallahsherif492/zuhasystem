@@ -938,6 +938,10 @@ export default function OrderDetailsPage() {
                                         transaction_date: new Date().toISOString(),
                                         type: "revenue",
                                         category: "Deposits",
+                                        // The link the reconciliation reads. Without it
+                                        // the only tie between an order and its deposit
+                                        // is a sentence in the description.
+                                        order_id: completedOrder?.id,
                                         description: `Order #${completedOrder?.id?.slice(0, 8)} - ${completedOrder?.cName} - ${completedOrder?.cPhone}`,
                                     };
 

@@ -7,6 +7,7 @@ import { useBusiness } from "@/contexts/BusinessContext";
 
 import { formatCurrency } from "@/lib/utils";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { Loader2, DollarSign, ArrowDownToLine, PackageCheck, ListOrdered } from "lucide-react";
 import { DateRangePicker } from "@/components/date-range-picker";
 import {
@@ -53,6 +54,12 @@ function RevenuesContent() {
     }[]>([]);
     const [paymentMissing, setPaymentMissing] = useState(false);
 
+    // Does every deposit written on an order actually exist in the treasury?
+    const [recon, setRecon] = useState<any | null>(null);
+    const [unbooked, setUnbooked] = useState<any[]>([]);
+    const [reconMissing, setReconMissing] = useState(false);
+    const [showUnbooked, setShowUnbooked] = useState(false);
+
     const fromDate = searchParams.get('from');
     const toDate = searchParams.get('to');
 
@@ -79,6 +86,22 @@ function RevenuesContent() {
                 });
                 if (payErr) { setPaymentMissing(true); setPayment([]); }
                 else { setPaymentMissing(false); setPayment((pay as any[]) || []); }
+
+                const args = {
+                    p_business_id: activeBusiness.id,
+                    p_from: new Date(start).toISOString(),
+                    p_to: new Date(new Date(end).getTime() + 86400000).toISOString(),
+                };
+                const [recRes, unbRes] = await Promise.all([
+                    supabase.rpc("get_deposit_reconciliation", args),
+                    supabase.rpc("get_unbooked_deposits", args),
+                ]);
+                if (recRes.error) { setReconMissing(true); setRecon(null); setUnbooked([]); }
+                else {
+                    setReconMissing(false);
+                    setRecon((recRes.data as any[])?.[0] || null);
+                    setUnbooked((unbRes.data as any[]) || []);
+                }
             }
 
             // Fetch Revenue Transactions with fetchAll
@@ -362,6 +385,116 @@ function RevenuesContent() {
                             <span className="font-bold text-xl text-primary">{formatCurrency(totalRevenue)}</span>
                         </div>
                     </div>
+                </CardContent>
+            </Card>
+
+            {/* Deposits: what the orders say versus what the treasury holds.
+                These two should be the same number. Where they are not, money
+                was taken from a customer and never booked. */}
+            <Card className={recon && Number(recon.unmatched_value) > 0 ? "border-amber-500/40" : undefined}>
+                <CardHeader>
+                    <CardTitle>مطابقة العرابين</CardTitle>
+                    <CardDescription>
+                        العربون المكتوب على الأوردر لازم يكون موجود في الخزينة بنفس القيمة.
+                        أي فرق معناه إن فلوس اتاخدت من عميل ومدخلتش الحسابات.
+                    </CardDescription>
+                </CardHeader>
+                <CardContent>
+                    {reconMissing ? (
+                        <p className="text-sm text-muted-foreground">
+                            شغّل supabase/migrations/20260827_deposit_reconciliation.sql عشان القسم ده يشتغل.
+                        </p>
+                    ) : !recon || Number(recon.orders_with_deposit) === 0 ? (
+                        <p className="text-sm text-muted-foreground py-6 text-center">
+                            مفيش أوردرات فيها عربون في الفترة دي.
+                        </p>
+                    ) : (
+                        <div className="space-y-5">
+                            <div className="grid gap-4 sm:grid-cols-3">
+                                <div className="rounded-xl border p-4">
+                                    <p className="text-xs text-muted-foreground">عرابين مكتوبة على الأوردرات</p>
+                                    <p className="text-2xl font-bold tabular-nums mt-1">
+                                        {formatCurrency(Number(recon.orders_deposit_value))}
+                                    </p>
+                                    <p className="text-xs text-muted-foreground mt-1">
+                                        {Number(recon.orders_with_deposit).toLocaleString()} أوردر
+                                    </p>
+                                </div>
+                                <div className="rounded-xl border p-4">
+                                    <p className="text-xs text-muted-foreground">مسجّلة في الخزينة</p>
+                                    <p className="text-2xl font-bold tabular-nums mt-1 text-emerald-600">
+                                        {formatCurrency(Number(recon.txn_value))}
+                                    </p>
+                                    <p className="text-xs text-muted-foreground mt-1">
+                                        {Number(recon.txn_count).toLocaleString()} ترانزاكشن
+                                    </p>
+                                </div>
+                                <div className={`rounded-xl border p-4 ${Number(recon.unmatched_value) > 0 ? "border-amber-500/40 bg-amber-500/5" : ""}`}>
+                                    <p className="text-xs text-muted-foreground">ناقص من الحسابات</p>
+                                    <p className={`text-2xl font-bold tabular-nums mt-1 ${Number(recon.unmatched_value) > 0 ? "text-amber-600" : "text-emerald-600"}`}>
+                                        {formatCurrency(Number(recon.unmatched_value))}
+                                    </p>
+                                    <p className="text-xs text-muted-foreground mt-1">
+                                        {Number(recon.unmatched_orders).toLocaleString()} أوردر
+                                    </p>
+                                </div>
+                            </div>
+
+                            {Number(recon.orphan_txn_count) > 0 && (
+                                <p className="text-xs text-muted-foreground">
+                                    وكمان {Number(recon.orphan_txn_count)} ترانزاكشن بقيمة{" "}
+                                    {formatCurrency(Number(recon.orphan_txn_value))} مش مربوطة بأي أوردر —
+                                    دي غالباً عرابين قديمة اتسجلت قبل ما الربط يبقى موجود.
+                                </p>
+                            )}
+
+                            {Number(recon.unmatched_orders) > 0 ? (
+                                <>
+                                    <Button variant="outline" size="sm"
+                                            onClick={() => setShowUnbooked(v => !v)}>
+                                        {showUnbooked ? "اخفي الأوردرات الناقصة" : `شوف الـ${Number(recon.unmatched_orders)} أوردر`}
+                                    </Button>
+
+                                    {showUnbooked && (
+                                        <div className="rounded-lg border overflow-x-auto max-h-96 overflow-y-auto">
+                                            <table className="w-full text-sm min-w-[560px]">
+                                                <thead className="bg-muted/50 sticky top-0">
+                                                    <tr>
+                                                        <th className="text-start p-2.5 font-medium text-xs">الأوردر</th>
+                                                        <th className="text-start p-2.5 font-medium text-xs">العميل</th>
+                                                        <th className="text-start p-2.5 font-medium text-xs">التاريخ</th>
+                                                        <th className="text-end p-2.5 font-medium text-xs">العربون</th>
+                                                        <th className="text-end p-2.5 font-medium text-xs">مسجّل</th>
+                                                        <th className="text-end p-2.5 font-medium text-xs">ناقص</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {unbooked.map(u => (
+                                                        <tr key={u.order_id} className="border-t">
+                                                            <td className="p-2.5 font-mono text-xs">#{u.reference}</td>
+                                                            <td className="p-2.5">{u.customer_name || "—"}</td>
+                                                            <td className="p-2.5 text-xs text-muted-foreground">
+                                                                {String(u.created_at).slice(0, 10)}
+                                                            </td>
+                                                            <td className="p-2.5 text-end tabular-nums">{formatCurrency(Number(u.paid_amount))}</td>
+                                                            <td className="p-2.5 text-end tabular-nums text-muted-foreground">{formatCurrency(Number(u.booked_amount))}</td>
+                                                            <td className="p-2.5 text-end tabular-nums font-semibold text-amber-600">
+                                                                {formatCurrency(Number(u.missing_amount))}
+                                                            </td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    )}
+                                </>
+                            ) : (
+                                <p className="text-sm font-medium text-emerald-600">
+                                    كل العرابين في الفترة دي مسجّلة في الخزينة.
+                                </p>
+                            )}
+                        </div>
+                    )}
                 </CardContent>
             </Card>
 

@@ -239,6 +239,7 @@ function PlatformOrdersContent() {
                     transaction_date: new Date().toISOString().split('T')[0],
                     type: 'revenue',
                     category: 'orders_collection',
+                    order_id: order.id,
                     amount: order.paid_amount,
                     description: `Payment collection for Platform Order ${order.easyorders_id || order.id.slice(0,8)}`,
                     account_name: accountName
