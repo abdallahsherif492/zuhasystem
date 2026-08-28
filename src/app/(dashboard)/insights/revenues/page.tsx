@@ -59,6 +59,8 @@ function RevenuesContent() {
     const [unbooked, setUnbooked] = useState<any[]>([]);
     const [reconMissing, setReconMissing] = useState(false);
     const [showUnbooked, setShowUnbooked] = useState(false);
+    // Every row that makes the two totals differ, each with a reason.
+    const [discrepancies, setDiscrepancies] = useState<any[]>([]);
 
     const fromDate = searchParams.get('from');
     const toDate = searchParams.get('to');
@@ -92,10 +94,12 @@ function RevenuesContent() {
                     p_from: new Date(start).toISOString(),
                     p_to: new Date(new Date(end).getTime() + 86400000).toISOString(),
                 };
-                const [recRes, unbRes] = await Promise.all([
+                const [recRes, unbRes, discRes] = await Promise.all([
                     supabase.rpc("get_deposit_reconciliation", args),
                     supabase.rpc("get_unbooked_deposits", args),
+                    supabase.rpc("get_deposit_discrepancies", args),
                 ]);
+                setDiscrepancies((discRes.data as any[]) || []);
                 if (recRes.error) { setReconMissing(true); setRecon(null); setUnbooked([]); }
                 else {
                     setReconMissing(false);
@@ -450,59 +454,102 @@ function RevenuesContent() {
                                 </div>
                             </div>
 
-                            {Number(recon.orphan_txn_count) > 0 && (
-                                <p className="text-xs text-muted-foreground">
-                                    وكمان {Number(recon.orphan_txn_count)} ترانزاكشن بقيمة{" "}
-                                    {formatCurrency(Number(recon.orphan_txn_value))} مش مربوطة بأي أوردر —
-                                    دي غالباً عرابين قديمة اتسجلت قبل ما الربط يبقى موجود.
-                                </p>
-                            )}
+                            {(() => {
+                                const diff = Number(recon.txn_value) - Number(recon.orders_deposit_value);
+                                const REASONS: Record<string, { label: string; hint: string; tone: string }> = {
+                                    short: { label: "ناقصة من الخزينة", tone: "text-amber-600",
+                                             hint: "عربون مكتوب على الأوردر ومش موجود في الحسابات — ده اللي محتاج تدقيق" },
+                                    over: { label: "مسجّل أكتر من العربون", tone: "text-amber-600",
+                                            hint: "الخزينة فيها أكتر من اللي مكتوب على الأوردر — غالباً دفعة تانية اتسجلت والأوردر مااتحدّثش" },
+                                    carried_in: { label: "عرابين لأوردرات من فترة قبل دي", tone: "text-muted-foreground",
+                                                  hint: "الفلوس دخلت في الفترة دي بس الأوردر اتعمل قبلها — ده طبيعي على حدود الشهر" },
+                                    orphan: { label: "مش مربوطة بأي أوردر", tone: "text-muted-foreground",
+                                              hint: "ترانزاكشن في الخزينة مش معروف تخص أنهي أوردر" },
+                                };
+                                const groups = ["short", "over", "carried_in", "orphan"].map(k => {
+                                    const rows = discrepancies.filter(d => d.reason === k);
+                                    return { k, rows, total: rows.reduce((a, r) => a + Number(r.delta || 0), 0) };
+                                }).filter(g => g.rows.length > 0);
 
-                            {Number(recon.unmatched_orders) > 0 ? (
-                                <>
-                                    <Button variant="outline" size="sm"
-                                            onClick={() => setShowUnbooked(v => !v)}>
-                                        {showUnbooked ? "اخفي الأوردرات الناقصة" : `شوف الـ${Number(recon.unmatched_orders)} أوردر`}
-                                    </Button>
+                                if (groups.length === 0) {
+                                    return (
+                                        <p className="text-sm font-medium text-emerald-600">
+                                            كل العرابين في الفترة دي مطابقة للخزينة بالظبط.
+                                        </p>
+                                    );
+                                }
 
-                                    {showUnbooked && (
-                                        <div className="rounded-lg border overflow-x-auto max-h-96 overflow-y-auto">
-                                            <table className="w-full text-sm min-w-[560px]">
-                                                <thead className="bg-muted/50 sticky top-0">
-                                                    <tr>
-                                                        <th className="text-start p-2.5 font-medium text-xs">الأوردر</th>
-                                                        <th className="text-start p-2.5 font-medium text-xs">العميل</th>
-                                                        <th className="text-start p-2.5 font-medium text-xs">التاريخ</th>
-                                                        <th className="text-end p-2.5 font-medium text-xs">العربون</th>
-                                                        <th className="text-end p-2.5 font-medium text-xs">مسجّل</th>
-                                                        <th className="text-end p-2.5 font-medium text-xs">ناقص</th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody>
-                                                    {unbooked.map(u => (
-                                                        <tr key={u.order_id} className="border-t">
-                                                            <td className="p-2.5 font-mono text-xs">#{u.reference}</td>
-                                                            <td className="p-2.5">{u.customer_name || "—"}</td>
-                                                            <td className="p-2.5 text-xs text-muted-foreground">
-                                                                {String(u.created_at).slice(0, 10)}
-                                                            </td>
-                                                            <td className="p-2.5 text-end tabular-nums">{formatCurrency(Number(u.paid_amount))}</td>
-                                                            <td className="p-2.5 text-end tabular-nums text-muted-foreground">{formatCurrency(Number(u.booked_amount))}</td>
-                                                            <td className="p-2.5 text-end tabular-nums font-semibold text-amber-600">
-                                                                {formatCurrency(Number(u.missing_amount))}
-                                                            </td>
-                                                        </tr>
-                                                    ))}
-                                                </tbody>
-                                            </table>
+                                return (
+                                    <div className="space-y-4">
+                                        <div className="rounded-lg border bg-muted/20 p-4">
+                                            <p className="text-sm font-semibold mb-2">
+                                                الفرق {formatCurrency(Math.abs(diff))}{" "}
+                                                {diff > 0 ? "لصالح الخزينة" : "لصالح الأوردرات"} — سببه:
+                                            </p>
+                                            <ul className="space-y-1.5 text-sm">
+                                                {groups.map(g => (
+                                                    <li key={g.k} className="flex flex-wrap items-baseline gap-x-2">
+                                                        <span className={`font-semibold ${REASONS[g.k].tone}`}>
+                                                            {formatCurrency(g.total)}
+                                                        </span>
+                                                        <span>— {REASONS[g.k].label}</span>
+                                                        <span className="text-muted-foreground text-xs">
+                                                            ({g.rows.length} حالة · {REASONS[g.k].hint})
+                                                        </span>
+                                                    </li>
+                                                ))}
+                                            </ul>
                                         </div>
-                                    )}
-                                </>
-                            ) : (
-                                <p className="text-sm font-medium text-emerald-600">
-                                    كل العرابين في الفترة دي مسجّلة في الخزينة.
-                                </p>
-                            )}
+
+                                        <Button variant="outline" size="sm" onClick={() => setShowUnbooked(v => !v)}>
+                                            {showUnbooked ? "اخفي التفاصيل" : `شوف الـ${discrepancies.length} حالة`}
+                                        </Button>
+
+                                        {showUnbooked && (
+                                            <div className="rounded-lg border overflow-x-auto max-h-96 overflow-y-auto">
+                                                <table className="w-full text-sm min-w-[640px]">
+                                                    <thead className="bg-muted/50 sticky top-0">
+                                                        <tr>
+                                                            <th className="text-start p-2.5 font-medium text-xs">السبب</th>
+                                                            <th className="text-start p-2.5 font-medium text-xs">الأوردر</th>
+                                                            <th className="text-start p-2.5 font-medium text-xs">العميل</th>
+                                                            <th className="text-start p-2.5 font-medium text-xs">تاريخ الأوردر</th>
+                                                            <th className="text-end p-2.5 font-medium text-xs">على الأوردر</th>
+                                                            <th className="text-end p-2.5 font-medium text-xs">في الخزينة</th>
+                                                            <th className="text-end p-2.5 font-medium text-xs">الفرق</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        {discrepancies.map((d, i) => (
+                                                            <tr key={`${d.order_id || "x"}-${d.reason}-${i}`} className="border-t">
+                                                                <td className={`p-2.5 text-xs font-medium ${REASONS[d.reason]?.tone || ""}`}>
+                                                                    {REASONS[d.reason]?.label || d.reason}
+                                                                </td>
+                                                                <td className="p-2.5 font-mono text-xs">
+                                                                    {d.order_id ? `#${d.reference}` : d.reference}
+                                                                </td>
+                                                                <td className="p-2.5">{d.customer_name || "—"}</td>
+                                                                <td className="p-2.5 text-xs text-muted-foreground">
+                                                                    {d.order_date ? String(d.order_date).slice(0, 10) : "—"}
+                                                                </td>
+                                                                <td className="p-2.5 text-end tabular-nums">
+                                                                    {Number(d.order_amount) > 0 ? formatCurrency(Number(d.order_amount)) : "—"}
+                                                                </td>
+                                                                <td className="p-2.5 text-end tabular-nums text-muted-foreground">
+                                                                    {formatCurrency(Number(d.booked_amount))}
+                                                                </td>
+                                                                <td className="p-2.5 text-end tabular-nums font-semibold">
+                                                                    {formatCurrency(Number(d.delta))}
+                                                                </td>
+                                                            </tr>
+                                                        ))}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        )}
+                                    </div>
+                                );
+                            })()}
                         </div>
                     )}
                 </CardContent>
