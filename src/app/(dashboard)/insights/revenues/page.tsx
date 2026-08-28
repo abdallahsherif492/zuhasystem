@@ -62,6 +62,10 @@ function RevenuesContent() {
     // Every row that makes the two totals differ, each with a reason.
     const [discrepancies, setDiscrepancies] = useState<any[]>([]);
 
+    // What the couriers should hand over for this period.
+    const [courier, setCourier] = useState<any[]>([]);
+    const [courierMissing, setCourierMissing] = useState(false);
+
     const fromDate = searchParams.get('from');
     const toDate = searchParams.get('to');
 
@@ -100,6 +104,10 @@ function RevenuesContent() {
                     supabase.rpc("get_deposit_discrepancies", args),
                 ]);
                 setDiscrepancies((discRes.data as any[]) || []);
+
+                const courRes = await supabase.rpc("get_courier_net_due", args);
+                if (courRes.error) { setCourierMissing(true); setCourier([]); }
+                else { setCourierMissing(false); setCourier((courRes.data as any[]) || []); }
                 if (recRes.error) { setReconMissing(true); setRecon(null); setUnbooked([]); }
                 else {
                     setReconMissing(false);
@@ -397,6 +405,94 @@ function RevenuesContent() {
                             <span className="font-bold text-xl text-primary">{formatCurrency(totalRevenue)}</span>
                         </div>
                     </div>
+                </CardContent>
+            </Card>
+
+            {/* What the couriers owe for this period. The settlements screen
+                records the transfers when they arrive; this is the shorter
+                question — how much should arrive at all. Both read the same
+                v_courier_payouts definition so they cannot disagree. */}
+            <Card>
+                <CardHeader>
+                    <CardTitle>المستحق من شركات الشحن</CardTitle>
+                    <CardDescription>
+                        الصافي المفروض يوصلك عن أوردرات الفترة دي: اللي المندوب حصّله من
+                        العميل ناقص تكلفة الشحن.
+                    </CardDescription>
+                </CardHeader>
+                <CardContent>
+                    {courierMissing ? (
+                        <p className="text-sm text-muted-foreground">
+                            شغّل supabase/migrations/20260830_courier_net_due.sql عشان القسم ده يشتغل.
+                        </p>
+                    ) : courier.length === 0 ? (
+                        <p className="text-sm text-muted-foreground py-6 text-center">
+                            مفيش أوردرات متسلّمة أو مرتجعة في الفترة دي.
+                        </p>
+                    ) : (() => {
+                        const sum = (k: string) => courier.reduce((a, r) => a + Number(r[k] || 0), 0);
+                        const net = sum("net_due"), uns = sum("unsettled_net");
+                        return (
+                            <div className="space-y-5">
+                                <div className="grid gap-4 sm:grid-cols-3">
+                                    <div className="rounded-xl border p-4">
+                                        <p className="text-xs text-muted-foreground">حصّلوه من العملاء</p>
+                                        <p className="text-2xl font-bold tabular-nums mt-1">{formatCurrency(sum("collected_total"))}</p>
+                                    </div>
+                                    <div className="rounded-xl border p-4">
+                                        <p className="text-xs text-muted-foreground">تكلفة الشحن</p>
+                                        <p className="text-2xl font-bold tabular-nums mt-1 text-muted-foreground">
+                                            − {formatCurrency(sum("shipping_total"))}
+                                        </p>
+                                    </div>
+                                    <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-4">
+                                        <p className="text-xs text-muted-foreground">الصافي المستحق</p>
+                                        <p className="text-2xl font-black tabular-nums mt-1 text-emerald-600">{formatCurrency(net)}</p>
+                                        {uns > 0 && uns !== net && (
+                                            <p className="text-xs text-amber-600 mt-1">
+                                                لسه متحصّلش منه {formatCurrency(uns)}
+                                            </p>
+                                        )}
+                                    </div>
+                                </div>
+
+                                <div className="rounded-lg border overflow-x-auto">
+                                    <table className="w-full text-sm min-w-[620px]">
+                                        <thead className="bg-muted/50">
+                                            <tr>
+                                                <th className="text-start p-2.5 font-medium text-xs">شركة الشحن</th>
+                                                <th className="text-end p-2.5 font-medium text-xs">متسلّم</th>
+                                                <th className="text-end p-2.5 font-medium text-xs">مرتجع</th>
+                                                <th className="text-end p-2.5 font-medium text-xs">حصّلوه</th>
+                                                <th className="text-end p-2.5 font-medium text-xs">شحن</th>
+                                                <th className="text-end p-2.5 font-medium text-xs">الصافي</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {courier.map(c => (
+                                                <tr key={c.shipping_company_id} className="border-t">
+                                                    <td className="p-2.5 font-medium">{c.company_name || "غير محددة"}</td>
+                                                    <td className="p-2.5 text-end tabular-nums">{Number(c.delivered_count).toLocaleString()}</td>
+                                                    <td className="p-2.5 text-end tabular-nums text-muted-foreground">{Number(c.returned_count).toLocaleString()}</td>
+                                                    <td className="p-2.5 text-end tabular-nums">{formatCurrency(Number(c.collected_total))}</td>
+                                                    <td className="p-2.5 text-end tabular-nums text-muted-foreground">{formatCurrency(Number(c.shipping_total))}</td>
+                                                    <td className="p-2.5 text-end tabular-nums font-semibold text-emerald-600">{formatCurrency(Number(c.net_due))}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+
+                                {courier.some(c => Number(c.returned_count) > 0) && (
+                                    <p className="text-xs text-muted-foreground">
+                                        المرتجعات داخلة في الحساب برسوم الإرجاع بتاعتها. رسوم الإرجاع
+                                        ونسبة التحصيل لسه صفر لكل الشركات في الإعدادات — لما تدخلهم،
+                                        الصافي هينزل بقيمتهم وهيبقى أدق.
+                                    </p>
+                                )}
+                            </div>
+                        );
+                    })()}
                 </CardContent>
             </Card>
 
