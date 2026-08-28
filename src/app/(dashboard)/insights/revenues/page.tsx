@@ -134,11 +134,19 @@ function RevenuesContent() {
                     chartDataMap[dateKey] = { date: dateKey, Deposits: 0, Collections: 0, Others: 0 };
                 }
 
-                if (cat === 'deposit' || cat === 'deposits') {
+                // 'orders_collection' is a customer deposit taken on a platform
+                // order — the platform-orders screen writes it under that name.
+                // It used to land in Collections, which understated deposits by
+                // 11,265 EGP and made a third of them invisible on this card.
+                //
+                // 'orders collection' with a space is a different thing entirely:
+                // money collected from couriers in bulk, 66% of it over 1,000 EGP
+                // and up to 74,218, against a deposit ceiling of about 2,600.
+                if (cat === 'deposit' || cat === 'deposits' || cat === 'orders_collection') {
                     dVal += amt;
                     dCount++;
                     chartDataMap[dateKey].Deposits += amt;
-                } else if (cat === 'orders_collection' || cat === 'orders collection') {
+                } else if (cat === 'orders collection') {
                     cVal += amt;
                     cCount++;
                     chartDataMap[dateKey].Collections += amt;
@@ -396,7 +404,9 @@ function RevenuesContent() {
                     <CardTitle>مطابقة العرابين</CardTitle>
                     <CardDescription>
                         العربون المكتوب على الأوردر لازم يكون موجود في الخزينة بنفس القيمة.
-                        أي فرق معناه إن فلوس اتاخدت من عميل ومدخلتش الحسابات.
+                        أي فرق معناه إن فلوس اتاخدت من عميل ومدخلتش الحسابات. المطابقة بتحسب
+                        العرابين بتلات تصنيفاتها: Deposits و Deposit و orders_collection
+                        (عرابين أوردرات المنصة).
                     </CardDescription>
                 </CardHeader>
                 <CardContent>

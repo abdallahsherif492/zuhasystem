@@ -6,12 +6,16 @@
 -- ("Order #<uuid> - Name - Phone"), so nobody could answer the one question
 -- that matters: is every deposit written on an order actually in the books?
 --
--- It is not. Across 2026, 1,434 orders carry a deposit and only 1,292 deposit
--- transactions exist — a gap of 12,049 EGP, and it is widening: August alone
--- accounts for 6,077 of it. The cause is now fixed (the deposit dialog could be
+-- It is not, though the real figure is smaller than a first pass suggested:
+-- deposits on platform orders are filed under 'orders_collection' rather than
+-- 'Deposits', and counting only the latter reports orders as unbooked when
+-- their money is sitting in the treasury under another name. All three deposit
+-- categories are counted below.
+--
+-- The cause of the genuine gap is already fixed (the deposit dialog could be
 -- dismissed with Skip, Escape or a click outside, and its insert was never
 -- error-checked) but the history is still unreconciled, and without a real link
--- it stays that way.
+-- between a transaction and its order it stays that way.
 
 -- ===========================================================================
 -- 1. A real link
@@ -27,9 +31,10 @@ CREATE INDEX IF NOT EXISTS idx_transactions_order
     WHERE order_id IS NOT NULL;
 
 -- Recover the link for existing rows from the only place it was ever written.
--- Matched on the first 8 hex characters, which is the reference the rest of the
--- app prints; the description carries either the full uuid (older rows) or the
--- short form (newer), and this handles both.
+-- Two passes, because the two screens reference two different ids.
+--
+-- Pass 1 — the order's own id. "Order #<uuid> - Name - Phone", written by the
+-- new/edit order dialog. Matches all 1,189 of them.
 UPDATE public.transactions t
    SET order_id = o.id
   FROM public.orders o
@@ -38,14 +43,37 @@ UPDATE public.transactions t
    AND o.business_id = t.business_id
    AND substring(t.description from 'Order #([0-9a-fA-F]{8})') = left(o.id::TEXT, 8);
 
+-- Pass 2 — the EasyOrders id. "Payment collection for Platform Order <uuid>"
+-- and "... for EasyOrder <uuid>", written by the platform-orders screen, quote
+-- the store's id rather than ours. All 123 of those match this way and none
+-- match pass 1, so without this they would all read as unbooked deposits.
+UPDATE public.transactions t
+   SET order_id = o.id
+  FROM public.orders o
+ WHERE t.order_id IS NULL
+   AND t.description IS NOT NULL
+   AND o.business_id = t.business_id
+   AND o.easyorders_id IS NOT NULL
+   AND substring(t.description from '([0-9a-fA-F]{8})-[0-9a-fA-F]{4}') = left(o.easyorders_id, 8);
+
 -- ===========================================================================
 -- 2. Is anything missing?
 -- ===========================================================================
--- Deposits are written under two spellings ('Deposits' and 'Deposit') by
--- different screens, so the check normalises rather than matching a literal.
+-- Three categories carry a customer deposit, written by different screens:
+--   'Deposits'          — the new/edit order dialog        (1,189 rows)
+--   'Deposit'           — an older variant of the same      (106 rows)
+--   'orders_collection' — the platform-orders review screen (123 rows)
+--
+-- 'Orders Collection' — same words, space instead of underscore — is NOT a
+-- deposit. It is money collected from couriers in bulk, and the data separates
+-- cleanly: 328 rows, 66% of them over 1,000 EGP, up to 74,218, with
+-- descriptions like "Telegraph تحصيل". Every genuine deposit category tops out
+-- around 2,600. Folding those in would drown a 26,000 discrepancy in 3.2m of
+-- unrelated courier money.
 CREATE OR REPLACE FUNCTION public.is_deposit_category(p_category TEXT)
 RETURNS BOOLEAN LANGUAGE sql IMMUTABLE AS $$
-    SELECT lower(btrim(coalesce(p_category, ''))) IN ('deposit', 'deposits');
+    SELECT lower(btrim(coalesce(p_category, '')))
+           IN ('deposit', 'deposits', 'orders_collection');
 $$;
 
 CREATE OR REPLACE FUNCTION public.get_deposit_reconciliation(
