@@ -1,3 +1,24 @@
+-- Migration: filter the orders list by payment status
+-- Created At: 2026-08-28
+--
+-- The list could already be narrowed by order status, channel, governorate,
+-- product and date, but not by whether the order had been paid for — so
+-- "show me everything with a deposit still owed" had no answer on the screen
+-- people actually work from.
+--
+-- The return type is unchanged; the signature gains a parameter, so this has to
+-- be dropped rather than replaced. Regenerated from
+-- supabase/orders_pagination_rpc.sql with the new filter added and nothing else
+-- touched. The parameter goes last and binds to $11 so every existing
+-- positional argument keeps its number.
+
+DROP FUNCTION IF EXISTS get_orders_paginated(
+    UUID, INT, INT, TEXT, TEXT[], TEXT[], TEXT[], UUID[], TIMESTAMPTZ, TIMESTAMPTZ, BOOLEAN
+);
+DROP FUNCTION IF EXISTS get_orders_paginated(
+    UUID, INT, INT, TEXT, TEXT[], TEXT[], TEXT[], UUID[], TIMESTAMPTZ, TIMESTAMPTZ, BOOLEAN, TEXT[]
+);
+
 -- Function to get paginated and filtered orders
 CREATE OR REPLACE FUNCTION get_orders_paginated(
     p_business_id UUID,

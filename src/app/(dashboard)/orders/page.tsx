@@ -90,6 +90,9 @@ function OrdersContent() {
     const [productFilter, setProductFilter] = useState<string[]>([]);
     const [govFilter, setGovFilter] = useState<string[]>([]);
     const [channelFilter, setChannelFilter] = useState<string[]>([]);
+    // The three buckets the RPC normalises to; a null or blank payment_status
+    // on an older row counts as Not Paid there, so it is reachable here.
+    const [paymentFilter, setPaymentFilter] = useState<string[]>([]);
     const [shippingCompanyFilter, setShippingCompanyFilter] = useState<string>("all");
     const [uploadedOrderFilters, setUploadedOrderFilters] = useState<string[]>([]);
     const [shippingCompanies, setShippingCompanies] = useState<any[]>([]);
@@ -108,11 +111,11 @@ function OrdersContent() {
     useEffect(() => {
         // Reset to page 1 when filters change
         setPage(1);
-    }, [debouncedSearch, statusFilter, productFilter, govFilter, channelFilter, shippingCompanyFilter, uploadedOrderFilters, fromDate, toDate, pageSize]);
+    }, [debouncedSearch, statusFilter, productFilter, govFilter, channelFilter, paymentFilter, shippingCompanyFilter, uploadedOrderFilters, fromDate, toDate, pageSize]);
 
     useEffect(() => {
         fetchOrders();
-    }, [page, pageSize, debouncedSearch, statusFilter, productFilter, govFilter, channelFilter, shippingCompanyFilter, uploadedOrderFilters, fromDate, toDate, activeBusiness]);
+    }, [page, pageSize, debouncedSearch, statusFilter, productFilter, govFilter, channelFilter, paymentFilter, shippingCompanyFilter, uploadedOrderFilters, fromDate, toDate, activeBusiness]);
 
     async function fetchProducts() {
         if (!activeBusiness) return;
@@ -147,6 +150,7 @@ function OrdersContent() {
                 p_status: statusFilter.length > 0 ? statusFilter : null,
                 p_channel: channelFilter.length > 0 ? channelFilter : null,
                 p_gov: govFilter.length > 0 ? govFilter : null,
+                p_payment_status: paymentFilter.length > 0 ? paymentFilter : null,
                 p_products: productFilter.length > 0 ? productFilter : null,
                 p_from_date: fromDate || null,
                 p_to_date: toDate ? new Date(new Date(toDate).setHours(23, 59, 59, 999)).toISOString() : null,
@@ -244,6 +248,7 @@ function OrdersContent() {
                     p_status: statusFilter.length > 0 ? statusFilter : null,
                     p_channel: channelFilter.length > 0 ? channelFilter : null,
                     p_gov: govFilter.length > 0 ? govFilter : null,
+                    p_payment_status: paymentFilter.length > 0 ? paymentFilter : null,
                     p_products: productFilter.length > 0 ? productFilter : null,
                     p_from_date: fromDate || null,
                     p_to_date: toDate ? new Date(new Date(toDate).setHours(23, 59, 59, 999)).toISOString() : null,
@@ -455,6 +460,7 @@ function OrdersContent() {
         setProductFilter([]);
         setGovFilter([]);
         setChannelFilter([]);
+        setPaymentFilter([]);
     };
 
     const totalPages = Math.ceil(totalCount / pageSize);
@@ -530,6 +536,17 @@ function OrdersContent() {
                                 selected={productFilter}
                                 onChange={setProductFilter}
                                 placeholder={t("Product")}
+                                className="bg-white h-10 rounded-lg"
+                            />
+                            <MultiSelect
+                                options={[
+                                    { label: t("Paid"), value: "Paid" },
+                                    { label: t("Partially Paid"), value: "Partially Paid" },
+                                    { label: t("Not Paid"), value: "Not Paid" },
+                                ]}
+                                selected={paymentFilter}
+                                onChange={setPaymentFilter}
+                                placeholder={t("Payment")}
                                 className="bg-white h-10 rounded-lg"
                             />
                         </div>
