@@ -68,6 +68,11 @@ function RevenuesContent() {
     // What they owe against what they actually transferred.
     const [collMatch, setCollMatch] = useState<any[]>([]);
     const [collMissing, setCollMissing] = useState(false);
+    // Transfers that name no courier, and the list to assign one from.
+    const [orphanColl, setOrphanColl] = useState<any[]>([]);
+    const [couriers, setCouriers] = useState<any[]>([]);
+    const [showOrphans, setShowOrphans] = useState(false);
+    const [assigning, setAssigning] = useState<string | null>(null);
 
     const [dupes, setDupes] = useState<any[]>([]);
     const [dupesMissing, setDupesMissing] = useState(false);
@@ -80,6 +85,30 @@ function RevenuesContent() {
     useEffect(() => {
         fetchRevenues();
     }, [fromDate, toDate, activeBusiness]);
+
+    /** Attach an unattributed transfer to the courier it came from. */
+    async function assignCourier(txnId: string, companyId: string) {
+        if (!activeBusiness) return;
+        setAssigning(txnId);
+        try {
+            const { data, error } = await supabase
+                .from("transactions")
+                .update({ shipping_company_id: companyId })
+                .eq("id", txnId)
+                .eq("business_id", activeBusiness.id)
+                .select("id");
+            // A filtered update that matches nothing still returns success, so
+            // the row count is the only proof it landed.
+            if (error) throw error;
+            if (!data || data.length === 0) throw new Error("لم يتم الحفظ");
+            await fetchRevenues();
+        } catch (e: any) {
+            console.error("Failed to assign courier:", e);
+            alert(e?.message || "لم يتم الحفظ. حدّث الصفحة وجرّب تاني.");
+        } finally {
+            setAssigning(null);
+        }
+    }
 
     async function fetchRevenues() {
         setLoading(true);
@@ -120,6 +149,17 @@ function RevenuesContent() {
                 const matchRes = await supabase.rpc("get_courier_collection_match", args);
                 if (matchRes.error) { setCollMissing(true); setCollMatch([]); }
                 else { setCollMissing(false); setCollMatch((matchRes.data as any[]) || []); }
+
+                // Not scoped to the period: an unattributed transfer from April
+                // is as wrong as one from today, and the date picker is how it
+                // stayed out of sight.
+                const [orphRes, courierList] = await Promise.all([
+                    supabase.rpc("get_unattributed_collections", { p_business_id: activeBusiness.id }),
+                    supabase.from("shipping_companies").select("id, name")
+                        .eq("business_id", activeBusiness.id).order("name"),
+                ]);
+                setOrphanColl((orphRes.data as any[]) || []);
+                setCouriers((courierList.data as any[]) || []);
 
                 const courRes = await supabase.rpc("get_courier_net_due", args);
                 if (courRes.error) { setCourierMissing(true); setCourier([]); }
@@ -619,6 +659,78 @@ function RevenuesContent() {
                                         </p>
                                     )}
                                 </div>
+
+                                {/* The unknown bucket, made fixable. Every row
+                                    here is money in the treasury that no
+                                    courier is credited with. */}
+                                {orphanColl.length > 0 && (
+                                    <div className="rounded-lg border border-amber-500/40 bg-amber-500/5 p-4 space-y-3">
+                                        <div className="flex flex-wrap items-center justify-between gap-2">
+                                            <div>
+                                                <p className="text-sm font-semibold">
+                                                    {orphanColl.length} تحصيل مش معروف تبع أنهي شركة
+                                                    {" — "}
+                                                    {formatCurrency(orphanColl.reduce((a, r) => a + Number(r.amount || 0), 0))}
+                                                </p>
+                                                <p className="text-xs text-muted-foreground mt-0.5">
+                                                    وصفها فاضي أو مفهوش اسم شركة. اختار الشركة من القايمة
+                                                    وهتدخل في المقارنة على طول. القايمة دي مش متأثرة
+                                                    بالفترة المختارة.
+                                                </p>
+                                            </div>
+                                            <Button variant="outline" size="sm" onClick={() => setShowOrphans(v => !v)}>
+                                                {showOrphans ? "اخفي" : "اظهرها وعدّلها"}
+                                            </Button>
+                                        </div>
+
+                                        {showOrphans && (
+                                            <div className="rounded-lg border bg-background overflow-x-auto max-h-[26rem] overflow-y-auto">
+                                                <table className="w-full text-sm min-w-[620px]">
+                                                    <thead className="bg-muted/50 sticky top-0">
+                                                        <tr>
+                                                            <th className="text-start p-2.5 font-medium text-xs">التاريخ</th>
+                                                            <th className="text-end p-2.5 font-medium text-xs">المبلغ</th>
+                                                            <th className="text-start p-2.5 font-medium text-xs">الخزينة</th>
+                                                            <th className="text-start p-2.5 font-medium text-xs">الوصف</th>
+                                                            <th className="text-start p-2.5 font-medium text-xs w-44">شركة الشحن</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        {orphanColl.map(o => (
+                                                            <tr key={o.id} className="border-t">
+                                                                <td className="p-2.5 text-xs tabular-nums text-muted-foreground">
+                                                                    {String(o.transaction_date).slice(0, 10)}
+                                                                </td>
+                                                                <td className="p-2.5 text-end tabular-nums font-semibold">
+                                                                    {formatCurrency(Number(o.amount))}
+                                                                </td>
+                                                                <td className="p-2.5 text-xs">{o.account_name || "—"}</td>
+                                                                <td className="p-2.5 text-xs text-muted-foreground">
+                                                                    {o.description || <span className="italic">بدون وصف</span>}
+                                                                </td>
+                                                                <td className="p-2.5">
+                                                                    <select
+                                                                        className="w-full rounded-md border bg-background px-2 py-1.5 text-xs"
+                                                                        defaultValue=""
+                                                                        disabled={assigning === o.id}
+                                                                        onChange={e => e.target.value && assignCourier(o.id, e.target.value)}
+                                                                    >
+                                                                        <option value="">
+                                                                            {assigning === o.id ? "بيحفظ..." : "اختار شركة"}
+                                                                        </option>
+                                                                        {couriers.map(c => (
+                                                                            <option key={c.id} value={c.id}>{c.name}</option>
+                                                                        ))}
+                                                                    </select>
+                                                                </td>
+                                                            </tr>
+                                                        ))}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
                             </div>
                         );
                     })()}

@@ -47,7 +47,14 @@ const transactionSchema = z.object({
     category: z.string().min(1, "Category is required"),
     description: z.string().optional(),
     account: z.string().min(1, "Account is required"), // 'Mohamed Adel', 'Abdallah Sherif', 'Split'
-});
+    shippingCompanyId: z.string().optional(),
+}).refine(
+    // A collection is money a courier handed over. Recording it without saying
+    // which courier is what left 90 transfers worth 67,983 EGP attached to
+    // nothing, reconstructable only by reading names out of free text.
+    v => v.category !== COLLECTION_CATEGORY || !!v.shippingCompanyId,
+    { message: "Pick the courier this collection came from", path: ["shippingCompanyId"] },
+);
 
 interface AddTransactionDialogProps {
     type: "investment" | "revenue" | "expense";
@@ -57,6 +64,7 @@ interface AddTransactionDialogProps {
 const ACCOUNTS = ["Mohamed Adel", "Abdallah Sherif"];
 const EXPENSE_CATEGORIES = ["Ads", "Website", "Purchases", "Salaries", "Rent", "Transportation", "Fulfilment", "Returns", "Printing", "Wrapping", "Software/Tools", "Marketing", "Other"];
 const REVENUE_CATEGORIES = ["Orders Collection", "Deposit", "Other"];
+const COLLECTION_CATEGORY = "Orders Collection";
 
 // Define the form values type explicitly for better type inference
 type TransactionFormValues = z.infer<typeof transactionSchema>;
@@ -66,12 +74,23 @@ export function AddTransactionDialog({ type, onSuccess }: AddTransactionDialogPr
     const [open, setOpen] = useState(false);
     const [submitting, setSubmitting] = useState(false);
     const [accounts, setAccounts] = useState<any[]>([]);
+    const [couriers, setCouriers] = useState<any[]>([]);
 
     useEffect(() => {
         if (open && activeBusiness) {
             fetchAccounts();
+            fetchCouriers();
         }
     }, [open, activeBusiness]);
+
+    async function fetchCouriers() {
+        const { data } = await supabase
+            .from("shipping_companies")
+            .select("id, name")
+            .eq("business_id", activeBusiness?.id)
+            .order("name");
+        setCouriers(data || []);
+    }
 
     async function fetchAccounts() {
         const { data } = await supabase
@@ -93,8 +112,12 @@ export function AddTransactionDialog({ type, onSuccess }: AddTransactionDialogPr
             amount: 0,
             description: "",
             category: type === "investment" ? "Investment" : "",
+            shippingCompanyId: "",
         },
     });
+
+    const category = form.watch("category");
+    const isCollection = type === "revenue" && category === COLLECTION_CATEGORY;
 
     async function onSubmit(values: z.infer<typeof transactionSchema>) {
         setSubmitting(true);
@@ -106,6 +129,10 @@ export function AddTransactionDialog({ type, onSuccess }: AddTransactionDialogPr
                 type: values.type,
                 category: values.category,
                 description: values.description,
+                shipping_company_id:
+                    values.category === COLLECTION_CATEGORY && values.shippingCompanyId
+                        ? values.shippingCompanyId
+                        : null,
             };
 
             if (values.type === "expense" && values.account === "Split") {
@@ -250,6 +277,34 @@ export function AddTransactionDialog({ type, onSuccess }: AddTransactionDialogPr
                                                     ? REVENUE_CATEGORIES.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)
                                                     : EXPENSE_CATEGORIES.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)
                                                 }
+                                            </SelectContent>
+                                        </Select>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+                        )}
+
+                        {/* Which courier handed this money over. Only asked for
+                            a collection, where it is the whole point, and
+                            required there — see the schema refinement. */}
+                        {isCollection && (
+                            <FormField
+                                control={form.control}
+                                name="shippingCompanyId"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel>Shipping Company</FormLabel>
+                                        <Select onValueChange={field.onChange} value={field.value || ""}>
+                                            <FormControl>
+                                                <SelectTrigger>
+                                                    <SelectValue placeholder="Which courier paid this?" />
+                                                </SelectTrigger>
+                                            </FormControl>
+                                            <SelectContent>
+                                                {couriers.map((c) => (
+                                                    <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                                                ))}
                                             </SelectContent>
                                         </Select>
                                         <FormMessage />
