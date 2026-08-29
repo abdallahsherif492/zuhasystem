@@ -65,6 +65,9 @@ function RevenuesContent() {
     // What the couriers should hand over for this period.
     const [courier, setCourier] = useState<any[]>([]);
     const [courierMissing, setCourierMissing] = useState(false);
+    // What they owe against what they actually transferred.
+    const [collMatch, setCollMatch] = useState<any[]>([]);
+    const [collMissing, setCollMissing] = useState(false);
 
     const [dupes, setDupes] = useState<any[]>([]);
     const [dupesMissing, setDupesMissing] = useState(false);
@@ -113,6 +116,10 @@ function RevenuesContent() {
                 const dupRes = await supabase.rpc("get_duplicate_deposits", args);
                 if (dupRes.error) { setDupesMissing(true); setDupes([]); }
                 else { setDupesMissing(false); setDupes((dupRes.data as any[]) || []); }
+
+                const matchRes = await supabase.rpc("get_courier_collection_match", args);
+                if (matchRes.error) { setCollMissing(true); setCollMatch([]); }
+                else { setCollMissing(false); setCollMatch((matchRes.data as any[]) || []); }
 
                 const courRes = await supabase.rpc("get_courier_net_due", args);
                 if (courRes.error) { setCourierMissing(true); setCourier([]); }
@@ -502,6 +509,126 @@ function RevenuesContent() {
                             </div>
                         );
                     })()}
+
+                    {/* The other half of the question: not what they owe, but
+                        what they have actually handed over. That money is in
+                        the books as 'Orders Collection', tied to a courier only
+                        by whoever typed the name in the description. */}
+                    {!collMissing && collMatch.length > 0 && (() => {
+                        const named = collMatch.filter(c => c.shipping_company_id);
+                        const loose = collMatch.find(c => !c.shipping_company_id);
+                        const sum = (rows: any[], k: string) =>
+                            rows.reduce((a, r) => a + Number(r[k] || 0), 0);
+                        const owed = sum(named, "due_total") - sum(collMatch, "received_total");
+
+                        return (
+                            <div className="mt-8 pt-6 border-t space-y-4">
+                                <div>
+                                    <h3 className="font-semibold">مقارنة بالتحصيل الفعلي</h3>
+                                    <p className="text-sm text-muted-foreground mt-1">
+                                        المستحق فوق مقابل اللي وصل فعلاً واتسجل في الخزينة تحت بند
+                                        Orders Collection. الربط بينهم بالاسم المكتوب في وصف
+                                        الترانزاكشن — والاسم بيتكتب بأكتر من شكل (Telegraph و
+                                        Telegrah و X-fast) فالمطابقة بتتعامل مع الاختلافات دي.
+                                    </p>
+                                </div>
+
+                                <div className="rounded-lg border overflow-x-auto">
+                                    <table className="w-full text-sm min-w-[660px]">
+                                        <thead className="bg-muted/50">
+                                            <tr>
+                                                <th className="text-start p-2.5 font-medium text-xs">شركة الشحن</th>
+                                                <th className="text-end p-2.5 font-medium text-xs">مستحق (الفترة)</th>
+                                                <th className="text-end p-2.5 font-medium text-xs">وصل (الفترة)</th>
+                                                <th className="text-end p-2.5 font-medium text-xs">مستحق (إجمالي)</th>
+                                                <th className="text-end p-2.5 font-medium text-xs">وصل (إجمالي)</th>
+                                                <th className="text-end p-2.5 font-medium text-xs">لسه عليهم</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {named.map(c => {
+                                                const out = Number(c.outstanding);
+                                                return (
+                                                    <tr key={c.shipping_company_id} className="border-t">
+                                                        <td className="p-2.5 font-medium">{c.company_name}</td>
+                                                        <td className="p-2.5 text-end tabular-nums text-muted-foreground">
+                                                            {formatCurrency(Number(c.due_period))}
+                                                        </td>
+                                                        <td className="p-2.5 text-end tabular-nums text-muted-foreground">
+                                                            {formatCurrency(Number(c.received_period))}
+                                                        </td>
+                                                        <td className="p-2.5 text-end tabular-nums">
+                                                            {formatCurrency(Number(c.due_total))}
+                                                        </td>
+                                                        <td className="p-2.5 text-end tabular-nums">
+                                                            {formatCurrency(Number(c.received_total))}
+                                                        </td>
+                                                        <td className={`p-2.5 text-end tabular-nums font-semibold ${
+                                                            out > 1 ? "text-amber-600"
+                                                                : out < -1 ? "text-blue-600"
+                                                                    : "text-emerald-600"}`}>
+                                                            {formatCurrency(out)}
+                                                        </td>
+                                                    </tr>
+                                                );
+                                            })}
+                                            {loose && (
+                                                <tr className="border-t bg-muted/20">
+                                                    <td className="p-2.5 text-muted-foreground">
+                                                        تحصيل مش متحدد لشركة
+                                                        <span className="block text-xs">
+                                                            {Number(loose.received_count)} ترانزاكشن الوصف بتاعها فاضي أو مفهوش اسم شركة
+                                                        </span>
+                                                    </td>
+                                                    <td className="p-2.5">—</td>
+                                                    <td className="p-2.5 text-end tabular-nums text-muted-foreground">
+                                                        {formatCurrency(Number(loose.received_period))}
+                                                    </td>
+                                                    <td className="p-2.5">—</td>
+                                                    <td className="p-2.5 text-end tabular-nums">
+                                                        {formatCurrency(Number(loose.received_total))}
+                                                    </td>
+                                                    <td className="p-2.5">—</td>
+                                                </tr>
+                                            )}
+                                        </tbody>
+                                        <tfoot className="border-t-2 bg-muted/30 font-semibold">
+                                            <tr>
+                                                <td className="p-2.5">الإجمالي</td>
+                                                <td className="p-2.5 text-end tabular-nums">{formatCurrency(sum(named, "due_period"))}</td>
+                                                <td className="p-2.5 text-end tabular-nums">{formatCurrency(sum(collMatch, "received_period"))}</td>
+                                                <td className="p-2.5 text-end tabular-nums">{formatCurrency(sum(named, "due_total"))}</td>
+                                                <td className="p-2.5 text-end tabular-nums">{formatCurrency(sum(collMatch, "received_total"))}</td>
+                                                <td className="p-2.5 text-end tabular-nums text-amber-600">{formatCurrency(owed)}</td>
+                                            </tr>
+                                        </tfoot>
+                                    </table>
+                                </div>
+
+                                <div className="text-xs text-muted-foreground space-y-1.5">
+                                    <p>
+                                        <strong>اقرا عمودين الفترة بحذر.</strong> المستحق مؤرّخ بيوم
+                                        الأوردر والواصل مؤرّخ بيوم التحويل، وشركة الشحن بتحوّل بعد
+                                        أسابيع — فالشهر الواحد مش هيتساوى ولا المفروض يتساوى. عمود
+                                        الإجمالي هو اللي بيقول الحقيقة.
+                                    </p>
+                                    {named.some(c => Number(c.outstanding) < -1) && (
+                                        <p>
+                                            الرقم السالب مش معناه إن الشركة دفعت زيادة — معناه إن فيه
+                                            تحويلات اتسجلت عليها عن أوردرات السيستم ماعلّمهاش متسلّمة.
+                                        </p>
+                                    )}
+                                </div>
+                            </div>
+                        );
+                    })()}
+
+                    {collMissing && !courierMissing && (
+                        <p className="mt-6 pt-4 border-t text-sm text-muted-foreground">
+                            شغّل <code className="text-xs">20260902_courier_collection_match.sql</code> عشان
+                            تقارن المستحق باللي وصل فعلاً.
+                        </p>
+                    )}
                 </CardContent>
             </Card>
 
