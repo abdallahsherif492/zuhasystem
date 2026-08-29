@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Plus, Pencil, Trash2, Truck, Upload, Wallet } from "lucide-react";
+import { Loader2, Plus, Pencil, Trash2, Truck, Upload, Wallet, FileSpreadsheet } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -33,6 +33,7 @@ type ShippingCompany = {
     is_default?: boolean;
     cod_fee_percent?: number;
     return_fee?: number;
+    return_fee_percent?: number;
 };
 
 export function ShippingManagement() {
@@ -50,7 +51,8 @@ export function ShippingManagement() {
         rates: {} as Record<string, number>,
         is_default: false,
         cod_fee_percent: 0,
-        return_fee: 0
+        return_fee: 0,
+        return_fee_percent: 0
     });
 
     useEffect(() => {
@@ -85,7 +87,8 @@ export function ShippingManagement() {
                 rates: company.rates || {},
                 is_default: company.is_default || false,
                 cod_fee_percent: Number(company.cod_fee_percent) || 0,
-                return_fee: Number(company.return_fee) || 0
+                return_fee: Number(company.return_fee) || 0,
+                return_fee_percent: Number(company.return_fee_percent) || 0
             });
         } else {
             setEditingCompany(null);
@@ -96,7 +99,8 @@ export function ShippingManagement() {
                 rates: {},
                 is_default: false,
                 cod_fee_percent: 0,
-                return_fee: 0
+                return_fee: 0,
+                return_fee_percent: 0
             });
         }
         setIsDialogOpen(true);
@@ -126,7 +130,8 @@ export function ShippingManagement() {
                 rates: formData.rates,
                 is_default: formData.is_default,
                 cod_fee_percent: Number(formData.cod_fee_percent) || 0,
-                return_fee: Number(formData.return_fee) || 0
+                return_fee: Number(formData.return_fee) || 0,
+                return_fee_percent: Number(formData.return_fee_percent) || 0
             };
 
             let error;
@@ -192,6 +197,12 @@ export function ShippingManagement() {
                     <p className="text-muted-foreground text-sm">Manage couriers, companies, and shipping rates.</p>
                 </div>
                 <div className="flex gap-2">
+                    <Link href="/shipping/statement">
+                        <Button variant="outline">
+                            <FileSpreadsheet className="mr-2 h-4 w-4" />
+                            مطابقة كشف حساب
+                        </Button>
+                    </Link>
                     <Link href="/shipping/settlements">
                         <Button variant="outline">
                             <Wallet className="mr-2 h-4 w-4" />
@@ -331,7 +342,22 @@ export function ShippingManagement() {
                                         onChange={e => setFormData({ ...formData, return_fee: parseFloat(e.target.value) || 0 })}
                                         placeholder="0"
                                     />
-                                    <p className="text-xs text-muted-foreground">Charged per returned parcel.</p>
+                                    <p className="text-xs text-muted-foreground">Flat amount per returned parcel.</p>
+                                </div>
+                                <div className="space-y-2">
+                                    <Label>Return Fee (% of shipping)</Label>
+                                    <Input
+                                        type="number" step="0.01" min="0"
+                                        value={formData.return_fee_percent}
+                                        onChange={e => setFormData({ ...formData, return_fee_percent: parseFloat(e.target.value) || 0 })}
+                                        placeholder="0"
+                                    />
+                                    {/* Bringing a parcel back from Aswan costs more than from
+                                        Nasr City, for the same reason the delivery did.
+                                        Telegraf's statement puts this at 80% exactly. */}
+                                    <p className="text-xs text-muted-foreground">
+                                        Share of that parcel&apos;s own shipping cost. Added to the flat fee.
+                                    </p>
                                 </div>
                             </div>
                         </div>
