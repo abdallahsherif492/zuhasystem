@@ -18,9 +18,10 @@ interface FunnelRow {
     day: string;
     orders_count: number; confirmed_count: number; cancelled_count: number;
     waiting_count: number; delivered_count: number; returned_count: number;
-    in_transit_count: number; items_count: number;
+    in_transit_count: number; items_count: number; all_items_count: number;
     sales_value: number; confirmed_value: number; delivered_value: number;
-    confirm_rate: number | null; delivery_rate: number | null;
+    confirm_rate: number | null; confirm_rate_decided: number | null;
+    delivery_rate: number | null; settled_rate: number | null;
     items_per_order: number | null; avg_order_value: number | null;
 }
 
@@ -106,8 +107,19 @@ export function AdvancedAnalytics({ from, to }: { from: string | null; to: strin
             sales: s("sales_value"), confirmedValue: s("confirmed_value"),
             deliveredValue: s("delivered_value"),
             confirmRate: orders ? (100 * confirmed) / orders : null,
-            deliveryRate: resolved ? (100 * delivered) / resolved : null,
+            // Of orders someone has actually decided on. An order placed an
+            // hour ago is still Waiting and would otherwise drag today down.
+            confirmRateDecided: (confirmed + s("cancelled_count"))
+                ? (100 * confirmed) / (confirmed + s("cancelled_count")) : null,
+            // Collected out of every confirmed order — the definition the
+            // Moderators League uses, so the two sections cannot disagree.
+            deliveryRate: confirmed ? (100 * delivered) / confirmed : null,
+            // And out of parcels that have finished moving, which is the
+            // courier's performance rather than the month's.
+            settledRate: resolved ? (100 * delivered) / resolved : null,
             returnRate: resolved ? (100 * returned) / resolved : null,
+            // Units on confirmed orders over confirmed orders. Counting units
+            // from cancelled and uncalled orders here inflated it by a third.
             itemsPerOrder: confirmed ? s("items_count") / confirmed : null,
             aov: confirmed ? s("confirmed_value") / confirmed : null,
         };
@@ -125,11 +137,11 @@ export function AdvancedAnalytics({ from, to }: { from: string | null; to: strin
         const part = (rows: FunnelRow[]) => {
             const s = (k: keyof FunnelRow) => rows.reduce((a, r) => a + Number(r[k] || 0), 0);
             const o = s("orders_count"), c = s("confirmed_count");
-            const d = s("delivered_count"), r = s("returned_count");
+            const d = s("delivered_count");
             return {
                 orders: o, confirmed: c,
                 confirmRate: o ? (100 * c) / o : null,
-                deliveryRate: (d + r) ? (100 * d) / (d + r) : null,
+                deliveryRate: c ? (100 * d) / c : null,
                 aov: c ? s("confirmed_value") / c : null,
                 itemsPerOrder: c ? s("items_count") / c : null,
             };
@@ -146,7 +158,9 @@ export function AdvancedAnalytics({ from, to }: { from: string | null; to: strin
         returned: Number(r.returned_count),
         inTransit: Number(r.in_transit_count),
         confirmRate: r.confirm_rate === null ? null : Number(r.confirm_rate),
+        confirmRateDecided: r.confirm_rate_decided === null ? null : Number(r.confirm_rate_decided),
         deliveryRate: r.delivery_rate === null ? null : Number(r.delivery_rate),
+        settledRate: r.settled_rate === null ? null : Number(r.settled_rate),
         aov: r.avg_order_value === null ? null : Number(r.avg_order_value),
     })), [funnel]);
 
@@ -226,11 +240,15 @@ export function AdvancedAnalytics({ from, to }: { from: string | null; to: strin
                     trend ? delta(trend.second.confirmed, trend.first.confirmed) : null, "", true)}
                 {kpi(t("Confirmation rate"),
                     totals.confirmRate === null ? "—" : `${totals.confirmRate.toFixed(1)}%`,
-                    t("of orders placed"),
+                    totals.confirmRateDecided === null
+                        ? t("of orders placed")
+                        : `${totals.confirmRateDecided.toFixed(1)}% ${t("of decided")} · ${totals.waiting.toLocaleString()} ${t("waiting")}`,
                     trend ? delta(trend.second.confirmRate, trend.first.confirmRate) : null, "%", true)}
                 {kpi(t("Delivery rate"),
                     totals.deliveryRate === null ? "—" : `${totals.deliveryRate.toFixed(1)}%`,
-                    `${totals.inTransit.toLocaleString()} ${t("still moving")}`,
+                    totals.settledRate === null
+                        ? `${totals.inTransit.toLocaleString()} ${t("still moving")}`
+                        : `${totals.settledRate.toFixed(1)}% ${t("of settled")} · ${totals.inTransit.toLocaleString()} ${t("still moving")}`,
                     trend ? delta(trend.second.deliveryRate, trend.first.deliveryRate) : null, "%", true)}
                 {kpi(t("Items / order"),
                     totals.itemsPerOrder === null ? "—" : totals.itemsPerOrder.toFixed(2),
@@ -274,7 +292,7 @@ export function AdvancedAnalytics({ from, to }: { from: string | null; to: strin
                                         fill="#cbd5e1" radius={[3, 3, 0, 0]} />
                                     <Bar yAxisId="l" dataKey="confirmed" name={t("Confirmed")}
                                         fill="#7A5544" radius={[3, 3, 0, 0]} />
-                                    <Line yAxisId="r" type="monotone" dataKey="confirmRate"
+                                    <Line yAxisId="r" type="monotone" dataKey="confirmRateDecided"
                                         name={t("Confirmation rate")} stroke="#2563eb"
                                         strokeWidth={2} dot={false} connectNulls />
                                 </ComposedChart>
@@ -286,14 +304,21 @@ export function AdvancedAnalytics({ from, to }: { from: string | null; to: strin
                                     <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8 }}
                                         formatter={(v: any) => `${Number(v).toFixed(1)}%`} />
                                     <Legend wrapperStyle={{ fontSize: 12 }} />
-                                    <Line type="monotone" dataKey="confirmRate" name={t("Confirmation rate")}
+                                    <Line type="monotone" dataKey="confirmRateDecided" name={t("Confirmation rate (decided)")}
                                         stroke="#2563eb" strokeWidth={2} dot={false} connectNulls />
-                                    <Line type="monotone" dataKey="deliveryRate" name={t("Delivery rate")}
+                                    <Line type="monotone" dataKey="confirmRate" name={t("Confirmation rate (all)")}
+                                        stroke="#93c5fd" strokeWidth={2} strokeDasharray="4 3" dot={false} connectNulls />
+                                    <Line type="monotone" dataKey="deliveryRate" name={t("Collected / confirmed")}
                                         stroke="#059669" strokeWidth={2} dot={false} connectNulls />
+                                    <Line type="monotone" dataKey="settledRate" name={t("Collected / settled")}
+                                        stroke="#a7f3d0" strokeWidth={2} strokeDasharray="4 3" dot={false} connectNulls />
                                 </ComposedChart>
                             )}
                         </ResponsiveContainer>
                     </div>
+                    <p className="text-xs text-muted-foreground mt-3">
+                        {t("Confirmation rate is out of orders someone has decided on — an order placed an hour ago is still Waiting. Delivery rate is Collected out of every confirmed order, the same way the Moderators League counts it, so an order still in transit counts against it until it lands.")}
+                    </p>
                 </CardContent>
             </Card>
 
