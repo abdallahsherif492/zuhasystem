@@ -29,6 +29,7 @@ import { AdvancedSearch } from "@/components/dashboard/advanced-search";
 import { format } from "date-fns";
 import { RecentSales } from "@/components/dashboard/recent-sales";
 import { ModeratorsLeague } from "@/components/dashboard/moderators-league";
+import { AdvancedAnalytics } from "@/components/dashboard/advanced-analytics";
 
 interface RestockAlertItem {
   variantId: string;
@@ -561,6 +562,10 @@ function DashboardContent() {
           the page. It is a scoreboard, and a scoreboard nobody scrolls to is
           not one. */}
       <ModeratorsLeague />
+
+      {/* Everything the tiles above cannot say: the same period broken out by
+          day, by governorate and by product. */}
+      <AdvancedAnalytics from={fromDate} to={toDate} />
 
       {/* Main Content Grid */}
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-7">
