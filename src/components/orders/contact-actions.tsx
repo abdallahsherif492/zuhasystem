@@ -39,6 +39,10 @@ export function ContactActions({
 
     // Whichever number can actually take a WhatsApp message; a landline cannot.
     const waNumber = numbers.find(n => whatsappLink(n));
+    // Built on every render rather than on click, because the button is a real
+    // link. window.open with a features string is treated as a popup and gets
+    // blocked, which is silent: the dialog closes and no chat ever opens.
+    const sendHref = target ? whatsappLink(target, text) : null;
 
     function openComposer() {
         setText(confirmationMessage(order, storeName));
@@ -46,12 +50,6 @@ export function ContactActions({
         setOpen(true);
     }
 
-    function send() {
-        const link = target ? whatsappLink(target, text) : null;
-        if (!link) return;
-        window.open(link, "_blank", "noopener,noreferrer");
-        setOpen(false);
-    }
 
     async function copy() {
         try {
@@ -139,10 +137,23 @@ export function ContactActions({
                             <Copy className="h-4 w-4" />
                             نسخ
                         </Button>
-                        <Button onClick={send} disabled={!target} className="gap-1.5">
-                            <Send className="h-4 w-4" />
-                            افتح واتساب
-                        </Button>
+                        {sendHref ? (
+                            <Button asChild className="gap-1.5" onClick={() => setOpen(false)}>
+                                {/* wa.me/<full international number> opens that
+                                    contact's chat directly — creating it when the
+                                    number is not saved — with the text waiting in
+                                    the input. An anchor, so nothing can block it. */}
+                                <a href={sendHref} target="_blank" rel="noopener noreferrer">
+                                    <Send className="h-4 w-4" />
+                                    افتح المحادثة
+                                </a>
+                            </Button>
+                        ) : (
+                            <Button disabled className="gap-1.5">
+                                <Send className="h-4 w-4" />
+                                افتح المحادثة
+                            </Button>
+                        )}
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
