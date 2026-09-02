@@ -11,6 +11,7 @@ import { DateRangePicker } from "@/components/date-range-picker";
 import { useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
+import { ContactActions } from "@/components/orders/contact-actions";
 import { Input } from "@/components/ui/input";
 import { AutosaveField } from "@/components/ui/autosave-field";
 import { Label } from "@/components/ui/label";
@@ -65,6 +66,7 @@ interface Order {
     paid_amount: number;
     created_at: string;
     closed_by?: string | null;
+    notes?: string | null;
     order_items: OrderItem[];
 }
 
@@ -88,6 +90,9 @@ import { logBusinessAction } from "@/lib/logs/actions-logger";
 
 function PlatformOrdersContent() {
     const { activeBusiness, currentUser } = useBusiness();
+    // Signed on the confirmation message, so it reads as coming from the store
+    // the customer ordered from rather than from nobody.
+    const storeName = activeBusiness?.name || "متجرنا";
 
     const { t } = useLanguage();
     
@@ -576,8 +581,8 @@ function PlatformOrdersContent() {
                 </div>
             </div>
             
-            <div className="flex flex-wrap items-center gap-4 py-4">
-                <div className="relative flex-1 max-w-sm">
+            <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-3 py-4">
+                <div className="relative w-full sm:flex-1 sm:max-w-sm">
                     <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                     <Input
                         type="search"
@@ -588,7 +593,7 @@ function PlatformOrdersContent() {
                     />
                 </div>
                 <Select value={platformFilter} onValueChange={setPlatformFilter}>
-                    <SelectTrigger className="w-[180px] h-10">
+                    <SelectTrigger className="w-full sm:w-[180px] h-10">
                         <SelectValue placeholder={t("Filter by Platform")} />
                     </SelectTrigger>
                     <SelectContent>
@@ -648,24 +653,35 @@ function PlatformOrdersContent() {
                 <div className="grid gap-6">
                     {filteredOrders.map(order => (
                         <Card key={order.id} className="border-2 border-primary/20 shadow-md">
-                            <CardHeader className="bg-muted/30 pb-4 border-b">
-                                <div className="flex justify-between items-start">
-                                    <div>
-                                        <CardTitle className="flex items-center gap-2">
-                                            {order.customer_info?.name || "Unknown"} 
-                                            <span className="text-sm font-normal text-muted-foreground">({order.easyorders_id || order.id.slice(0, 8)})</span>
+                            <CardHeader className="bg-muted/30 pb-4 border-b space-y-3">
+                                {/* Stacks on a phone. Side by side, the name and
+                                    the total each got half a narrow screen and
+                                    both wrapped to three lines. */}
+                                <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-2">
+                                    <div className="min-w-0">
+                                        <CardTitle className="flex flex-wrap items-center gap-x-2 gap-y-1 text-lg sm:text-xl">
+                                            <span className="break-words">{order.customer_info?.name || "Unknown"}</span>
+                                            <span className="font-mono text-xs font-normal text-muted-foreground">
+                                                #{order.id.slice(0, 8)}
+                                            </span>
                                         </CardTitle>
-                                        <p className="text-sm text-muted-foreground mt-1">
+                                        <p className="text-xs sm:text-sm text-muted-foreground mt-1">
                                             {format(new Date(order.created_at), "PPP p")}
                                         </p>
                                     </div>
-                                    <div className="text-right">
+                                    <div className="flex items-center justify-between sm:flex-col sm:items-end gap-2 shrink-0">
                                         <p className="text-xl font-bold text-primary">{formatCurrency(order.total_amount)}</p>
-                                        <Badge variant="outline" className="mt-1 bg-yellow-50 text-yellow-700 border-yellow-200">
+                                        <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200">
                                             Waiting Review
                                         </Badge>
                                     </div>
                                 </div>
+
+                                {/* Calling is the first thing that happens to one
+                                    of these orders, so it is the first thing on
+                                    the card rather than a field to select and
+                                    copy out of. */}
+                                <ContactActions order={order as any} storeName={storeName} />
                                 {/* Set by the webhook when our total from the items
                                     disagrees with the total EasyOrders sent. Almost
                                     always a quantity or a line we failed to read, so
@@ -679,12 +695,12 @@ function PlatformOrdersContent() {
                                     </div>
                                 )}
                             </CardHeader>
-                            <CardContent className="pt-6">
-                                <div className="grid md:grid-cols-2 gap-8">
+                            <CardContent className="pt-5 px-4 sm:px-6">
+                                <div className="grid gap-6 lg:grid-cols-2 lg:gap-8">
                                     {/* Customer Details */}
                                     <div className="space-y-4">
                                         <h3 className="font-semibold text-lg flex items-center border-b pb-2">{t("Customer Details")}</h3>
-                                        <div className="grid grid-cols-2 gap-4">
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                                             <div className="space-y-2">
                                                 <Label>{t("Name")}</Label>
                                                 <AutosaveField
@@ -701,7 +717,7 @@ function PlatformOrdersContent() {
                                             </div>
                                         </div>
                                         
-                                        <div className="grid grid-cols-2 gap-4">
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                                             <div className="space-y-2">
                                                 <Label>{t("Phone 2")}</Label>
                                                 <AutosaveField
@@ -756,6 +772,25 @@ function PlatformOrdersContent() {
                                                 onCommit={v => handleAutoSaveNotes(order, v)}
                                                 rows={2}
                                                 className="text-xs bg-amber-50/30 dark:bg-amber-950/10 border-amber-200/80 dark:border-amber-900/40 focus:border-amber-400"
+                                            />
+                                        </div>
+
+                                        {/* The note that travels with the order.
+                                            Distinct from the review notes above:
+                                            that one is for whoever is checking
+                                            this screen, this one is on the order
+                                            everywhere else and goes out with it. */}
+                                        <div className="space-y-1.5 pt-3 border-t">
+                                            <Label className="text-xs font-semibold flex items-center gap-1.5">
+                                                🗒️ {t("Order note")}
+                                            </Label>
+                                            <AutosaveField
+                                                multiline
+                                                placeholder={t("A note that stays on the order — delivery instructions, a landmark, anything the courier should know.")}
+                                                value={order.notes || ""}
+                                                onCommit={v => updateOrderField(order, 'notes', v)}
+                                                rows={2}
+                                                className="text-xs"
                                             />
                                         </div>
 
@@ -1120,10 +1155,10 @@ function PlatformOrdersContent() {
                                     </div>
                                 </div>
                             </CardContent>
-                            <CardFooter className="bg-muted/10 border-t p-4 flex justify-end gap-3">
+                            <CardFooter className="bg-muted/10 border-t p-4 flex flex-col-reverse sm:flex-row sm:justify-end gap-3">
                                 <AlertDialog>
                                     <AlertDialogTrigger asChild>
-                                        <Button variant="outline" className="text-destructive border-destructive hover:bg-destructive/10">
+                                        <Button variant="outline" className="w-full sm:w-auto text-destructive border-destructive hover:bg-destructive/10">
                                             <X className="mr-2 h-4 w-4" />
                                             {t("Cancel Order")}
                                         </Button>
@@ -1147,7 +1182,7 @@ function PlatformOrdersContent() {
                                 <AlertDialog>
                                     <AlertDialogTrigger asChild>
                                         <Button 
-                                            className="bg-primary text-primary-foreground hover:bg-primary/90"
+                                            className="w-full sm:w-auto bg-primary text-primary-foreground hover:bg-primary/90"
                                             disabled={!order.order_items?.length || order.order_items.some(item => !item.variant_id)}
                                         >
                                             {saving === order.id ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Check className="mr-2 h-4 w-4" />}
