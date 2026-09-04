@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
@@ -11,6 +11,7 @@ import { ActionFeedbackProvider } from "@/contexts/ActionFeedbackContext";
 import { MetaPixelProvider } from "@/components/providers/meta-pixel-provider";
 import { Toaster } from "@/components/ui/sonner-toaster";
 import { SessionTrackerProvider } from "@/components/providers/session-tracker-provider";
+import { ServiceWorkerProvider } from "@/components/providers/service-worker-provider";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -39,6 +40,28 @@ export const metadata: Metadata = {
   ),
   title: "eCommerx Admin System",
   description: "Internal E-commerce Dashboard",
+  // Installing to the home screen: the manifest supplies the name, colours
+  // and icons, and appleWebApp does the same job on iOS, which reads none of
+  // it. The apple-touch-icon is a separate opaque file because iOS fills a
+  // transparent icon with black.
+  manifest: "/manifest.webmanifest",
+  applicationName: "eCommerx",
+  appleWebApp: {
+    capable: true,
+    title: "eCommerx",
+    statusBarStyle: "default",
+  },
+  icons: {
+    icon: [
+      { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/icon-512.png", sizes: "512x512", type: "image/png" },
+    ],
+    apple: [{ url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" }],
+  },
+  formatDetection: {
+    // Android was turning order references and totals into dial links.
+    telephone: false,
+  },
   ...(facebookDomainVerification
     ? {
         verification: {
@@ -46,6 +69,18 @@ export const metadata: Metadata = {
         },
       }
     : {}),
+};
+
+export const viewport: Viewport = {
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#6366f1" },
+    { media: "(prefers-color-scheme: dark)", color: "#0f172a" },
+  ],
+  // The installed app runs edge to edge; without this the content sits under
+  // the notch and the home indicator on a phone.
+  viewportFit: "cover",
+  width: "device-width",
+  initialScale: 1,
 };
 
 export default function RootLayout({
@@ -71,6 +106,7 @@ export default function RootLayout({
                 <DynamicThemeProvider>
                   <MetaPixelProvider />
                   <SessionTrackerProvider />
+                  <ServiceWorkerProvider />
                   {children}
                   <Toaster />
                 </DynamicThemeProvider>
