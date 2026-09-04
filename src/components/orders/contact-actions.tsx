@@ -78,10 +78,16 @@ export function ContactActions({
                         className="gap-1.5 font-mono tabular-nums"
                     >
                         {/* One button per number: a single tel: built from
-                            "0882232065 / 01159244278" dials neither. */}
+                            "0882232065 / 01159244278" dials neither.
+
+                            The label is wrapped rather than left as a bare text
+                            node. Anything that rewrites the DOM — a translator,
+                            an extension — re-parents loose text, and React then
+                            cannot remove it when this card goes. An element it
+                            created itself is one it can always find again. */}
                         <a href={telLink(n)}>
                             <Phone className="h-3.5 w-3.5" />
-                            {n}
+                            <span>{n}</span>
                         </a>
                     </Button>
                 ))}
@@ -95,7 +101,7 @@ export function ContactActions({
                     className="gap-1.5 border-emerald-500/40 text-emerald-700 hover:bg-emerald-500/10 dark:text-emerald-400"
                 >
                     <MessageCircle className="h-3.5 w-3.5" />
-                    رسالة تأكيد
+                    <span>رسالة تأكيد</span>
                 </Button>
             </div>
 
@@ -135,7 +141,7 @@ export function ContactActions({
                     <DialogFooter className="gap-2 sm:gap-2">
                         <Button variant="outline" onClick={copy} className="gap-1.5">
                             <Copy className="h-4 w-4" />
-                            نسخ
+                            <span>نسخ</span>
                         </Button>
                         {sendHref ? (
                             <Button asChild className="gap-1.5" onClick={() => setOpen(false)}>
@@ -145,13 +151,13 @@ export function ContactActions({
                                     the input. An anchor, so nothing can block it. */}
                                 <a href={sendHref} target="_blank" rel="noopener noreferrer">
                                     <Send className="h-4 w-4" />
-                                    افتح المحادثة
+                                    <span>افتح المحادثة</span>
                                 </a>
                             </Button>
                         ) : (
                             <Button disabled className="gap-1.5">
                                 <Send className="h-4 w-4" />
-                                افتح المحادثة
+                                <span>افتح المحادثة</span>
                             </Button>
                         )}
                     </DialogFooter>

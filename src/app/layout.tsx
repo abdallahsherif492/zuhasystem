@@ -62,6 +62,11 @@ export const metadata: Metadata = {
     // Android was turning order references and totals into dial links.
     telephone: false,
   },
+  other: {
+    // The meta form of the same instruction, which is what the Translate
+    // toolbar itself reads before offering the banner at all.
+    google: "notranslate",
+  },
   ...(facebookDomainVerification
     ? {
         verification: {
@@ -89,7 +94,20 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="ar" dir="ltr" suppressHydrationWarning>
+    // translate="no" is load-bearing, not a preference.
+    //
+    // Chrome offers to translate a page marked lang="ar" whenever the browser
+    // itself is set to another language, and accepting rewrites the DOM under
+    // React: every text node is moved inside a <font> element the translator
+    // inserts. React still holds the original node and its original parent, so
+    // the next time it removes that subtree — confirming an order removes its
+    // whole card — removeChild is called with a node that is no longer a child
+    // of the node it is called on, and the page dies with NotFoundError.
+    //
+    // The staff who use this are Arabic speakers reading an Arabic interface.
+    // Translation is never wanted here, and turning it off is the fix rather
+    // than a workaround.
+    <html lang="ar" dir="ltr" translate="no" className="notranslate" suppressHydrationWarning>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
         suppressHydrationWarning
