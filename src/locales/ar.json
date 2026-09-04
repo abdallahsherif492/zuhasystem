@@ -403,5 +403,14 @@
   "Out of stock": "نفد المخزون",
   "in stock": "متاح",
   "Add to Order": "أضف للأوردر",
-  "This total does not match what the store sent. Check the quantities and prices below before moving the order on.": "الإجمالي ده مش مطابق للي المتجر بعته. راجع الكميات والأسعار تحت قبل ما تمرر الأوردر."
+  "This total does not match what the store sent. Check the quantities and prices below before moving the order on.": "الإجمالي ده مش مطابق للي المتجر بعته. راجع الكميات والأسعار تحت قبل ما تمرر الأوردر.",
+  "My preferences": "تفضيلاتي",
+  "These apply to your account on every device you sign in from. Nobody else on the team is affected.": "دي بتتطبق على حسابك على أي جهاز تدخل منه. مش بتأثر على حد تاني في الفريق.",
+  "Business default": "الافتراضي للشركة",
+  "Use the business default again": "ارجع للافتراضي بتاع الشركة",
+  "Default language for new members": "اللغة الافتراضية للأعضاء الجدد",
+  "Default layout direction": "اتجاه التخطيط الافتراضي",
+  "Anyone who has chosen their own language keeps it.": "اللي اختار لغته بنفسه هيفضل عليها.",
+  "Saved": "اتحفظ",
+  "Failed to save": "مش قادر يحفظ"
 }

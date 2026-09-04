@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useBusiness } from "@/contexts/BusinessContext";
 import { useLanguage, DEFAULT_LANGUAGE, DEFAULT_DIRECTION } from "@/contexts/LanguageContext";
+import { MyPreferences } from "@/components/settings/my-preferences";
 import { supabase } from "@/lib/supabase";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -347,6 +348,11 @@ export default function SettingsPage() {
                 </TabsList>
                 
                 <TabsContent value="theme" className="space-y-4">
+                    {/* First on the tab: the setting a person is most likely
+                        here to change, and the only one on this page that is
+                        theirs rather than the whole team's. */}
+                    <MyPreferences />
+
                     <Card>
                         <CardHeader>
                             <CardTitle>{t("Theme & Appearance")}</CardTitle>
@@ -404,8 +410,11 @@ export default function SettingsPage() {
                                     />
                                 </div>
 
+                                {/* Still here, but no longer what anyone sees:
+                                    these are the values a new member starts on
+                                    until they pick their own in My Preferences. */}
                                 <div className="space-y-2">
-                                    <Label>{t("Language")}</Label>
+                                    <Label>{t("Default language for new members")}</Label>
                                     <Select value={language} onValueChange={setLanguage}>
                                         <SelectTrigger>
                                             <SelectValue placeholder={t("Select Language")} />
@@ -415,10 +424,13 @@ export default function SettingsPage() {
                                             <SelectItem value="ar">{t("Arabic")}</SelectItem>
                                         </SelectContent>
                                     </Select>
+                                    <p className="text-xs text-muted-foreground">
+                                        {t("Anyone who has chosen their own language keeps it.")}
+                                    </p>
                                 </div>
 
                                 <div className="space-y-2">
-                                    <Label>{t("Layout Direction")}</Label>
+                                    <Label>{t("Default layout direction")}</Label>
                                     <Select value={direction} onValueChange={setDirection}>
                                         <SelectTrigger>
                                             <SelectValue placeholder={t("Select Direction")} />

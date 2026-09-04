@@ -403,5 +403,14 @@
   "Out of stock": "Out of stock",
   "in stock": "in stock",
   "Add to Order": "Add to Order",
-  "This total does not match what the store sent. Check the quantities and prices below before moving the order on.": "This total does not match what the store sent. Check the quantities and prices below before moving the order on."
+  "This total does not match what the store sent. Check the quantities and prices below before moving the order on.": "This total does not match what the store sent. Check the quantities and prices below before moving the order on.",
+  "My preferences": "My preferences",
+  "These apply to your account on every device you sign in from. Nobody else on the team is affected.": "These apply to your account on every device you sign in from. Nobody else on the team is affected.",
+  "Business default": "Business default",
+  "Use the business default again": "Use the business default again",
+  "Default language for new members": "Default language for new members",
+  "Default layout direction": "Default layout direction",
+  "Anyone who has chosen their own language keeps it.": "Anyone who has chosen their own language keeps it.",
+  "Saved": "Saved",
+  "Failed to save": "Failed to save"
 }
