@@ -86,11 +86,24 @@ export default function GlobalError({
                         </a>
                     </div>
 
-                    {error.digest && (
-                        <p style={{ fontSize: 11, color: "#94a3b8", marginTop: 22, fontFamily: "monospace" }}>
-                            رقم الخطأ: {error.digest}
-                        </p>
-                    )}
+                    {/* The message as well as the digest. A digest exists only
+                        for errors thrown while rendering on the server, so
+                        printing it alone left this panel blank for every crash
+                        that happened in the browser — which is most of them. */}
+                    <pre
+                        dir="ltr"
+                        style={{
+                            fontSize: 11, color: "#64748b", marginTop: 22,
+                            fontFamily: "ui-monospace, monospace", textAlign: "left",
+                            background: "#f8fafc", border: "1px solid #e2e8f0",
+                            borderRadius: 8, padding: 10, whiteSpace: "pre-wrap",
+                            wordBreak: "break-word", maxHeight: 160, overflow: "auto",
+                        }}
+                    >
+                        {[error.message || "(no message)",
+                          error.digest ? `digest: ${error.digest}` : null]
+                            .filter(Boolean).join("\n")}
+                    </pre>
                 </div>
             </body>
         </html>
