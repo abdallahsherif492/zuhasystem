@@ -19,8 +19,9 @@ import {
 } from "@/components/ui/select";
 import {
     Loader2, LifeBuoy, Phone, MessageCircle, Search, RefreshCw,
-    ChevronDown, ChevronRight, AlertTriangle, Clock,
+    ChevronDown, ChevronRight, AlertTriangle, Clock, Download, Truck,
 } from "lucide-react";
+import * as XLSX from "xlsx";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { logBusinessAction } from "@/lib/logs/actions-logger";
@@ -74,6 +75,9 @@ const BUCKETS = [
 
 const todayStr = () => format(new Date(), "yyyy-MM-dd");
 
+/** Filter key for orders with no courier attached. */
+const NO_COURIER = "__none__";
+
 /**
  * Worklist for orders stuck with the courier.
  *
@@ -94,6 +98,10 @@ export default function ShippingIssuesPage() {
     const [loading, setLoading] = useState(true);
     const [unavailable, setUnavailable] = useState(false);
     const [bucket, setBucket] = useState("all");
+    // Courier by name — the RPC returns the name, and one courier's problems
+    // are one conversation with one account manager.
+    const [courier, setCourier] = useState("all");
+    const [exporting, setExporting] = useState(false);
     const [query, setQuery] = useState("");
     const [staleDays, setStaleDays] = useState(5);
     const [expanded, setExpanded] = useState<string | null>(null);
@@ -138,12 +146,103 @@ export default function ShippingIssuesPage() {
         const q = normalizeSearchText(query);
         return rows.filter(r => {
             if (bucket !== "all" && r.bucket !== bucket) return false;
+            if (courier !== "all" && (r.courier || NO_COURIER) !== courier) return false;
             if (!q) return true;
             const hay = normalizeSearchText(
                 `${r.reference} ${r.customer_name || ""} ${r.customer_phone || ""} ${r.governorate || ""} ${r.courier || ""}`);
             return hay.includes(q);
         });
-    }, [rows, bucket, query]);
+    }, [rows, bucket, courier, query]);
+
+    /** Couriers present in the current bucket, with how many each is holding. */
+    const couriers = useMemo(() => {
+        const m = new Map<string, number>();
+        rows.filter(r => bucket === "all" || r.bucket === bucket)
+            .forEach(r => m.set(r.courier || NO_COURIER, (m.get(r.courier || NO_COURIER) || 0) + 1));
+        return [...m.entries()].sort((a, b) => b[1] - a[1]);
+    }, [rows, bucket]);
+
+    /**
+     * The sheet is exactly what is on screen — same bucket, same courier, same
+     * search — so filtering to one courier and exporting gives the file to send
+     * that courier.
+     *
+     * The issues RPC carries what the cards need and no more, so the address,
+     * second phone and payment are read for just these orders at export time.
+     * A courier cannot chase a parcel without the address, and needs the
+     * amount still due rather than the total when a deposit was taken. Read in
+     * chunks: a few hundred ids in one filter overflows the request URL.
+     */
+    async function exportSheet() {
+        if (!activeBusiness || filtered.length === 0) return;
+        setExporting(true);
+        try {
+            const ids = filtered.map(r => r.order_id);
+            const extra = new Map<string, any>();
+            let partial = false;
+            for (let i = 0; i < ids.length; i += 100) {
+                const { data, error } = await supabase
+                    .from("orders")
+                    .select("id, created_at, customer_info, notes, payment_status, paid_amount")
+                    .eq("business_id", activeBusiness.id)
+                    .in("id", ids.slice(i, i + 100));
+                if (error) { partial = true; continue; }
+                (data || []).forEach(o => extra.set(o.id, o));
+            }
+
+            const bucketLabel = (b: string) => BUCKETS.find(x => x.key === b)?.label || b;
+            const sheetRows = filtered.map(r => {
+                const o = extra.get(r.order_id) || {};
+                const info = o.customer_info || {};
+                const total = Number(r.total_amount) || 0;
+                const paid = Number(o.paid_amount) || 0;
+                const due = o.payment_status === "Paid" ? 0 : Math.max(total - paid, 0);
+                return {
+                    "رقم الأوردر": r.reference,
+                    "الحالة": r.status,
+                    "نوع المشكلة": bucketLabel(r.bucket),
+                    "عالق من (يوم)": r.days_stuck,
+                    "شركة الشحن": r.courier || "",
+                    "العميل": r.customer_name || "",
+                    "موبايل 1": info.phone || r.customer_phone || "",
+                    "موبايل 2": info.phone2 || "",
+                    "المحافظة": r.governorate || "",
+                    "العنوان": info.address || "",
+                    "قيمة الأوردر": total,
+                    "المطلوب تحصيله": due,
+                    "عدد المتابعات": Number(r.followup_count) || 0,
+                    "آخر متابعة": r.followup_count ? outcomeLabel(r.last_outcome) : "",
+                    "المتابعة الجاية": r.next_action_at || "",
+                    "أكده": r.closed_by || "",
+                    "ملاحظات الأوردر": o.notes || "",
+                    "تاريخ الأوردر": o.created_at ? String(o.created_at).slice(0, 10) : "",
+                };
+            });
+
+            const ws = XLSX.utils.json_to_sheet(sheetRows);
+            // Widths from the longest value in each column, so the sheet opens
+            // readable instead of as a wall of truncated cells.
+            const keys = Object.keys(sheetRows[0]);
+            ws["!cols"] = keys.map(k => ({
+                wch: Math.min(60, Math.max(k.length, ...sheetRows.map(r => String((r as any)[k] ?? "").length)) + 2),
+            }));
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "مشاكل الشحن");
+            // Arabic content reads right to left in Excel too.
+            wb.Workbook = { Views: [{ RTL: true }] } as any;
+
+            const tag = courier === "all" ? "all" : courier.replace(/[^\p{L}\p{N}]+/gu, "_");
+            XLSX.writeFile(wb, `shipping_issues_${tag}_${todayStr()}.xlsx`);
+
+            if (partial) toast.warning("اتصدّر، بس بعض العناوين مااتحملتش. جرّب تاني لو محتاجها.");
+            else toast.success(`اتصدّر ${sheetRows.length} أوردر`);
+        } catch (e: any) {
+            console.error("Export failed:", e);
+            toast.error(e?.message || "مش قادر يصدّر الشيت");
+        } finally {
+            setExporting(false);
+        }
+    }
 
     const totals = useMemo(() => {
         const val = filtered.reduce((s, r) => s + Number(r.total_amount || 0), 0);
@@ -246,10 +345,22 @@ export default function ShippingIssuesPage() {
                         أوردرات عالقة عند شركة الشحن ولسه ممكن تتنقذ. الأقدم أولاً — ده اللي على وشك يضيع.
                     </p>
                 </div>
-                <Button variant="outline" onClick={load} className="gap-2">
-                    <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
-                    {t("تحديث")}
-                </Button>
+                <div className="flex flex-wrap gap-2">
+                    <Button
+                        variant="outline" onClick={exportSheet}
+                        disabled={exporting || loading || filtered.length === 0}
+                        className="gap-2 border-emerald-500/40 text-emerald-700 hover:bg-emerald-500/10 dark:text-emerald-400"
+                    >
+                        {exporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+                        {/* The count says what will be in the file, so a filter
+                            left on by accident is noticed before sending it. */}
+                        تصدير Excel ({filtered.length})
+                    </Button>
+                    <Button variant="outline" onClick={load} className="gap-2">
+                        <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
+                        {t("تحديث")}
+                    </Button>
+                </div>
             </div>
 
             <div className="grid gap-4 md:grid-cols-4">
@@ -282,6 +393,20 @@ export default function ShippingIssuesPage() {
                         </Button>
                     );
                 })}
+                <Select value={courier} onValueChange={setCourier}>
+                    <SelectTrigger className="h-9 w-[190px] bg-background">
+                        <Truck className="h-4 w-4 text-muted-foreground" />
+                        <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="all">كل شركات الشحن</SelectItem>
+                        {couriers.map(([name, n]) => (
+                            <SelectItem key={name} value={name}>
+                                {name === NO_COURIER ? "بدون شركة شحن" : name} ({n})
+                            </SelectItem>
+                        ))}
+                    </SelectContent>
+                </Select>
                 <div className="relative flex-1 min-w-[180px] max-w-sm ms-auto">
                     <Search className="absolute start-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                     <Input placeholder="رقم الأوردر أو العميل أو التليفون..." value={query}
