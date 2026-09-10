@@ -92,6 +92,7 @@ export default function DamagesPage() {
     const [resolveOpen, setResolveOpen] = useState(false);
     const [resolveForm, setResolveForm] = useState(emptyResolve);
     const [resolving, setResolving] = useState(false);
+    const [resolvePopover, setResolvePopover] = useState(false);
 
     useEffect(() => {
         if (activeBusiness) {
@@ -243,9 +244,8 @@ export default function DamagesPage() {
     const selected = grouped.find(r => r.variant_id === resolveForm.variant_id);
     const restockValue = selected ? resolveForm.quantity * selected.unitCost : 0;
 
-    function startResolve(variantId: string) {
-        const r = grouped.find(x => x.variant_id === variantId);
-        setResolveForm({ ...emptyResolve(), variant_id: variantId, quantity: Math.min(1, r?.open || 1) });
+    function startResolve(variantId = "") {
+        setResolveForm({ ...emptyResolve(), variant_id: variantId });
         setResolveOpen(true);
     }
 
@@ -304,6 +304,19 @@ export default function DamagesPage() {
                     <h1 className="text-3xl font-bold tracking-tight">{t("Damaged Products")}</h1>
                     <p className="text-muted-foreground">{t("Track inventory losses and damaged items.")}</p>
                 </div>
+
+                {/* The two things this page is for, side by side: units going
+                    into the damaged pile and units coming back out of it. */}
+                <div className="flex flex-wrap gap-2">
+                <Button
+                    variant="outline"
+                    className="gap-2 border-emerald-500/40 text-emerald-700 hover:bg-emerald-500/10 dark:text-emerald-400"
+                    disabled={resolutionsMissing || openRows.length === 0}
+                    onClick={() => startResolve()}
+                >
+                    <Undo2 className="h-4 w-4" />
+                    {t("Remove from damages")}
+                </Button>
 
                 <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
                     <DialogTrigger asChild>
@@ -408,6 +421,7 @@ export default function DamagesPage() {
                         </DialogFooter>
                     </DialogContent>
                 </Dialog>
+                </div>
             </div>
 
             {/* Taking units back out. One dialog for every row; the product is
@@ -425,19 +439,55 @@ export default function DamagesPage() {
                     <div className="grid gap-4 py-2">
                         <div className="flex flex-col gap-2">
                             <label className="text-sm font-medium">{t("Product / Variant")}</label>
-                            <Select
-                                value={resolveForm.variant_id}
-                                onValueChange={v => setResolveForm(f => ({ ...f, variant_id: v, quantity: 1 }))}
-                            >
-                                <SelectTrigger><SelectValue placeholder={t("Select product...")} /></SelectTrigger>
-                                <SelectContent>
-                                    {openRows.map(r => (
-                                        <SelectItem key={r.variant_id} value={r.variant_id}>
-                                            {r.name} - {r.title} ({t("Still open")}: {r.open})
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
+                            {/* Searchable, like the product field when recording a
+                                damage. Lists only products with units still open —
+                                there is nothing to take out of the others. */}
+                            <Popover open={resolvePopover} onOpenChange={setResolvePopover}>
+                                <PopoverTrigger asChild>
+                                    <Button
+                                        variant="outline"
+                                        role="combobox"
+                                        aria-expanded={resolvePopover}
+                                        className="justify-between w-full font-normal"
+                                    >
+                                        <span className="truncate">
+                                            {selected
+                                                ? `${selected.name} - ${selected.title} (${t("Still open")}: ${selected.open})`
+                                                : t("Search product...")}
+                                        </span>
+                                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                    </Button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-[min(400px,90vw)] p-0" align="start">
+                                    <Command>
+                                        <CommandInput placeholder={t("Search by name...")} />
+                                        <CommandList>
+                                            <CommandEmpty>{t("No product found.")}</CommandEmpty>
+                                            <CommandGroup>
+                                                {openRows.map(r => (
+                                                    <CommandItem
+                                                        key={r.variant_id}
+                                                        value={`${r.name} ${r.title}`}
+                                                        onSelect={() => {
+                                                            setResolveForm(f => ({ ...f, variant_id: r.variant_id, quantity: 1 }));
+                                                            setResolvePopover(false);
+                                                        }}
+                                                    >
+                                                        <Check
+                                                            className={cn(
+                                                                "mr-2 h-4 w-4",
+                                                                resolveForm.variant_id === r.variant_id ? "opacity-100" : "opacity-0"
+                                                            )}
+                                                        />
+                                                        <span className="flex-1 truncate">{r.name} - {r.title}</span>
+                                                        <span className="text-xs text-muted-foreground tabular-nums">{r.open}</span>
+                                                    </CommandItem>
+                                                ))}
+                                            </CommandGroup>
+                                        </CommandList>
+                                    </Command>
+                                </PopoverContent>
+                            </Popover>
                         </div>
 
                         <div className="grid grid-cols-2 gap-4">
