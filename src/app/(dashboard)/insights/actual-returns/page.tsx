@@ -92,11 +92,17 @@ function ActualReturnsContent() {
                 return q.range(from, to);
             });
 
-            // 4. Fetch Damages with fetchAll
-            const damages = await fetchAll((from, to) => {
+            // 4. Damages, net of anything recovered from them.
+            //
+            // Units can now come back out of the damaged pile — repaired, or
+            // credited by the supplier — so gross total_loss overstates what was
+            // lost. The ledger view carries damages as positive loss and
+            // recoveries as negative, each on its own date. Falls back to the
+            // gross figure until migration 20260910 has created the view.
+            const readDamages = (table: string, col: string) => fetchAll((from, to) => {
                 let q = supabase
-                    .from('inventory_damages')
-                    .select('total_loss')
+                    .from(table)
+                    .select(col)
                     .gte('date', start)
                     .lte('date', end);
                 if (activeBusiness?.id) {
@@ -105,9 +111,18 @@ function ActualReturnsContent() {
                 return q.range(from, to);
             });
 
+            let damages: any[];
+            let lossCol = 'loss';
+            try {
+                damages = await readDamages('v_damage_ledger', 'id, loss');
+            } catch {
+                lossCol = 'total_loss';
+                damages = await readDamages('inventory_damages', 'id, total_loss');
+            }
+
             let damagesLoss = 0;
             (damages || []).forEach(d => {
-                damagesLoss += Number(d.total_loss) || 0;
+                damagesLoss += Number(d[lossCol]) || 0;
             });
 
 
