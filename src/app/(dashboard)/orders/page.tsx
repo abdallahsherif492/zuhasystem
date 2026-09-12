@@ -20,6 +20,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Plus, Loader2, MoreHorizontal, Download, Search, Printer, FilterX, ChevronLeft, ChevronRight, Upload } from "lucide-react";
 import * as XLSX from "xlsx";
+import { orderNetProfit, overheadRateFor, type OverheadRow, type CourierFees } from "@/lib/orders/net-profit";
 import { DateRangePicker } from "@/components/date-range-picker";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -96,6 +97,11 @@ function OrdersContent() {
     const [shippingCompanyFilter, setShippingCompanyFilter] = useState<string>("all");
     const [uploadedOrderFilters, setUploadedOrderFilters] = useState<string[]>([]);
     const [shippingCompanies, setShippingCompanies] = useState<any[]>([]);
+    // Net profit per order: the month's cost share, and the two fields the list
+    // RPC does not return — which courier (for its return fee) and whether a
+    // returned order's goods went back on the shelf.
+    const [overheadRows, setOverheadRows] = useState<OverheadRow[] | null>(null);
+    const [orderExtras, setOrderExtras] = useState<Map<string, { shipping_company_id: string | null; restock_on_return: boolean | null }>>(new Map());
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     // Selection State
@@ -117,6 +123,38 @@ function OrdersContent() {
         fetchOrders();
     }, [page, pageSize, debouncedSearch, statusFilter, productFilter, govFilter, channelFilter, paymentFilter, shippingCompanyFilter, uploadedOrderFilters, fromDate, toDate, activeBusiness]);
 
+    useEffect(() => {
+        if (!activeBusiness) return;
+        let cancelled = false;
+        supabase.rpc("get_order_overhead_rates", { p_business_id: activeBusiness.id })
+            .then(({ data, error }) => {
+                if (cancelled) return;
+                // Missing (migration not run): fall back to the old column
+                // rather than show a number built on nothing.
+                setOverheadRows(error ? null : ((data as OverheadRow[]) || []));
+            });
+        return () => { cancelled = true; };
+    }, [activeBusiness]);
+
+    useEffect(() => {
+        if (!activeBusiness || orders.length === 0) return;
+        let cancelled = false;
+        supabase.from("orders")
+            .select("id, shipping_company_id, restock_on_return")
+            .eq("business_id", activeBusiness.id)
+            .in("id", orders.map(o => o.id))
+            .then(({ data }) => {
+                if (cancelled || !data) return;
+                setOrderExtras(new Map(data.map((r: any) => [r.id, r])));
+            });
+        return () => { cancelled = true; };
+    }, [activeBusiness, orders]);
+
+    const rateFor = useMemo(() => overheadRows ? overheadRateFor(overheadRows) : null, [overheadRows]);
+    const courierById = useMemo(
+        () => new Map<string, CourierFees>(shippingCompanies.map((c: any) => [c.id, c])),
+        [shippingCompanies]);
+
     async function fetchProducts() {
         if (!activeBusiness) return;
         const { data } = await supabase.from('products').select('id, name').eq('business_id', activeBusiness.id).order('name');
@@ -126,7 +164,7 @@ function OrdersContent() {
 
         const { data: companies } = await supabase
             .from('shipping_companies')
-            .select('id, name')
+            .select('*')
             .eq('business_id', activeBusiness.id);
         if (companies) {
             setShippingCompanies(companies);
@@ -629,7 +667,9 @@ function OrdersContent() {
                             <TableHead>{t("Status")}</TableHead>
                             <TableHead>{t("Tags")}</TableHead>
                             <TableHead>{t("Total")}</TableHead>
-                            <TableHead>{t("Profit")}</TableHead>
+                            <TableHead title={t("After goods, courier, returns and the order's share of ads, salaries and running costs.")}>
+                                {t("Net profit")}
+                            </TableHead>
                             <TableHead>{t("Actions")}</TableHead>
                         </TableRow>
                     </TableHeader>
@@ -711,22 +751,52 @@ function OrdersContent() {
                                         fee was never recorded for anything coming
                                         from EasyOrders and had to be backfilled
                                         from the rate card. */}
-                                    <TableCell
-                                        className={cn(
-                                            "font-medium",
-                                            Number(order.profit) < 0 ? "text-red-600" : "text-green-600"
-                                        )}
-                                        title={
-                                            order.shipping_cost_estimated
-                                                ? `Includes an estimated courier fee of ${formatCurrency(Number(order.actual_shipping_cost) || 0)} taken from the rate card, not a recorded invoice.`
-                                                : undefined
+                                    {(() => {
+                                        // The real net, when the cost share is available; the old
+                                        // gross column only as a fallback until migration 20260912
+                                        // has run, and said so on hover.
+                                        if (!rateFor) {
+                                            return (
+                                                <TableCell className="font-medium text-muted-foreground"
+                                                    title={t("Gross only: run migration 20260912_order_overhead_rates.sql for net profit.")}>
+                                                    {formatCurrency(Number(order.profit) || 0)}
+                                                </TableCell>
+                                            );
                                         }
-                                    >
-                                        {Number(order.profit) < 0 ? "" : "+"}{formatCurrency(Number(order.profit) || 0)}
-                                        {order.shipping_cost_estimated && (
-                                            <span className="text-muted-foreground font-normal ms-0.5" aria-label="estimated shipping">*</span>
-                                        )}
-                                    </TableCell>
+                                        const extra = orderExtras.get(order.id);
+                                        const np = orderNetProfit(
+                                            { ...(order as any), ...(extra || {}) },
+                                            rateFor,
+                                            extra?.shipping_company_id ? courierById.get(extra.shipping_company_id) : null,
+                                        );
+                                        if (np.kind === "none") {
+                                            return <TableCell className="text-muted-foreground">—</TableCell>;
+                                        }
+                                        // Every term on hover, so the figure can be checked
+                                        // rather than taken on trust.
+                                        const breakdown = [
+                                            ...np.parts.map(p => `${p.label}: ${p.amount < 0 ? "−" : "+"}${formatCurrency(Math.abs(p.amount))}`),
+                                            `= ${formatCurrency(np.value)}`,
+                                            ...(np.kind === "projected" ? [t("Projected: the order has not been delivered yet.")] : []),
+                                            ...(np.returnFeeAssumed ? [t("No return fee set for this courier: the full shipping rate was assumed.")] : []),
+                                            ...(order.shipping_cost_estimated ? [t("Courier fee estimated from the rate card.")] : []),
+                                        ].join("\n");
+                                        return (
+                                            <TableCell
+                                                title={breakdown}
+                                                className={cn(
+                                                    "font-medium tabular-nums",
+                                                    np.kind === "projected" && "italic opacity-70",
+                                                    np.value < 0 ? "text-red-600" : "text-green-600",
+                                                )}
+                                            >
+                                                <span>{np.value < 0 ? "−" : "+"}{formatCurrency(Math.abs(np.value))}</span>
+                                                {np.kind === "projected" && (
+                                                    <span className="block text-[10px] font-normal not-italic text-muted-foreground">{t("projected")}</span>
+                                                )}
+                                            </TableCell>
+                                        );
+                                    })()}
                                     <TableCell>
                                         <div className="flex items-center gap-1">
                                             <Button
