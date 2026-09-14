@@ -18,9 +18,11 @@ import {
     TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Loader2, MoreHorizontal, Download, Search, Printer, FilterX, ChevronLeft, ChevronRight, Upload } from "lucide-react";
+import { Plus, Loader2, MoreHorizontal, Download, Search, Printer, FilterX, ChevronLeft, ChevronRight, Upload, Repeat } from "lucide-react";
 import * as XLSX from "xlsx";
 import { orderNetProfit, overheadRateFor, type OverheadRow, type CourierFees } from "@/lib/orders/net-profit";
+import { useRepeatOrders } from "@/hooks/use-repeat-orders";
+import { RepeatOrdersBadge } from "@/components/orders/repeat-orders";
 import { DateRangePicker } from "@/components/date-range-picker";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -154,6 +156,18 @@ function OrdersContent() {
     const courierById = useMemo(
         () => new Map<string, CourierFees>(shippingCompanies.map((c: any) => [c.id, c])),
         [shippingCompanies]);
+
+    // Other orders on the same number, for the rows on this page.
+    const repeatSubjects = useMemo(() => orders.map(o => ({
+        id: o.id,
+        created_at: o.created_at,
+        status: o.status,
+        customer_info: o.customer_info,
+        order_type: o.order_type,
+        productNames: (Array.isArray(o.items) ? o.items : []).map(i => i.variant?.product?.name || ""),
+    })), [orders]);
+    const repeats = useRepeatOrders(activeBusiness?.id, repeatSubjects);
+    const repeatCount = orders.filter(o => repeats.has(o.id)).length;
 
     async function fetchProducts() {
         if (!activeBusiness) return;
@@ -595,9 +609,18 @@ function OrdersContent() {
 
                     {/* Bottom Row: Actions and Stats */}
                     <div className="flex flex-col sm:flex-row justify-between items-center gap-4 pt-4 border-t border-border/50">
-                        <div className="text-sm font-medium text-muted-foreground flex items-center bg-muted/30 py-1.5 px-3 rounded-md">
-                            <span className="bg-primary/10 text-primary px-2 py-0.5 rounded text-sm font-bold mr-2">{totalCount}</span> {t("orders found")}
-                            {selectedOrders.size > 0 && <span className="text-primary font-bold ml-2">({selectedOrders.size} {t("selected")})</span>}
+                        <div className="flex flex-wrap items-center gap-2">
+                            <div className="text-sm font-medium text-muted-foreground flex items-center bg-muted/30 py-1.5 px-3 rounded-md">
+                                <span className="bg-primary/10 text-primary px-2 py-0.5 rounded text-sm font-bold mr-2">{totalCount}</span> {t("orders found")}
+                                {selectedOrders.size > 0 && <span className="text-primary font-bold ml-2">({selectedOrders.size} {t("selected")})</span>}
+                            </div>
+                            {repeatCount > 0 && (
+                                <div className="flex items-center gap-1.5 rounded-md border border-amber-300 bg-amber-50 px-3 py-1.5 text-sm font-medium text-amber-800 dark:border-amber-900 dark:bg-amber-950/20 dark:text-amber-300">
+                                    <Repeat className="h-4 w-4" />
+                                    <span>{t("Repeat orders on this page")}:</span>
+                                    <span className="font-bold tabular-nums">{repeatCount}</span>
+                                </div>
+                            )}
                         </div>
                         
                         <div className="flex flex-wrap gap-2 items-center">
@@ -697,7 +720,13 @@ function OrdersContent() {
                             </TableRow>
                         ) : (
                             orders.map((order) => (
-                                <TableRow key={order.id} data-state={selectedOrders.has(order.id) && "selected"}>
+                                <TableRow
+                                    key={order.id}
+                                    data-state={selectedOrders.has(order.id) && "selected"}
+                                    // Two live orders on one number: the row itself says so
+                                    // before anyone opens the badge.
+                                    className={cn(repeats.get(order.id)?.doubleRisk && "bg-red-50/60 dark:bg-red-950/20")}
+                                >
                                     <TableCell>
                                         <Checkbox
                                             checked={selectedOrders.has(order.id)}
@@ -717,6 +746,7 @@ function OrdersContent() {
                                     <TableCell>
                                         <div className="font-medium">{order.customer_info?.name || "N/A"}</div>
                                         <div className="text-xs text-muted-foreground">{order.customer_info?.phone}</div>
+                                        {repeats.has(order.id) && <RepeatOrdersBadge info={repeats.get(order.id)!} />}
                                     </TableCell>
                                     <TableCell>
                                         <Badge variant="outline">{order.channel || "N/A"}</Badge>

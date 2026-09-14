@@ -12,11 +12,13 @@ import { useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { ContactActions } from "@/components/orders/contact-actions";
+import { RepeatOrdersAlert } from "@/components/orders/repeat-orders";
+import { useRepeatOrders } from "@/hooks/use-repeat-orders";
 import { Input } from "@/components/ui/input";
 import { AutosaveField } from "@/components/ui/autosave-field";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Check, X, AlertTriangle, Search, PackageSearch, ChevronsUpDown } from "lucide-react";
+import { Loader2, Check, X, AlertTriangle, Search, PackageSearch, ChevronsUpDown, Repeat } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -560,6 +562,25 @@ function PlatformOrdersContent() {
         });
     }, [orders, searchQuery, fromDate, toDate, platformFilter]);
 
+    // Other orders on the same number, looked up for the whole waiting list
+    // rather than what the filters show, so a twin hidden by a search still
+    // flags the card that is visible.
+    const repeatSubjects = useMemo(() => orders.map(o => ({
+        id: o.id,
+        created_at: o.created_at,
+        status: o.status,
+        customer_info: o.customer_info,
+        productNames: (o.order_items || []).map(i => i.variants?.products?.name || i.unmapped_name || ""),
+    })), [orders]);
+    const repeats = useRepeatOrders(activeBusiness?.id, repeatSubjects);
+    const [repeatOnly, setRepeatOnly] = useState(false);
+    const repeatCount = filteredOrders.filter(o => repeats.has(o.id)).length;
+    const doubleRiskCount = filteredOrders.filter(o => repeats.get(o.id)?.doubleRisk).length;
+    const visibleOrders = repeatOnly ? filteredOrders.filter(o => repeats.has(o.id)) : filteredOrders;
+    // A twin that is itself a card on screen is linked by anchor; anything
+    // else opens in a new tab.
+    const onPageIds = new Set(visibleOrders.map(o => o.id));
+
 
     if (loading) {
         return <div className="flex justify-center p-20"><Loader2 className="h-8 w-8 animate-spin" /></div>;
@@ -603,6 +624,25 @@ function PlatformOrdersContent() {
                     </SelectContent>
                 </Select>
                 <DateRangePicker />
+                {/* Only there when something is flagged, and red when two
+                    orders on one number could both still ship. */}
+                {(repeatCount > 0 || repeatOnly) && (
+                    <Button
+                        variant={repeatOnly ? "default" : "outline"}
+                        onClick={() => setRepeatOnly(v => !v)}
+                        title={t("Show only orders whose number has other orders")}
+                        className={cn(
+                            "h-10 w-full gap-1.5 sm:w-auto",
+                            !repeatOnly && (doubleRiskCount > 0
+                                ? "border-red-300 text-red-700 hover:bg-red-50 dark:border-red-900 dark:text-red-300"
+                                : "border-amber-300 text-amber-800 hover:bg-amber-50 dark:border-amber-900 dark:text-amber-300"),
+                        )}
+                    >
+                        <Repeat className="h-4 w-4" />
+                        <span>{t("Repeat orders")}</span>
+                        <span className="tabular-nums">({repeatCount})</span>
+                    </Button>
+                )}
             </div>
 
             {/* Treasury Transaction Modal */}
@@ -642,7 +682,7 @@ function PlatformOrdersContent() {
             </AlertDialog>
 
             <div id="platform-orders-table">
-            {filteredOrders.length === 0 ? (
+            {visibleOrders.length === 0 ? (
                 <div className="flex flex-col items-center justify-center p-20 text-muted-foreground bg-muted/20 rounded-lg border border-dashed">
                     <PackageSearch className="h-12 w-12 mb-4 opacity-20" />
                     <p className="text-lg font-medium">{t("No waiting platform orders")}</p>
@@ -651,8 +691,19 @@ function PlatformOrdersContent() {
             ) : (
 
                 <div className="grid gap-6">
-                    {filteredOrders.map(order => (
-                        <Card key={order.id} className="border-2 border-primary/20 shadow-md">
+                    {visibleOrders.map(order => (
+                        <Card
+                            key={order.id}
+                            id={`po-${order.id}`}
+                            className={cn(
+                                "border-2 shadow-md scroll-mt-24",
+                                repeats.get(order.id)?.doubleRisk
+                                    ? "border-red-400 dark:border-red-800"
+                                    : repeats.has(order.id)
+                                        ? "border-amber-300 dark:border-amber-800"
+                                        : "border-primary/20",
+                            )}
+                        >
                             <CardHeader className="bg-muted/30 pb-4 border-b space-y-3">
                                 {/* Stacks on a phone. Side by side, the name and
                                     the total each got half a narrow screen and
@@ -677,6 +728,12 @@ function PlatformOrdersContent() {
                                     </div>
                                 </div>
 
+                                {/* Above the call buttons, not below: the other
+                                    orders on this number are what the call has
+                                    to settle. */}
+                                {repeats.has(order.id) && (
+                                    <RepeatOrdersAlert info={repeats.get(order.id)!} onPage={onPageIds} />
+                                )}
                                 {/* Calling is the first thing that happens to one
                                     of these orders, so it is the first thing on
                                     the card rather than a field to select and
@@ -1197,6 +1254,21 @@ function PlatformOrdersContent() {
                                                 Ensure all products are mapped correctly before proceeding.
                                             </AlertDialogDescription>
                                         </AlertDialogHeader>
+                                        {/* Said again at the one moment it can still be
+                                            acted on: after this click the order goes to
+                                            fulfilment alongside the other one. */}
+                                        {repeats.get(order.id)?.doubleRisk && (
+                                            <div className="space-y-1 rounded-md border border-red-300 bg-red-50 p-3 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/30 dark:text-red-300">
+                                                <p className="font-semibold">{t("This number already has an open order:")}</p>
+                                                <p className="font-mono">
+                                                    {repeats.get(order.id)!.related
+                                                        .filter(r => r.open)
+                                                        .map(r => `#${r.id.slice(0, 8)} (${r.status})`)
+                                                        .join(" · ")}
+                                                </p>
+                                                <p>{t("Check with the customer that this is a new order and not the same one twice.")}</p>
+                                            </div>
+                                        )}
                                         <AlertDialogFooter>
                                             <AlertDialogCancel>Review Again</AlertDialogCancel>
                                             <AlertDialogAction onClick={() => handleMoveToPending(order)}>
