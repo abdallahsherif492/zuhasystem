@@ -23,6 +23,7 @@ import * as XLSX from "xlsx";
 import { orderNetProfit, overheadRateFor, type OverheadRow, type CourierFees } from "@/lib/orders/net-profit";
 import { useRepeatOrders } from "@/hooks/use-repeat-orders";
 import { RepeatOrdersBadge } from "@/components/orders/repeat-orders";
+import { arabicProductLabel } from "@/lib/orders/product-label";
 import { DateRangePicker } from "@/components/date-range-picker";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -80,6 +81,8 @@ function OrdersContent() {
     const [errorMsg, setErrorMsg] = useState<string | null>(null);
     const [totalCount, setTotalCount] = useState(0);
     const [productsOptions, setProductsOptions] = useState<Option[]>([]);
+    // Product id → its short Arabic name, for the courier sheet's contents column.
+    const [productArabic, setProductArabic] = useState<Map<string, string>>(new Map());
 
     // Pagination State
     const [page, setPage] = useState(1);
@@ -171,9 +174,15 @@ function OrdersContent() {
 
     async function fetchProducts() {
         if (!activeBusiness) return;
-        const { data } = await supabase.from('products').select('id, name').eq('business_id', activeBusiness.id).order('name');
+        const { data } = await supabase.from('products').select('id, name, description').eq('business_id', activeBusiness.id).order('name');
         if (data) {
             setProductsOptions(data.map(p => ({ label: p.name, value: p.id })));
+            const arabic = new Map<string, string>();
+            for (const p of data) {
+                const label = arabicProductLabel(p.description);
+                if (label) arabic.set(p.id, label);
+            }
+            setProductArabic(arabic);
         }
 
         const { data: companies } = await supabase
@@ -277,7 +286,7 @@ function OrdersContent() {
                 toast.loading("Fetching selected orders for export...");
                 const { data, error } = await supabase
                     .from('orders')
-                    .select('*, items:order_items(quantity, variant:variants(title, product:products(id, name)))')
+                    .select('*, items:order_items(quantity, variant:variants(title, product:products(id, name, description)))')
                     .in('id', Array.from(selectedOrders));
                 
                 if (error) throw error;
@@ -363,8 +372,15 @@ function OrdersContent() {
 
             const content = itemsArray?.map((item: any) => {
                 const productName = item.variant?.product?.name || item.product?.name || item.product_name || "Product";
-                const variantTitle = item.variant?.title || item.variant_title || "N/A";
-                return `${productName} (${variantTitle}) x${item.quantity}`;
+                const variantTitle = item.variant?.title || item.variant_title || "";
+                const variant = variantTitle && variantTitle !== "Default" ? ` - ${variantTitle}` : "";
+                // The courier prints this column on its own waybill and its
+                // drivers read Arabic, so what the thing is goes in brackets
+                // beside the catalogue name, as on our waybill.
+                const arabic = arabicProductLabel(item.variant?.product?.description)
+                    ?? productArabic.get(item.variant?.product?.id)
+                    ?? null;
+                return `${productName}${variant}${arabic ? ` (${arabic})` : ""} x${item.quantity}`;
             }).join(" + ") || "No Items";
 
             const phone1 = order.customer_info?.phone || "";
