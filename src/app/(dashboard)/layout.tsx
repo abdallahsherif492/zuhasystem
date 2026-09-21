@@ -9,6 +9,7 @@ import { SubscriptionGuard } from "@/components/layout/subscription-guard";
 import { AutoSyncProvider } from "@/components/providers/AutoSyncProvider";
 import { FloatingChatWidget } from "@/components/support/floating-chat-widget";
 import { WalkthroughWrapper } from "@/components/walkthrough/walkthrough-wrapper";
+import { StartHereLink } from "@/components/onboarding/getting-started";
 
 export default function DashboardLayout({
   children,
@@ -30,10 +31,11 @@ export default function DashboardLayout({
       <div className="flex flex-col flex-1 min-w-0">
         <AnnouncementBanner />
         <ExpirationBanner />
-        <header className="flex h-14 items-center gap-4 border-b bg-muted/40 px-4 lg:h-[60px] lg:px-6">
+        <header className="flex min-h-14 flex-wrap items-center gap-2 border-b bg-muted/40 px-4 py-2 lg:min-h-[60px] lg:px-6">
           <MobileNav />
           <CommandPalette />
-          <div className="w-full flex justify-end items-center gap-4">
+          <StartHereLink />
+          <div className="min-w-0 flex flex-1 justify-end items-center gap-2">
             <BusinessSwitcher />
           </div>
         </header>
@@ -53,4 +55,3 @@ export default function DashboardLayout({
     </div>
   );
 }
-

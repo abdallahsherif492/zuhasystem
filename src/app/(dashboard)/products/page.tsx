@@ -101,7 +101,10 @@ export default function ProductsPage() {
                         ) : filteredProducts.length === 0 ? (
                             <TableRow>
                                 <TableCell colSpan={4} className="h-24 text-center">
-                                    {t("No products found.")}
+                                    {products.length === 0 && !searchQuery ? <div className="space-y-3 p-4">
+                                        <p className="text-muted-foreground">{t("Add your first product to start taking orders.")}</p>
+                                        <Button asChild className="min-h-11"><Link href="/products/new">{t("New Product")}</Link></Button>
+                                    </div> : t("No products found.")}
                                 </TableCell>
                             </TableRow>
                         ) : (

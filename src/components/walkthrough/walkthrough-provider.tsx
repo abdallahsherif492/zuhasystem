@@ -1,7 +1,7 @@
 "use client";
 
-import React, { createContext, useContext, useCallback, useEffect, useState, useRef } from "react";
-import { usePathname, useRouter } from "next/navigation";
+import React, { createContext, useContext, useCallback, useState, useRef } from "react";
+import { useRouter } from "next/navigation";
 import { driver, DriveStep } from "driver.js";
 import "driver.js/dist/driver.css";
 import { useBusiness } from "@/contexts/BusinessContext";
@@ -46,10 +46,8 @@ function getPageIdFromPath(pathname: string): string | null {
 export function WalkthroughProvider({ children }: { children: React.ReactNode }) {
   const { activeBusiness, userRole, allowedPages, isSystemAdmin } = useBusiness();
   const { direction } = useLanguage();
-  const pathname = usePathname();
   const router = useRouter();
   const [isTouring, setIsTouring] = useState(false);
-  const [hasCheckedFirstVisit, setHasCheckedFirstVisit] = useState(false);
   const driverRef = useRef<any>(null);
 
   /**
@@ -228,24 +226,7 @@ export function WalkthroughProvider({ children }: { children: React.ReactNode })
     safeLocal.set(`walkthrough_completed_${activeBusiness.id}`, "true");
   };
 
-  // Check if this is the first visit (trigger full tour)
-  useEffect(() => {
-    if (!activeBusiness || hasCheckedFirstVisit || pathname !== "/dashboard") return;
-
-    const localKey = `walkthrough_completed_${activeBusiness.id}`;
-    const localCompleted = safeLocal.get(localKey);
-    const dbCompleted = activeBusiness.theme_config?.walkthrough_completed;
-
-    if (!localCompleted && !dbCompleted) {
-      // First visit — start full tour after a delay
-      setHasCheckedFirstVisit(true);
-      setTimeout(() => {
-        startFullTour();
-      }, 2000);
-    } else {
-      setHasCheckedFirstVisit(true);
-    }
-  }, [activeBusiness, pathname, hasCheckedFirstVisit, startFullTour]);
+  // Tours are started from the help button; first-time setup is task-based.
 
   return (
     <WalkthroughContext.Provider value={{ startPageTour, startFullTour, isTouring }}>

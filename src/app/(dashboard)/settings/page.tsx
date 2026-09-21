@@ -28,6 +28,11 @@ export default function SettingsPage() {
     const [loading, setLoading] = useState(false);
     const [saving, setSaving] = useState(false);
     const [successMessage, setSuccessMessage] = useState("");
+    const [activeTab, setActiveTab] = useState("theme");
+    useEffect(() => {
+        const tab = new URLSearchParams(window.location.search).get("tab");
+        if (tab && ["theme", "shipping", "platforms", "tools", "inventory", "billing"].includes(tab)) setActiveTab(tab);
+    }, []);
     
     // Form state
     const [businessName, setBusinessName] = useState<string>("");
@@ -332,12 +337,12 @@ export default function SettingsPage() {
     };
 
     return (
-        <div className="flex-1 space-y-4 p-8 pt-6">
+        <div className="min-w-0 flex-1 space-y-4 p-0 sm:p-4 lg:p-8 pt-6">
             <div className="flex items-center justify-between space-y-2">
                 <h2 className="text-3xl font-bold tracking-tight">{t("Settings")}</h2>
             </div>
-            <Tabs defaultValue="theme" className="space-y-4">
-                <TabsList id="integrations-tab">
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4 min-w-0">
+                <TabsList id="integrations-tab" className="h-auto max-w-full flex-wrap justify-start gap-1">
                     <TabsTrigger value="theme">{t("Theme & Appearance")}</TabsTrigger>
                     <TabsTrigger value="shipping">{t("Shipping Companies")}</TabsTrigger>
                     <TabsTrigger value="platforms">{t("Order Platforms")}</TabsTrigger>

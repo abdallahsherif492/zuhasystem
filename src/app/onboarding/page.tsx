@@ -116,8 +116,8 @@ export default function OnboardingPage() {
 
             safeLocal.set("activeBusinessId", newBusinessId as string);
 
-            // Force a hard reload to the dashboard so Context picks it up
-            window.location.href = "/";
+            // Reload the context and guide the owner to their first order.
+            window.location.href = "/getting-started";
             
         } catch (err: any) {
             console.error("Onboarding error:", err);

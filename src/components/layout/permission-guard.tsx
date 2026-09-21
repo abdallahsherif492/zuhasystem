@@ -2,49 +2,21 @@
 
 import { usePathname, useRouter } from "next/navigation";
 import { useBusiness } from "@/contexts/BusinessContext";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { Loader2 } from "lucide-react";
+import { canOpenPage } from "@/lib/navigation-access";
 
 export function PermissionGuard({ children }: { children: React.ReactNode }) {
     const pathname = usePathname();
     const router = useRouter();
     const { userRole, allowedPages, isSystemAdmin, loading } = useBusiness();
-    const [authorized, setAuthorized] = useState(false);
+    const authorized = canOpenPage(pathname, userRole, allowedPages, isSystemAdmin);
 
     useEffect(() => {
         if (loading) return;
 
-        const role = userRole?.toLowerCase().trim() || "";
-        
-        if (isSystemAdmin || role === "owner" || role === "admin" || role === "platform admin" || role === "super admin") {
-            setAuthorized(true);
-            return;
-        }
-
-        // Always allow dashboard and my-hr
-        if (pathname === "/dashboard" || pathname.startsWith("/my-hr")) {
-            setAuthorized(true);
-            return;
-        }
-
-        // Check explicit permissions
-        if (allowedPages && allowedPages.length > 0) {
-            const hasAccess = allowedPages.some(allowed => 
-                pathname.startsWith(allowed) || 
-                (allowed === "/easy-orders" && pathname.startsWith("/platform-orders")) ||
-                (allowed === "/platform-orders" && pathname.startsWith("/easy-orders"))
-            );
-            if (hasAccess) {
-                setAuthorized(true);
-                return;
-            }
-        }
-
-
-        // Unauthorized
-        setAuthorized(false);
-        router.push("/unauthorized");
-    }, [pathname, loading, userRole, allowedPages, isSystemAdmin, router]);
+        if (!authorized) router.replace("/unauthorized");
+    }, [loading, authorized, router]);
 
     if (loading || !authorized) {
         return (

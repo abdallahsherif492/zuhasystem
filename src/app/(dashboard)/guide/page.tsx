@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import Link from "next/link";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -404,7 +405,7 @@ export default function GuidePage() {
   const { language, direction } = useLanguage();
   const [searchQuery, setSearchQuery] = useState("");
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>(
-    sections.reduce((acc, section) => ({ ...acc, [section.id]: true }), {})
+    {}
   );
 
   const toggleSection = (id: string) => {
@@ -434,6 +435,7 @@ export default function GuidePage() {
         <h1 className="text-3xl font-bold text-slate-900 dark:text-white">
           {pageTitle}
         </h1>
+        <Button asChild variant="outline" className="min-h-11"><Link href="/getting-started">{language === "ar" ? "جديد هنا؟ ابدأ بخطوات أول أوردر" : "New here? Start with your first order"}</Link></Button>
         <div className="relative max-w-md">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
           <Input

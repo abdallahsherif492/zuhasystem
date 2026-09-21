@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { useBusiness } from "@/contexts/BusinessContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { cn } from "@/lib/utils";
+import { canOpenPage } from "@/lib/navigation-access";
 import { Button } from "@/components/ui/button";
 import { LayoutDashboard, AlertTriangle, Package, ShoppingCart, Settings, Users, Truck, Banknote, LineChart, ShoppingBag, Megaphone, Box, DollarSign, ShieldCheck, FileText, Ticket, CreditCard, Clock, Inbox, Calendar, LogOut, Globe, ChevronDown, ChevronRight, BarChart3, PieChart, History, BookOpen, Wallet, Upload, LifeBuoy } from "lucide-react";
 
@@ -110,33 +111,14 @@ export function SidebarContent({ onLinkClick }: { onLinkClick?: () => void }) {
         const timer = setInterval(load, 60_000);
         return () => { cancelled = true; clearInterval(timer); };
     }, [activeBusiness, pathname]);
-    const [expandedGroups, setExpandedGroups] = useState<string[]>([
-        t("Overview"), 
-        t("Sales & Orders"), 
-        t("Catalog & Inventory"), 
-        t("Supply Chain"), 
-        t("Finance & Analytics"), 
-        t("Settings & Administration")
-    ]);
+    // Route keys survive language changes. Open the everyday groups first.
+    const [expandedGroups, setExpandedGroups] = useState<string[]>(["/dashboard", "/orders"]);
     
-    const role = userRole?.toLowerCase().trim() || "";
-    const isAdminRole = role === "owner" || role === "admin" || role === "platform admin" || role.includes("super");
+    const role = (userRole || "").toLowerCase().trim().replace(/_/g, " ");
+    const isAdminRole = ["owner", "admin", "platform admin", "super admin"].includes(role);
 
     const canAccess = (path: string) => {
-        if (isSystemAdmin) return true;
-        if (isAdminRole) return true;
-        if (path === "/dashboard" || path === "/guide") return true;
-        
-        if (allowedPages && allowedPages.length > 0) {
-            return allowedPages.some(allowed => 
-                pathname.startsWith(allowed) || 
-                path.startsWith(allowed) ||
-                (allowed === "/easy-orders" && path.startsWith("/platform-orders")) ||
-                (allowed === "/platform-orders" && path.startsWith("/easy-orders"))
-            );
-        }
-
-        return false;
+        return canOpenPage(path, userRole, allowedPages, isSystemAdmin);
     };
 
     // Define the menu structure
@@ -145,6 +127,7 @@ export function SidebarContent({ onLinkClick }: { onLinkClick?: () => void }) {
             title: t("Overview"),
             items: [
                 { title: t("Dashboard"), href: "/dashboard", icon: LayoutDashboard, exactMatch: true },
+                { title: t("Start here"), href: "/getting-started", icon: BookOpen },
                 { title: t("System Guide"), href: "/guide", icon: BookOpen },
                 { title: t("My HR"), href: "/my-hr", icon: Calendar },
             ]
@@ -260,10 +243,13 @@ export function SidebarContent({ onLinkClick }: { onLinkClick?: () => void }) {
                 }
                 return false;
             }
-            return canAccess(item.href);
+            return canAccess(item.href) || !!item.subItems?.some(sub => canAccess(sub.href));
         }).map(item => {
             if (item.subItems) {
                 const filteredSubItems = item.subItems.filter(subItem => canAccess(subItem.href));
+                if (!canAccess(item.href) && filteredSubItems.length) {
+                    return { ...filteredSubItems[0], subItems: filteredSubItems.slice(1) };
+                }
                 return { ...item, subItems: filteredSubItems };
             }
             return item;
@@ -281,7 +267,7 @@ export function SidebarContent({ onLinkClick }: { onLinkClick?: () => void }) {
                 const hasActiveSubItem = item.subItems?.some(sub => sub.exactMatch ? pathname === sub.href : pathname.startsWith(sub.href));
                 return isItemActive || hasActiveSubItem;
             });
-            if (hasActiveItem) activeGroups.push(group.title);
+            if (hasActiveItem) activeGroups.push(group.items[0].href);
         });
         // Prevent closing manually expanded groups, just add the active ones
         setExpandedGroups(prev => Array.from(new Set([...prev, ...activeGroups])));
@@ -310,13 +296,15 @@ export function SidebarContent({ onLinkClick }: { onLinkClick?: () => void }) {
     return (
         <div className="space-y-6 select-none">
             {accessibleGroups.map((group, groupIndex) => {
-                const isExpanded = expandedGroups.includes(group.title);
+                const groupKey = group.items[0].href;
+                const isExpanded = expandedGroups.includes(groupKey);
                 
                 return (
                     <div key={groupIndex} className="space-y-1">
                         <button
-                            onClick={() => toggleGroup(group.title)}
-                            className="w-full flex items-center justify-between px-3 py-2 text-xs font-bold text-foreground/80 hover:text-foreground hover:bg-muted/50 rounded-md transition-colors group"
+                            onClick={() => toggleGroup(groupKey)}
+                            aria-expanded={isExpanded}
+                            className="w-full min-h-11 flex items-center justify-between px-3 py-2 text-xs font-bold text-foreground/80 hover:text-foreground hover:bg-muted/50 rounded-md transition-colors group"
                         >
                             <span className="uppercase tracking-widest">{group.title}</span>
                             {isExpanded ? (
@@ -326,7 +314,7 @@ export function SidebarContent({ onLinkClick }: { onLinkClick?: () => void }) {
                             )}
                         </button>
                         
-                        <div className={cn(
+                        <div inert={!isExpanded} className={cn(
                             "grid transition-all duration-200 ease-in-out",
                             isExpanded ? "grid-rows-[1fr] opacity-100 mt-1" : "grid-rows-[0fr] opacity-0"
                         )}>
@@ -340,7 +328,7 @@ export function SidebarContent({ onLinkClick }: { onLinkClick?: () => void }) {
                                                 <Button
                                                     variant={isActive ? "secondary" : "ghost"}
                                                     className={cn(
-                                                        "w-full justify-start h-9 transition-all duration-200",
+                                                        "w-full justify-start min-h-11 transition-all duration-200",
                                                         isActive ? "bg-primary text-primary-foreground font-medium hover:bg-primary/90 shadow-sm" : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
                                                     )}
                                                 >
@@ -360,7 +348,7 @@ export function SidebarContent({ onLinkClick }: { onLinkClick?: () => void }) {
                                                                     variant="ghost"
                                                                     size="sm"
                                                                     className={cn(
-                                                                        "w-full justify-start h-8 text-xs transition-colors",
+                                                                        "w-full justify-start min-h-11 text-sm transition-colors",
                                                                         isSubActive 
                                                                             ? "bg-muted/50 text-foreground font-medium" 
                                                                             : "text-muted-foreground hover:text-foreground hover:bg-muted/30"

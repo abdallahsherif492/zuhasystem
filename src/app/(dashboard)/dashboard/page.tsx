@@ -3,6 +3,7 @@
 import { useEffect, useState, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
+import { GettingStarted } from "@/components/onboarding/getting-started";
 import { supabase } from "@/lib/supabase";
 import { useBusiness } from "@/contexts/BusinessContext";
 import { useLanguage } from "@/contexts/LanguageContext";
@@ -383,6 +384,7 @@ function DashboardContent() {
 
   return (
     <div className="flex flex-col space-y-6 pb-12 font-sans">
+      <GettingStarted compact />
       
       {/* Real-Time Pending Order Notification Banner */}
       {pendingOrderAlert && (

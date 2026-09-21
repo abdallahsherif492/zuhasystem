@@ -8,6 +8,7 @@ import {
 } from "@/components/ui/command";
 import { supabase } from "@/lib/supabase";
 import { useBusiness } from "@/contexts/BusinessContext";
+import { canOpenPage } from "@/lib/navigation-access";
 import { formatCurrency } from "@/lib/utils";
 import { LayoutDashboard, ShoppingCart, Globe, Truck, Package, Box, Users, Banknote, LineChart, Settings, Ticket, Megaphone, FileText, ShoppingBag, Calendar, History, BookOpen, Wallet, AlertTriangle, Loader2, Search, Plus, LifeBuoy } from "lucide-react";
 
@@ -27,6 +28,7 @@ type Dest = { label: string; hint?: string; href: string; icon: any; keywords: s
 // Arabic and English keywords on every entry: the UI language is configurable,
 // and staff type whichever comes to mind.
 const DESTINATIONS: Dest[] = [
+    { label: "ابدأ هنا", hint: "أول أوردر خطوة بخطوة", href: "/getting-started", icon: BookOpen, keywords: "start setup onboarding help بداية تجهيز مساعدة" },
     { label: "لوحة التحكم", hint: "Dashboard", href: "/dashboard", icon: LayoutDashboard, keywords: "dashboard home رئيسية الرئيسية" },
     { label: "الأوردرات", hint: "كل الأوردرات", href: "/orders", icon: ShoppingCart, keywords: "orders اوردرات طلبات" },
     { label: "أوردر جديد", hint: "إنشاء", href: "/orders/new", icon: Plus, keywords: "new order اوردر جديد انشاء create" },
@@ -60,7 +62,7 @@ interface Hit { id: string; title: string; sub: string; href: string; }
 
 export function CommandPalette() {
     const router = useRouter();
-    const { activeBusiness } = useBusiness();
+    const { activeBusiness, userRole, allowedPages, isSystemAdmin } = useBusiness();
     const [open, setOpen] = useState(false);
     const [query, setQuery] = useState("");
     const [searching, setSearching] = useState(false);
@@ -169,7 +171,7 @@ export function CommandPalette() {
                     </CommandEmpty>
 
                     <CommandGroup heading="الصفحات">
-                        {DESTINATIONS.map(d => (
+                        {DESTINATIONS.filter(d => canOpenPage(d.href, userRole, allowedPages, isSystemAdmin)).map(d => (
                             <CommandItem
                                 key={d.href}
                                 value={`${d.label} ${d.hint || ""} ${d.keywords}`}
