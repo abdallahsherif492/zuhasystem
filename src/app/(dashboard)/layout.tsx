@@ -10,6 +10,7 @@ import { AutoSyncProvider } from "@/components/providers/AutoSyncProvider";
 import { FloatingChatWidget } from "@/components/support/floating-chat-widget";
 import { WalkthroughWrapper } from "@/components/walkthrough/walkthrough-wrapper";
 import { StartHereLink } from "@/components/onboarding/getting-started";
+import { StarterExtras } from "@/components/onboarding/starter-extras";
 
 export default function DashboardLayout({
   children,
@@ -52,6 +53,7 @@ export default function DashboardLayout({
         </main>
       </div>
       <FloatingChatWidget />
+      <StarterExtras />
     </div>
   );
 }

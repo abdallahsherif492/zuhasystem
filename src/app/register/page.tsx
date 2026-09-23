@@ -12,6 +12,8 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Loader2, ArrowLeft, Mail, Lock, User, Phone } from "lucide-react";
 import { motion } from "framer-motion";
 import { trackCompleteRegistration, flushPixelEvent } from "@/lib/meta-pixel";
+import { normalizeEgyptianMobile, supportMessages } from "@/lib/support";
+import { WhatsappHelpButton } from "@/components/support/whatsapp-help";
 
 export default function RegisterPage() {
     const router = useRouter();
@@ -28,8 +30,16 @@ export default function RegisterPage() {
 
     const handleRegister = async (e: React.FormEvent) => {
         e.preventDefault();
-        setLoading(true);
         setError(null);
+        // Required now: a signup we cannot reach is a signup we lose. Every
+        // merchant who left on day one had given us only an email, so nobody
+        // could offer the setup help the landing page promises.
+        const mobile = normalizeEgyptianMobile(phone);
+        if (!mobile) {
+            setError("اكتب رقم موبايل مصري صحيح (11 رقم يبدأ بـ 01) — هنكلمك عليه واتساب عشان نساعدك تجهّز السيستم.");
+            return;
+        }
+        setLoading(true);
 
         try {
             const { data, error } = await supabase.auth.signUp({
@@ -38,7 +48,7 @@ export default function RegisterPage() {
                 options: {
                     data: {
                         full_name: fullName,
-                        phone: phone.trim() || null,
+                        phone: mobile,
                     }
                 }
             });
@@ -162,7 +172,7 @@ export default function RegisterPage() {
 
                             <div className="space-y-3">
                                 <Label htmlFor="phone" className="text-slate-700 font-bold text-sm block text-right">
-                                    رقم التليفون <span className="font-normal text-slate-400">(اختياري)</span>
+                                    رقم الموبايل (واتساب)
                                 </Label>
                                 <div className="relative">
                                     <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
@@ -172,13 +182,17 @@ export default function RegisterPage() {
                                         id="phone"
                                         name="phone"
                                         type="tel"
+                                        inputMode="tel"
+                                        autoComplete="tel"
+                                        required
                                         value={phone}
                                         onChange={(e) => setPhone(e.target.value)}
                                         className="h-12 pr-10 pl-4 bg-slate-50 border-slate-200 focus:border-indigo-500 focus:ring-indigo-500 rounded-xl text-right transition-all"
-                                        placeholder="010..."
+                                        placeholder="01xxxxxxxxx"
                                         dir="ltr"
                                     />
                                 </div>
+                                <p className="text-xs text-slate-500 text-right">هنكلمك عليه عشان نساعدك تجهّز متجرك ببلاش.</p>
                             </div>
 
                             <div className="space-y-3">
@@ -219,6 +233,10 @@ export default function RegisterPage() {
                             سجل دخول من هنا
                         </Link>
                     </p>
+                    <div className="-mt-4 flex flex-col items-center gap-2 pb-8 text-center">
+                        <p className="text-sm text-slate-500">عندك سؤال قبل ما تسجّل؟</p>
+                        <WhatsappHelpButton message={supportMessages.signup} variant="outline" />
+                    </div>
                 </motion.div>
             </div>
 
@@ -266,7 +284,7 @@ export default function RegisterPage() {
                                 كبر تجارتك بسرعة
                             </h1>
                             <p className="text-xl text-indigo-100 max-w-xl mx-auto leading-relaxed font-medium">
-                                انضم لمئات البراندات اللي بتدير شغلها اليومي وتتابع مخزونها وتزود أرباحها بسهولة من مكان واحد.
+                                أوردراتك ومخزونك وحساباتك وشركات الشحن في مكان واحد — وإحنا بنجهّزهولك ببلاش.
                             </p>
                         </motion.div>
                         

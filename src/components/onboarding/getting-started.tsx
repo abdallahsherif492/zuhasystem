@@ -10,6 +10,8 @@ import { canOpenPage } from "@/lib/navigation-access";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
+import { SetupForYouCard } from "@/components/support/whatsapp-help";
+import { EasyOrdersImportButton } from "@/components/onboarding/easyorders-import-button";
 
 export function StartHereLink() {
     const { language } = useLanguage();
@@ -62,6 +64,8 @@ export function GettingStarted({ compact = false }: { compact?: boolean }) {
         { title: copy("جهّز شركة الشحن", "Set up your courier"), href: "/shipping", action: copy("افتح شركات الشحن", "Open couriers"), description: copy("ضيف الشركة اللي بتشحن معاها، وبعدها راجع أسعار المحافظات عشان حساب الربح يبقى مفيد.", "Add the courier you use, then review governorate rates so profit estimates are useful."), done: current?.done[1] },
         { title: copy("دخّل أول أوردر", "Bring in your first order"), href: "/orders/new", action: copy("ضيف أوردر يدوي", "Add an order manually"), description: copy("سجّل أوردر حقيقي ببيانات العميل والمنتجات. أو اربط متجرك من الاختيار اللي تحت عشان الطلبات توصلك تلقائي.", "Enter a real order with customer details and products, or connect your store below to receive orders automatically."), done: current?.done[2] },
     ];
+    const tc = activeBusiness.theme_config || {};
+    const hasEasyOrdersKey = !!(tc.integrations?.platforms?.easyorders?.apiKey || tc.easyorders_api_key);
     const complete = ready ? steps.filter(s => s.done).length : 0;
     const next = steps.find(s => !s.done);
     const tasks = [
@@ -90,6 +94,9 @@ export function GettingStarted({ compact = false }: { compact?: boolean }) {
                 <h1 className="text-2xl font-bold sm:text-3xl">{copy("من أول أوردر لحد التحصيل", "From your first order to getting paid")}</h1>
                 <p className="text-muted-foreground">{copy("ابدأ بخطوة واحدة. تقدر ترجع هنا في أي وقت من القايمة.", "Start with one step. Return here anytime from the menu.")}</p>
             </header>
+            {/* The landing page promises free setup; this is where a new
+                merchant who is stuck can take us up on it. */}
+            {isManager && ready && complete < steps.length && <SetupForYouCard storeName={activeBusiness.name} />}
             {isManager && <Card>
                 <CardHeader>
                     <div className="flex flex-wrap items-center justify-between gap-3">
@@ -114,7 +121,12 @@ export function GettingStarted({ compact = false }: { compact?: boolean }) {
                     </ol>
                     <div className="flex flex-col gap-3 rounded-xl bg-muted/50 p-4 sm:flex-row sm:items-center sm:justify-between">
                         <div><p className="font-medium">{copy("عندك متجر على EasyOrders أو Shopify؟", "Already selling on EasyOrders or Shopify?")}</p><p className="text-sm text-muted-foreground">{copy("اربطه عشان تستقبل طلباته هنا. تقدر تبدأ يدوي وتربطه بعدين.", "Connect it to receive orders here. You can also start manually and connect later.")}</p></div>
-                        <Button asChild variant="outline" className="min-h-11 shrink-0"><Link href="/settings?tab=platforms">{copy("اربط متجرك", "Connect your store")}</Link></Button>
+                        <div className="flex shrink-0 flex-wrap gap-2">
+                            {/* With the API key saved, the catalogue can come straight
+                                over instead of being typed product by product. */}
+                            {hasEasyOrdersKey && complete < steps.length && <EasyOrdersImportButton businessId={activeBusiness.id} className="min-h-11" onDone={() => setRevision(r => r + 1)} />}
+                            <Button asChild variant="outline" className="min-h-11"><Link href="/settings?tab=platforms">{copy("اربط متجرك", "Connect your store")}</Link></Button>
+                        </div>
                     </div>
                 </CardContent>
             </Card>}

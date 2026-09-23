@@ -12,6 +12,8 @@ import { Loader2, Store, CheckCircle2, LogOut, Package, BarChart3, Wallet, Link 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { safeLocal } from "@/lib/safe-storage";
 import { motion } from "framer-motion";
+import { supportMessages } from "@/lib/support";
+import { WhatsappHelpButton } from "@/components/support/whatsapp-help";
 
 const features = [
     { icon: Package, text: "إدارة الأوردرات والشحن" },
@@ -278,6 +280,12 @@ export default function OnboardingPage() {
                                         تقدر تغيّر اسم المتجر وكل الإعدادات في أي وقت بعدين
                                     </p>
 
+                                    <WhatsappHelpButton
+                                        message={supportMessages.setup(businessName.trim() || null)}
+                                        label="محتاج مساعدة؟ كلّمنا واتساب"
+                                        variant="outline"
+                                        className="w-full"
+                                    />
                                     <Button
                                         type="button"
                                         variant="ghost"

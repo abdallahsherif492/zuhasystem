@@ -1,5 +1,8 @@
 "use client";
 
+import { EasyOrdersImportButton } from "@/components/onboarding/easyorders-import-button";
+import { SetupForYouCard } from "@/components/support/whatsapp-help";
+import { useStarterMode } from "@/hooks/use-starter-mode";
 import { useState, useEffect } from "react";
 import { useBusiness } from "@/contexts/BusinessContext";
 import { useLanguage, DEFAULT_LANGUAGE, DEFAULT_DIRECTION } from "@/contexts/LanguageContext";
@@ -24,6 +27,8 @@ import { IntegrationInstructions } from "@/components/settings/integration-instr
 export default function SettingsPage() {
     const { activeBusiness, userRole } = useBusiness();
     const { t } = useLanguage();
+    // Setup help and catalogue import are for stores still getting started.
+    const { isStarter: isStarterStore } = useStarterMode();
     
     const [loading, setLoading] = useState(false);
     const [saving, setSaving] = useState(false);
@@ -1063,6 +1068,20 @@ export default function SettingsPage() {
                                                 type="password"
                                             />
                                         </div>
+
+                                        {/* The key already lets us read their catalogue, so
+                                            nobody has to type their products in twice. Additive:
+                                            products the store already has are skipped. */}
+                                        {activeBusiness && isStarterStore && (
+                                            <div className="flex flex-col gap-2 rounded-xl border border-dashed p-3 sm:flex-row sm:items-center sm:justify-between">
+                                                <p className="text-xs text-muted-foreground">
+                                                    {t("After saving the API key, bring your EasyOrders products in with one tap.")}
+                                                </p>
+                                                <EasyOrdersImportButton businessId={activeBusiness.id} className="min-h-11 shrink-0" />
+                                            </div>
+                                        )}
+
+                                        {isStarterStore && <SetupForYouCard storeName={activeBusiness?.name} />}
 
                                         {/* Visual Instructions Card for EasyOrders */}
                                         <div className="mt-4 p-4 rounded-xl border border-primary/20 bg-primary/5 space-y-3">

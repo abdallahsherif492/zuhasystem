@@ -7,6 +7,7 @@ import { useBusiness } from "@/contexts/BusinessContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { cn } from "@/lib/utils";
 import { canOpenPage } from "@/lib/navigation-access";
+import { useStarterMode, STARTER_PAGES } from "@/hooks/use-starter-mode";
 import { Button } from "@/components/ui/button";
 import { LayoutDashboard, AlertTriangle, Package, ShoppingCart, Settings, Users, Truck, Banknote, LineChart, ShoppingBag, Megaphone, Box, DollarSign, ShieldCheck, FileText, Ticket, CreditCard, Clock, Inbox, Calendar, LogOut, Globe, ChevronDown, ChevronRight, BarChart3, PieChart, History, BookOpen, Wallet, Upload, LifeBuoy } from "lucide-react";
 
@@ -89,6 +90,7 @@ export function SidebarContent({ onLinkClick }: { onLinkClick?: () => void }) {
     const pathname = usePathname();
     const { userRole, allowedPages, isSystemAdmin, loading, activeBusiness } = useBusiness();
     const { t } = useLanguage();
+    const { simpleMenu, isStarter, setShowAll } = useStarterMode();
 
     // Orders waiting to be confirmed. Shown beside "New from stores" so the
     // queue is visible without opening it — previously the only way to know
@@ -258,10 +260,21 @@ export function SidebarContent({ onLinkClick }: { onLinkClick?: () => void }) {
         return { ...group, items: filteredItems };
     }).filter(group => group.items.length > 0);
 
+    // A store still setting up sees the pages its first week needs, "Start
+    // here" first. Nothing is disabled: every page stays reachable by link and
+    // through "all pages" below.
+    const visibleGroups = !simpleMenu ? accessibleGroups : accessibleGroups.map(group => ({
+        ...group,
+        items: group.items
+            .filter(item => STARTER_PAGES.has(item.href))
+            .map(item => item.subItems ? { ...item, subItems: item.subItems.filter(sub => STARTER_PAGES.has(sub.href)) } : item)
+            .sort((a, b) => Number(b.href === "/getting-started") - Number(a.href === "/getting-started")),
+    })).filter(group => group.items.length > 0);
+
     // Auto-expand groups based on active path
     useEffect(() => {
         const activeGroups: string[] = [];
-        accessibleGroups.forEach(group => {
+        visibleGroups.forEach(group => {
             const hasActiveItem = group.items.some(item => {
                 const isItemActive = item.exactMatch ? pathname === item.href : pathname.startsWith(item.href);
                 const hasActiveSubItem = item.subItems?.some(sub => sub.exactMatch ? pathname === sub.href : pathname.startsWith(sub.href));
@@ -271,7 +284,7 @@ export function SidebarContent({ onLinkClick }: { onLinkClick?: () => void }) {
         });
         // Prevent closing manually expanded groups, just add the active ones
         setExpandedGroups(prev => Array.from(new Set([...prev, ...activeGroups])));
-    }, [pathname, loading]); // Added loading to deps to re-evaluate once loaded
+    }, [pathname, loading, simpleMenu]); // Added loading to deps to re-evaluate once loaded
 
     const toggleGroup = (title: string) => {
         setExpandedGroups(prev => 
@@ -295,9 +308,10 @@ export function SidebarContent({ onLinkClick }: { onLinkClick?: () => void }) {
 
     return (
         <div className="space-y-6 select-none">
-            {accessibleGroups.map((group, groupIndex) => {
+            {visibleGroups.map((group, groupIndex) => {
                 const groupKey = group.items[0].href;
-                const isExpanded = expandedGroups.includes(groupKey);
+                // The short menu is short enough to show whole; collapsed groups there only hid the next step.
+                const isExpanded = simpleMenu || expandedGroups.includes(groupKey);
                 
                 return (
                     <div key={groupIndex} className="space-y-1">
@@ -375,6 +389,18 @@ export function SidebarContent({ onLinkClick }: { onLinkClick?: () => void }) {
                     </div>
                 );
             })}
+            {isStarter && (
+                <div className="px-3">
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        className="w-full min-h-11 text-xs"
+                        onClick={() => setShowAll(simpleMenu)}
+                    >
+                        {simpleMenu ? t("Show all pages") : t("Show the essentials only")}
+                    </Button>
+                </div>
+            )}
             <style jsx global>{`
                 .custom-scrollbar::-webkit-scrollbar {
                     width: 4px;
