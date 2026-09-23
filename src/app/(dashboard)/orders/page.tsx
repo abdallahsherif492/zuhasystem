@@ -18,7 +18,7 @@ import {
     TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Loader2, MoreHorizontal, Download, Search, Printer, FilterX, ChevronLeft, ChevronRight, Upload, Repeat } from "lucide-react";
+import { Plus, Loader2, MoreHorizontal, Download, Search, Printer, FilterX, ChevronLeft, ChevronRight, Upload, Repeat, FileSpreadsheet } from "lucide-react";
 import * as XLSX from "xlsx";
 import { orderNetProfit, overheadRateFor, type OverheadRow, type CourierFees } from "@/lib/orders/net-profit";
 import { useRepeatOrders } from "@/hooks/use-repeat-orders";
@@ -538,8 +538,13 @@ function OrdersContent() {
             <div className="flex flex-col gap-4">
                 <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                     <h1 className="text-3xl font-bold tracking-tight">{t("Orders")}</h1>
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                         <DateRangePicker />
+                        <Link href="/orders/import">
+                            <Button variant="outline">
+                                <FileSpreadsheet className="mr-2 h-4 w-4" /> {t("Import from Excel")}
+                            </Button>
+                        </Link>
                         <Link href="/orders/new">
                             <Button id="create-order-btn">
                                 <Plus className="mr-2 h-4 w-4" /> {t("New Order")}

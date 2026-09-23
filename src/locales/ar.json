@@ -493,5 +493,6 @@
   "Add an option": "ضيف اختيار",
   "Remove option": "امسح الاختيار",
   "Save product": "احفظ المنتج",
-  "Order number": "رقم الأوردر"
+  "Order number": "رقم الأوردر",
+  "Import from Excel": "رفع من Excel"
 }
