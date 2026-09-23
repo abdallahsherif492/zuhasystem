@@ -158,6 +158,45 @@ export default function ActionsLogPage() {
 
     useEffect(() => { fetchLogs(); }, [fetchLogs]);
 
+    /**
+     * The order behind each order row: reference, customer and phone.
+     *
+     * Rows written before the log named orders properly carry only whatever
+     * the screen that wrote them chose — the platform-orders screen used the
+     * 36-character EasyOrders id and sometimes no customer — so the order is
+     * read here instead of trusting the stored name. Bulk rows point at no
+     * single order and are left as they are.
+     */
+    const [orderInfo, setOrderInfo] = useState<Map<string, { ref: string; name: string; phone: string }>>(new Map());
+    useEffect(() => {
+        if (!activeBusiness) return;
+        const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        const ids = Array.from(new Set(logs
+            .filter(l => l.entity_type === "order" && uuid.test(l.entity_id || "") && !l.metadata?.bulk)
+            .map(l => l.entity_id)))
+            .filter(id => !orderInfo.has(id));
+        if (!ids.length) return;
+        let cancelled = false;
+        (async () => {
+            const found = new Map<string, { ref: string; name: string; phone: string }>();
+            for (let i = 0; i < ids.length; i += 100) {
+                const { data } = await supabase
+                    .from("orders")
+                    .select("id, customer_info")
+                    .eq("business_id", activeBusiness.id)
+                    .in("id", ids.slice(i, i + 100));
+                for (const o of data || []) {
+                    const info = (o.customer_info || {}) as { name?: string; phone?: string };
+                    found.set(o.id, { ref: o.id.slice(0, 8), name: String(info.name || "").trim(), phone: String(info.phone || "").trim() });
+                }
+            }
+            if (!cancelled && found.size) setOrderInfo(prev => new Map([...prev, ...found]));
+        })();
+        return () => { cancelled = true; };
+        // orderInfo is read only to skip ids already fetched.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [logs, activeBusiness]);
+
     // Dropdown options come from what is actually in the log, so a filter can
     // never offer a value that returns nothing, and never hides one it should.
     useEffect(() => {
@@ -467,9 +506,23 @@ export default function ActionsLogPage() {
                                                 <TableCell className="w-[180px]">
                                                     <div className="space-y-1">
                                                         {getEntityBadge(log.entity_type)}
-                                                        <p className="font-semibold text-xs text-foreground truncate max-w-[160px]" title={log.entity_name}>
-                                                            {log.entity_name}
-                                                        </p>
+                                                        {orderInfo.get(log.entity_id) ? (() => {
+                                                            const o = orderInfo.get(log.entity_id)!;
+                                                            return (
+                                                                <div className="space-y-0.5" title={log.entity_name}>
+                                                                    <p className="font-semibold text-xs text-foreground truncate max-w-[170px]">
+                                                                        <span className="font-mono">#{o.ref}</span>{o.name ? ` · ${o.name}` : ""}
+                                                                    </p>
+                                                                    {o.phone && (
+                                                                        <p className="font-mono text-[11px] text-muted-foreground" dir="ltr">{o.phone}</p>
+                                                                    )}
+                                                                </div>
+                                                            );
+                                                        })() : (
+                                                            <p className="font-semibold text-xs text-foreground truncate max-w-[160px]" title={log.entity_name}>
+                                                                {log.entity_name}
+                                                            </p>
+                                                        )}
                                                     </div>
                                                 </TableCell>
                                                 <TableCell className="max-w-[350px]">
@@ -516,6 +569,11 @@ export default function ActionsLogPage() {
                                                                         : "—"} />
                                                                 <Detail label={t("Entity")} value={`${t(LABELS[log.entity_type] || log.entity_type)} — ${log.entity_name}`} />
                                                                 <Detail label={t("Record ID")} value={log.entity_id} mono />
+                                                                {orderInfo.get(log.entity_id) && (<>
+                                                                    <Detail label={t("Order number")} value={`#${orderInfo.get(log.entity_id)!.ref}`} mono />
+                                                                    <Detail label={t("Customer")} value={orderInfo.get(log.entity_id)!.name} />
+                                                                    <Detail label={t("Phone")} value={orderInfo.get(log.entity_id)!.phone} mono />
+                                                                </>)}
                                                             </div>
 
                                                             {log.changes?.length > 0 && (

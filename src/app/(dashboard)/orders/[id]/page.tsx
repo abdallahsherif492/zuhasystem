@@ -67,6 +67,7 @@ const CHANNELS = ["Facebook", "Instagram", "Tiktok", "Tiktok Website", "Website"
 import { useBusiness } from "@/contexts/BusinessContext";
 import { ClosedBySelect } from "@/components/orders/closed-by-select";
 import { logBusinessAction, ActionDiff } from "@/lib/logs/actions-logger";
+import { orderLogName } from "@/lib/logs/order-log-name";
 
 export default function OrderDetailsPage() {
     const { activeBusiness, currentUser } = useBusiness();
@@ -433,7 +434,7 @@ export default function OrderDetailsPage() {
                 actionType: order?.status !== editForm.status ? "update_status" : "edit",
                 entityType: "order",
                 entityId: orderId,
-                entityName: `Order #${orderId.substring(0, 8)} (${editForm.customerName})`,
+                entityName: orderLogName(orderId, { name: editForm.customerName, phone: editForm.customerPhone }),
                 changes: auditChanges
             });
 

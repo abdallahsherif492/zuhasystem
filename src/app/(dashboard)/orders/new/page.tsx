@@ -84,6 +84,7 @@ const CHANNELS = ["Facebook", "Instagram", "Tiktok", "Tiktok Website", "Website"
 import { useBusiness } from "@/contexts/BusinessContext";
 import { ClosedBySelect } from "@/components/orders/closed-by-select";
 import { logBusinessAction } from "@/lib/logs/actions-logger";
+import { orderLogName } from "@/lib/logs/order-log-name";
 
 export default function NewOrderPage() {
     const { activeBusiness, currentUser } = useBusiness();
@@ -460,7 +461,7 @@ export default function NewOrderPage() {
                 actionType: "create",
                 entityType: "order",
                 entityId: orderData.id,
-                entityName: `Order #${orderData.id.substring(0, 8)} (${customerName})`,
+                entityName: orderLogName(orderData.id, { name: customerName, phone: customerPhone }),
                 changes: [
                     { field: "Total Amount", old_value: null, new_value: `${calculateTotal()} EGP` },
                     { field: "Status", old_value: null, new_value: initialStatus },

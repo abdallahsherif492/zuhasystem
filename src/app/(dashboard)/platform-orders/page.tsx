@@ -88,6 +88,7 @@ const GOVERNORATES = [
 ];
 
 import { logBusinessAction } from "@/lib/logs/actions-logger";
+import { orderLogName } from "@/lib/logs/order-log-name";
 
 
 function PlatformOrdersContent() {
@@ -268,7 +269,7 @@ function PlatformOrdersContent() {
                     actionType: "update_status",
                     entityType: "order",
                     entityId: order.id,
-                    entityName: `Platform Order #${order.easyorders_id || order.id.slice(0,8)} (${(order.customer_info as any)?.name || "Customer"})`,
+                    entityName: orderLogName(order.id, order.customer_info, "Platform Order"),
                     changes: [
                         { field: "Status", old_value: order.status, new_value: "Pending" },
                         { field: "Deposit Payment", old_value: null, new_value: `${order.paid_amount || 0} EGP (${accountName})` }
@@ -319,7 +320,7 @@ function PlatformOrdersContent() {
                         actionType: "update_status",
                         entityType: "order",
                         entityId: order.id,
-                        entityName: `Platform Order #${order.easyorders_id || order.id.slice(0,8)} (${(order.customer_info as any)?.name || "Customer"})`,
+                        entityName: orderLogName(order.id, order.customer_info, "Platform Order"),
                         changes: [
                             { field: "Status", old_value: order.status, new_value: "Pending" }
                         ]
@@ -350,7 +351,7 @@ function PlatformOrdersContent() {
                     actionType: "update_status",
                     entityType: "order",
                     entityId: orderId,
-                    entityName: `Platform Order #${targetOrder.easyorders_id || orderId.slice(0,8)}`,
+                    entityName: orderLogName(orderId, targetOrder.customer_info, "Platform Order"),
                     changes: [
                         { field: "Status", old_value: targetOrder.status, new_value: "Cancelled" }
                     ]
@@ -490,7 +491,7 @@ function PlatformOrdersContent() {
                     actionType: "edit",
                     entityType: "order",
                     entityId: orderId,
-                    entityName: `Platform Order #${targetOrder.easyorders_id || orderId.slice(0, 8)}`,
+                    entityName: orderLogName(orderId, targetOrder.customer_info, "Platform Order"),
                     changes: [
                         { 
                             field: "Item Variant", 
