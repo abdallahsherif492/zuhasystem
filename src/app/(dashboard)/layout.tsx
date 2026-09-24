@@ -11,6 +11,7 @@ import { FloatingChatWidget } from "@/components/support/floating-chat-widget";
 import { WalkthroughWrapper } from "@/components/walkthrough/walkthrough-wrapper";
 import { StartHereLink } from "@/components/onboarding/getting-started";
 import { StarterExtras } from "@/components/onboarding/starter-extras";
+import { PageTutorialButton } from "@/components/onboarding/tutorials";
 
 export default function DashboardLayout({
   children,
@@ -36,6 +37,7 @@ export default function DashboardLayout({
           <MobileNav />
           <CommandPalette />
           <StartHereLink />
+          <PageTutorialButton />
           <div className="min-w-0 flex flex-1 justify-end items-center gap-2">
             <BusinessSwitcher />
           </div>

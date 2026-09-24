@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { CheckCircle2, Circle, ArrowRight, BookOpen, RefreshCw } from "lucide-react";
+import { CheckCircle2, Circle, ArrowRight, BookOpen, RefreshCw, PlayCircle } from "lucide-react";
 import { useBusiness } from "@/contexts/BusinessContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { supabase } from "@/lib/supabase";
@@ -12,6 +12,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Progress } from "@/components/ui/progress";
 import { SetupForYouCard } from "@/components/support/whatsapp-help";
 import { EasyOrdersImportButton } from "@/components/onboarding/easyorders-import-button";
+import { TutorialPlaylist } from "@/components/onboarding/tutorials";
 
 export function StartHereLink() {
     const { language } = useLanguage();
@@ -82,7 +83,10 @@ export function GettingStarted({ compact = false }: { compact?: boolean }) {
                     <p className="font-semibold">{copy("مش عارف تبدأ منين؟", "Not sure where to start?")}</p>
                     <p className="text-sm text-muted-foreground">{isManager && ready && next ? copy(`الخطوة الجاية: ${next.title} — ${complete} من ${steps.length} خطوات تمت.`, `Next: ${next.title} — ${complete} of ${steps.length} steps done.`) : copy("اختار المهمة اللي محتاج تعملها، وهنوصلك لمكانها.", "Choose a task and find exactly where to do it.")}</p>
                 </div>
-                <Button asChild className="min-h-11 shrink-0"><Link href="/getting-started">{copy("ابدأ هنا", "Start here")}<ArrowRight className="ms-2 h-4 w-4 rtl:rotate-180" /></Link></Button>
+                <div className="flex shrink-0 flex-wrap gap-2">
+                    <Button asChild variant="outline" className="min-h-11"><Link href="/getting-started#tutorials"><PlayCircle className="me-2 h-4 w-4" />{copy("فيديوهات الشرح", "Tutorial videos")}</Link></Button>
+                    <Button asChild className="min-h-11"><Link href="/getting-started">{copy("ابدأ هنا", "Start here")}<ArrowRight className="ms-2 h-4 w-4 rtl:rotate-180" /></Link></Button>
+                </div>
             </CardContent>
         </Card>
     );
@@ -94,6 +98,8 @@ export function GettingStarted({ compact = false }: { compact?: boolean }) {
                 <h1 className="text-2xl font-bold sm:text-3xl">{copy("من أول أوردر لحد التحصيل", "From your first order to getting paid")}</h1>
                 <p className="text-muted-foreground">{copy("ابدأ بخطوة واحدة. تقدر ترجع هنا في أي وقت من القايمة.", "Start with one step. Return here anytime from the menu.")}</p>
             </header>
+            {/* The first thing a new store sees after signing up. */}
+            <TutorialPlaylist />
             {/* The landing page promises free setup; this is where a new
                 merchant who is stuck can take us up on it. */}
             {isManager && ready && complete < steps.length && <SetupForYouCard storeName={activeBusiness.name} />}
