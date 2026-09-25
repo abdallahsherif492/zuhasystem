@@ -5,16 +5,15 @@ import { usePathname } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { useBusiness } from "@/contexts/BusinessContext";
 import { useStarterMode } from "@/hooks/use-starter-mode";
-import { supportMessages } from "@/lib/support";
 import { activationAlreadyReported, reportActivation } from "@/lib/activation";
-import { WhatsappHelpFloating } from "@/components/support/whatsapp-help";
+import { TutorialFloatingButton } from "@/components/onboarding/tutorials";
 
 /** Stores older than this are not new signups; their first product is long past. */
 const NEW_STORE_DAYS = 30;
 
 /**
- * What a store still getting started gets on top of the normal app: a WhatsApp
- * button on every screen, and — once — a signal to Meta that this signup has
+ * What a store still getting started gets on top of the normal app: a tutorial
+ * video button on every screen, and — once — a signal to Meta that this signup has
  * started using the system. Renders nothing for an established store.
  */
 export function StarterExtras() {
@@ -48,5 +47,7 @@ export function StarterExtras() {
     }, [businessId, isStarter, pathname, activeBusiness?.theme_config]);
 
     if (!isStarter) return null;
-    return <WhatsappHelpFloating message={supportMessages.help(activeBusiness?.name)} />;
+    // Videos first: new stores messaged us before trying anything. WhatsApp
+    // is still one tap away, under each video.
+    return <TutorialFloatingButton />;
 }

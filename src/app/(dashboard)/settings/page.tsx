@@ -1,7 +1,7 @@
 "use client";
 
 import { EasyOrdersImportButton } from "@/components/onboarding/easyorders-import-button";
-import { SetupForYouCard } from "@/components/support/whatsapp-help";
+import { TutorialVideoButton } from "@/components/onboarding/tutorials";
 import { useStarterMode } from "@/hooks/use-starter-mode";
 import { useState, useEffect } from "react";
 import { useBusiness } from "@/contexts/BusinessContext";
@@ -1081,7 +1081,7 @@ export default function SettingsPage() {
                                             </div>
                                         )}
 
-                                        {isStarterStore && <SetupForYouCard storeName={activeBusiness?.name} />}
+                                        <TutorialVideoButton numbers={[9]} label={t("Watch how to connect EasyOrders")} className="w-full sm:w-auto" />
 
                                         {/* Visual Instructions Card for EasyOrders */}
                                         <div className="mt-4 p-4 rounded-xl border border-primary/20 bg-primary/5 space-y-3">

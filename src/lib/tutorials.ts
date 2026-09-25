@@ -16,23 +16,28 @@ export interface Tutorial {
     n: number;
     title: string;
     videoId?: string;
+    /** Not published yet (11 and 12 were recorded on the live store and are being re-recorded). */
+    hidden?: boolean;
     pages: string[];
 }
 
-export const TUTORIALS: Tutorial[] = [
-    { n: 1, title: "إنشاء الحساب والمتجر", pages: ["/getting-started"] },
-    { n: 2, title: "إضافة المنتجات", pages: ["/products", "/products/*"] },
-    { n: 3, title: "إضافة شركة الشحن", pages: ["/shipping"] },
-    { n: 4, title: "إضافة أوردر يدوي", pages: ["/orders/new", "/orders", "/accounting"] },
-    { n: 5, title: "رفع الأوردرات من Excel", pages: ["/orders/import", "/orders"] },
-    { n: 6, title: "كشف الأوردرات المتكررة", pages: ["/orders", "/platform-orders"] },
-    { n: 7, title: "الطباعة والتحضير والشحن", pages: ["/logistics"] },
-    { n: 8, title: "ربط شركات الشحن", pages: ["/settings", "/shipping"] },
-    { n: 9, title: "ربط EasyOrders و Shopify", pages: ["/settings", "/platform-orders"] },
-    { n: 10, title: "الاشتراك والدفع", pages: ["/settings"] },
-    { n: 11, title: "تأكيد طلبات المتاجر", pages: ["/platform-orders"] },
-    { n: 12, title: "متابعة الشحن ومشاكله", pages: ["/logistics/issues", "/logistics"] },
+const ALL_TUTORIALS: Tutorial[] = [
+    { n: 1, videoId: "o_43bCuGD8M", title: "إنشاء الحساب والمتجر", pages: ["/getting-started"] },
+    { n: 2, videoId: "ZnOAOKW0G2A", title: "إضافة المنتجات", pages: ["/products", "/products/*"] },
+    { n: 3, videoId: "HXPbdT3YAW8", title: "إضافة شركة الشحن", pages: ["/shipping"] },
+    { n: 4, videoId: "xV9N64SKmuQ", title: "إضافة أوردر يدوي", pages: ["/orders/new", "/orders", "/accounting"] },
+    { n: 5, videoId: "c5eUp3qHEbc", title: "رفع الأوردرات من Excel", pages: ["/orders/import", "/orders"] },
+    { n: 6, videoId: "af_kh6_yx0Q", title: "كشف الأوردرات المتكررة", pages: ["/orders", "/platform-orders"] },
+    { n: 7, videoId: "TxkZeE8ogWc", title: "الطباعة والتحضير والشحن", pages: ["/logistics"] },
+    { n: 8, videoId: "eeuZ42ErVBY", title: "ربط شركات الشحن", pages: ["/settings", "/shipping"] },
+    { n: 9, videoId: "ajhUVL_QJ40", title: "ربط EasyOrders و Shopify", pages: ["/settings", "/platform-orders"] },
+    { n: 10, videoId: "8fWO_BZ1OAY", title: "الاشتراك والدفع", pages: ["/settings"] },
+    { n: 11, hidden: true, title: "تأكيد طلبات المتاجر", pages: ["/platform-orders"] },
+    { n: 12, hidden: true, title: "متابعة الشحن ومشاكله", pages: ["/logistics/issues", "/logistics"] },
 ];
+
+/** The videos people can watch. A hidden one appears nowhere until it is published. */
+export const TUTORIALS: Tutorial[] = ALL_TUTORIALS.filter(t => !t.hidden);
 
 const matches = (page: string, path: string) =>
     page.endsWith("/*") ? path.startsWith(page.slice(0, -1)) : path === page;

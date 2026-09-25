@@ -1,8 +1,7 @@
 "use client";
 
-import { MessageCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { supportMessages, supportWhatsappLink, SUPPORT_WHATSAPP } from "@/lib/support";
+import { supportWhatsappLink } from "@/lib/support";
 
 const WhatsappGlyph = ({ className }: { className?: string }) => (
     <svg viewBox="0 0 24 24" aria-hidden="true" className={className} fill="currentColor">
@@ -37,48 +36,3 @@ export function WhatsappHelpButton({
         </a>
     );
 }
-
-/**
- * The same, pinned to the bottom-left corner of every screen for merchants who
- * are still setting up. Bottom-left because the support chat already owns the
- * bottom-right, and on a phone two buttons stacked in one corner get mis-tapped.
- */
-export function WhatsappHelpFloating({ message }: { message: string }) {
-    return (
-        <a
-            href={supportWhatsappLink(message)}
-            target="_blank"
-            rel="noopener noreferrer"
-            aria-label={`واتساب ${SUPPORT_WHATSAPP}`}
-            className="fixed bottom-6 left-6 z-50 inline-flex h-14 items-center gap-2 rounded-full bg-[#1DA851] px-5 text-sm font-bold text-white shadow-xl shadow-emerald-900/20 transition-transform hover:scale-105 print:hidden"
-        >
-            <WhatsappGlyph className="h-6 w-6" />
-            <span className="hidden sm:inline">محتاج مساعدة؟</span>
-        </a>
-    );
-}
-
-/** A short card: we will set it up for you, just message us. */
-export function SetupForYouCard({ storeName, className }: { storeName?: string | null; className?: string }) {
-    return (
-        <div
-            dir="rtl"
-            className={cn(
-                "flex flex-col gap-3 rounded-2xl border border-emerald-300 bg-emerald-50 p-4 text-emerald-950 sm:flex-row sm:items-center sm:justify-between dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-100",
-                className,
-            )}
-        >
-            <div className="flex items-start gap-3">
-                <MessageCircle className="mt-0.5 h-6 w-6 shrink-0 text-emerald-600" />
-                <div>
-                    <p className="font-bold">مش فاضي تجهّز السيستم؟ إحنا نجهّزهولك ببلاش</p>
-                    <p className="text-sm opacity-80">
-                        ابعتلنا على واتساب وهنربط متجرك ونضيف منتجاتك وشركة الشحن معاك في دقايق.
-                    </p>
-                </div>
-            </div>
-            <WhatsappHelpButton message={supportMessages.setup(storeName)} label="جهّزوهولي" className="shrink-0" />
-        </div>
-    );
-}
-

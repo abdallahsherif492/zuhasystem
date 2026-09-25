@@ -10,7 +10,6 @@ import { canOpenPage } from "@/lib/navigation-access";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import { SetupForYouCard } from "@/components/support/whatsapp-help";
 import { EasyOrdersImportButton } from "@/components/onboarding/easyorders-import-button";
 import { TutorialPlaylist } from "@/components/onboarding/tutorials";
 
@@ -84,8 +83,8 @@ export function GettingStarted({ compact = false }: { compact?: boolean }) {
                     <p className="text-sm text-muted-foreground">{isManager && ready && next ? copy(`الخطوة الجاية: ${next.title} — ${complete} من ${steps.length} خطوات تمت.`, `Next: ${next.title} — ${complete} of ${steps.length} steps done.`) : copy("اختار المهمة اللي محتاج تعملها، وهنوصلك لمكانها.", "Choose a task and find exactly where to do it.")}</p>
                 </div>
                 <div className="flex shrink-0 flex-wrap gap-2">
-                    <Button asChild variant="outline" className="min-h-11"><Link href="/getting-started#tutorials"><PlayCircle className="me-2 h-4 w-4" />{copy("فيديوهات الشرح", "Tutorial videos")}</Link></Button>
-                    <Button asChild className="min-h-11"><Link href="/getting-started">{copy("ابدأ هنا", "Start here")}<ArrowRight className="ms-2 h-4 w-4 rtl:rotate-180" /></Link></Button>
+                    <Button asChild className="min-h-11"><Link href="/getting-started#tutorials"><PlayCircle className="me-2 h-4 w-4" />{copy("اتفرج على الشرح", "Watch the tutorials")}</Link></Button>
+                    <Button asChild variant="outline" className="min-h-11"><Link href="/getting-started">{copy("ابدأ هنا", "Start here")}<ArrowRight className="ms-2 h-4 w-4 rtl:rotate-180" /></Link></Button>
                 </div>
             </CardContent>
         </Card>
@@ -100,9 +99,6 @@ export function GettingStarted({ compact = false }: { compact?: boolean }) {
             </header>
             {/* The first thing a new store sees after signing up. */}
             <TutorialPlaylist />
-            {/* The landing page promises free setup; this is where a new
-                merchant who is stuck can take us up on it. */}
-            {isManager && ready && complete < steps.length && <SetupForYouCard storeName={activeBusiness.name} />}
             {isManager && <Card>
                 <CardHeader>
                     <div className="flex flex-wrap items-center justify-between gap-3">
