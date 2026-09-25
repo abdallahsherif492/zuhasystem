@@ -16,8 +16,15 @@ import {
     getExternalReferrer,
 } from "@/lib/session-tracker";
 
-/** How often an open tab reports that it is still there. */
-const HEARTBEAT_MS = 15_000;
+/**
+ * How often a visible tab reports that it is still there.
+ *
+ * Was 15s from every open tab, hidden ones included: tens of thousands of
+ * requests a day against a 5 GB monthly egress allowance, and each one also
+ * woke every open admin "Live" page through Realtime. A hidden tab now reports
+ * once when it is hidden and again when it comes back.
+ */
+const HEARTBEAT_MS = 60_000;
 
 /**
  * Reports this tab's presence into `live_sessions` so System Admin > Live
@@ -112,7 +119,9 @@ export function SessionTrackerProvider() {
 
         reportRef.current = report;
         report();
-        const interval = setInterval(report, HEARTBEAT_MS);
+        const interval = setInterval(() => {
+            if (document.visibilityState !== "hidden") report();
+        }, HEARTBEAT_MS);
 
         // A backgrounded tab is still open but not in use — worth
         // distinguishing from someone actively working.

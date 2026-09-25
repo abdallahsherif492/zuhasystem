@@ -30,7 +30,7 @@ export function MobileNav() {
                             <Image
                                 src={activeBusiness?.logo_url || "/logo.png"}
                                 alt={activeBusiness?.name || "eCommerx Logo"}
-                                fill
+                                fill sizes="160px"
                                 className="object-contain"
                                 priority
                             />

@@ -33,7 +33,7 @@ export function Sidebar({ className }: SidebarProps) {
                             <Image
                                 src={activeBusiness?.logo_url || "/logo.png"}
                                 alt={activeBusiness?.name || "eCommerx Logo"}
-                                fill
+                                fill sizes="160px"
                                 className="object-contain"
                                 priority
                             />
@@ -100,6 +100,8 @@ export function SidebarContent({ onLinkClick }: { onLinkClick?: () => void }) {
         if (!activeBusiness) return;
         let cancelled = false;
         const load = async () => {
+            // A hidden tab does not need a live counter.
+            if (document.visibilityState === "hidden") return;
             const { count } = await supabase
                 .from("orders")
                 .select("id", { count: "exact", head: true })

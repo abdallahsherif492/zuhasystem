@@ -24,6 +24,25 @@ import { IntegrationLogs } from "@/components/settings/integration-logs";
 import { SubscriptionSettings } from "@/components/settings/subscription-settings";
 import { IntegrationInstructions } from "@/components/settings/integration-instructions";
 
+/**
+ * A logo at most 512px on its longest side, as WebP (keeps transparency).
+ * Returns the original file when the browser cannot decode or encode it.
+ */
+async function shrinkLogo(file: File, max = 512): Promise<Blob> {
+    try {
+        const bitmap = await createImageBitmap(file);
+        const scale = Math.min(1, max / Math.max(bitmap.width, bitmap.height));
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+        canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+        canvas.getContext("2d")?.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+        const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, "image/webp", 0.9));
+        return blob && blob.size < file.size ? blob : file;
+    } catch {
+        return file;
+    }
+}
+
 export default function SettingsPage() {
     const { activeBusiness, userRole } = useBusiness();
     const { t } = useLanguage();
@@ -226,12 +245,19 @@ export default function SettingsPage() {
             let finalLogoUrl = logoPreview; 
 
             if (logoFile) {
-                const fileExt = logoFile.name.split('.').pop();
+                // Shrunk before upload: the logo appears on every page and one
+                // store's 1.1 MB original was a real share of the monthly egress.
+                const small = await shrinkLogo(logoFile);
+                const fileExt = small.type === "image/webp" ? "webp" : logoFile.name.split('.').pop();
                 const fileName = `${activeBusiness.id}-logo-${Date.now()}.${fileExt}`;
                 
                 const { error: uploadError } = await supabase.storage
                     .from('business_logos')
-                    .upload(fileName, logoFile);
+                    .upload(fileName, small, {
+                        contentType: small.type || logoFile.type,
+                        // The name changes on every upload, so it can be cached for good.
+                        cacheControl: "31536000",
+                    });
                     
                 if (uploadError) throw uploadError;
 

@@ -1,5 +1,9 @@
 "use client";
 
+// Logos go through next/image: the raw file (1.1 MB for one store) was being
+// downloaded from Supabase storage in this header on every page.
+import Image from "next/image";
+
 import { useBusiness } from "@/contexts/BusinessContext";
 import {
   DropdownMenu,
@@ -48,7 +52,7 @@ export function BusinessSwitcher() {
               {/* Business Avatar / Logo */}
               <div className="h-7 w-7 rounded-lg bg-primary/10 text-primary border border-primary/20 flex items-center justify-center font-bold text-xs shrink-0 overflow-hidden">
                 {activeBusiness.logo_url ? (
-                  <img src={activeBusiness.logo_url} alt={activeBusiness.name} className="h-full w-full object-cover" />
+                  <Image src={activeBusiness.logo_url} alt={activeBusiness.name} width={28} height={28} sizes="28px" className="h-full w-full object-cover" />
                 ) : (
                   <Store className="h-3.5 w-3.5" />
                 )}
@@ -103,7 +107,7 @@ export function BusinessSwitcher() {
                       isSelected ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
                     }`}>
                       {b.business.logo_url ? (
-                        <img src={b.business.logo_url} alt={b.business.name} className="h-full w-full object-cover rounded-lg" />
+                        <Image src={b.business.logo_url} alt={b.business.name} width={28} height={28} sizes="28px" className="h-full w-full object-cover rounded-lg" />
                       ) : (
                         b.business.name ? b.business.name.charAt(0).toUpperCase() : 'S'
                       )}

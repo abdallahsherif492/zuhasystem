@@ -15,8 +15,10 @@ import {
 import { cn } from "@/lib/utils";
 
 /** A session counts as live while it has checked in within this window. */
-const LIVE_WINDOW_MS = 45_000;
-const REFRESH_MS = 5_000;
+// Tabs report every 60s while visible, so "live" is anything seen in the
+// last two and a half minutes.
+const LIVE_WINDOW_MS = 150_000;
+const REFRESH_MS = 30_000;
 
 interface LiveSession {
     session_id: string;
@@ -126,18 +128,9 @@ export default function LiveAnalyticsPage() {
         return () => clearInterval(tick);
     }, []);
 
-    // Realtime gives near-instant updates; the poll above remains the safety
-    // net in case Realtime is not enabled on the project.
-    useEffect(() => {
-        if (paused) return;
-        const channel = supabase
-            .channel("live-sessions-admin")
-            .on("postgres_changes", { event: "*", schema: "public", table: "live_sessions" }, () => fetchSessions())
-            .subscribe();
-        return () => {
-            supabase.removeChannel(channel);
-        };
-    }, [paused, fetchSessions]);
+    // No Realtime subscription here any more: it refetched the whole session
+    // list on every heartbeat from every tab on the platform. The 30s poll
+    // above is enough for a "who is online" view.
 
     const live = useMemo(
         () => sessions.filter((s) => now - new Date(s.last_seen_at).getTime() < LIVE_WINDOW_MS),
@@ -207,7 +200,7 @@ export default function LiveAnalyticsPage() {
                         )}
                     </h1>
                     <p className="text-muted-foreground">
-                        Who is on the platform right now — refreshed every {REFRESH_MS / 1000}s, plus instant Realtime updates.
+                        Who is on the platform right now — refreshed every {REFRESH_MS / 1000}s.
                     </p>
                 </div>
                 <div className="flex items-center gap-2">

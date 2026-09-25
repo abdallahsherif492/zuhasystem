@@ -5,6 +5,10 @@ const nextConfig: NextConfig = {
   /* config options here */
   reactCompiler: true,
   images: {
+    // Logo files are named with a timestamp, so a new upload is a new URL.
+    // Without this the optimiser went back to Supabase for the original about
+    // once a minute per size — for a 1.1 MB logo, a real share of the egress.
+    minimumCacheTTL: 60 * 60 * 24 * 30,
     remotePatterns: [
       {
         protocol: 'https',

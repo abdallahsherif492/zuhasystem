@@ -72,7 +72,7 @@ export function WaybillCard({ order, isFirstOnPage, business }: { order: Waybill
             <div className="flex justify-between items-start mb-0">
                 <div className="flex items-center gap-2">
                     <div className="relative h-10 w-10 grayscale">
-                        <Image src={business?.logo_url || "/logo.png"} alt={business?.name || "Logo"} fill className="object-contain" />
+                        <Image src={business?.logo_url || "/logo.png"} alt={business?.name || "Logo"} fill sizes="40px" className="object-contain" />
                     </div>
                     <div>
                         <h1 className="text-base font-bold leading-none">{business?.name || "eCommerx Home"}</h1>

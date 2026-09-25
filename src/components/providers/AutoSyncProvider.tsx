@@ -1,58 +1,48 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect } from "react";
 import { useBusiness } from "@/contexts/BusinessContext";
+import { safeLocal } from "@/lib/safe-storage";
 
-// This component silently pings the auto-sync endpoint if any sync is enabled
-// It ensures syncs happen as long as the user has the dashboard open, serving as a fallback to external crons.
+/**
+ * Pings the auto-sync endpoint while someone has the dashboard open, as a
+ * fallback to the external scheduler. The endpoint itself decides whether a
+ * sync is due (every 15 minutes by default), so pinging more often than that
+ * only costs requests.
+ *
+ * It used to ping every minute from every open tab of every staff member —
+ * hidden tabs included. Now one tab per browser does it, only while visible,
+ * and at most every five minutes: the same syncs run, far fewer requests.
+ */
+const PING_INTERVAL = 5 * 60 * 1000;
+const LAST_PING_KEY = "ecx:autoSyncLastPing";
+
 export function AutoSyncProvider({ children }: { children: React.ReactNode }) {
     const { activeBusiness } = useBusiness();
-    const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
     useEffect(() => {
         if (!activeBusiness) return;
-
+        // Same trigger as before: Telegraph or VROBO auto-sync switched on.
         const integrations = activeBusiness.theme_config?.integrations;
-        const telegraphAutoSync = integrations?.shipping?.telegraph?.autoSync;
-        const vroboAutoSync = integrations?.tools?.vrobo?.autoSync;
+        if (!integrations?.shipping?.telegraph?.autoSync && !integrations?.tools?.vrobo?.autoSync) return;
 
-        // If no auto-sync is enabled, clear any existing interval
-        if (!telegraphAutoSync && !vroboAutoSync) {
-            if (intervalRef.current) {
-                clearInterval(intervalRef.current);
-                intervalRef.current = null;
-            }
-            return;
-        }
-
-        // We check every 1 minute. The backend will determine if it's actually time to run based on lastSyncAt
-        const PING_INTERVAL = 60 * 1000; // 1 minute
-
-        const pingSyncEndpoint = async () => {
-            try {
-                // Call the API endpoint silently
-                await fetch('/api/cron/auto-sync', {
-                    method: 'GET',
-                    headers: {
-                        'Cache-Control': 'no-cache',
-                    }
-                });
-            } catch (err) {
-                console.error("[AutoSyncProvider] Failed to ping sync endpoint:", err);
-            }
+        const maybePing = () => {
+            if (document.visibilityState === "hidden") return;
+            // Shared across tabs: whichever tab gets here first after five
+            // minutes pings, the others see the fresh stamp and skip.
+            const last = Number(safeLocal.get(LAST_PING_KEY) || 0);
+            if (Date.now() - last < PING_INTERVAL) return;
+            safeLocal.set(LAST_PING_KEY, String(Date.now()));
+            fetch("/api/cron/auto-sync", { method: "GET", headers: { "Cache-Control": "no-cache" } })
+                .catch(err => console.error("[AutoSyncProvider] Failed to ping sync endpoint:", err));
         };
 
-        // Initial Ping
-        pingSyncEndpoint();
-
-        // Setup interval
-        if (intervalRef.current) clearInterval(intervalRef.current);
-        intervalRef.current = setInterval(pingSyncEndpoint, PING_INTERVAL);
-
+        maybePing();
+        const timer = setInterval(maybePing, 60 * 1000);
+        document.addEventListener("visibilitychange", maybePing);
         return () => {
-            if (intervalRef.current) {
-                clearInterval(intervalRef.current);
-            }
+            clearInterval(timer);
+            document.removeEventListener("visibilitychange", maybePing);
         };
     }, [activeBusiness]);
 

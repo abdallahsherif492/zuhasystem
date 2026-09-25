@@ -190,8 +190,12 @@ function LogisticsContent() {
             while (hasMore) {
                 let query = supabase
                     .from("orders")
+                    // Only the columns this page reads — was "*", about a
+                    // third more data on every load and every refresh.
                     .select(`
-                        *,
+                        id, created_at, status, customer_info, easyorders_id, shipping_company_id,
+                        restock_on_return, shipping_cost, total_amount, paid_amount, payment_status,
+                        tags, notes, channel, order_type,
                         items:order_items (
                             variant:variants (
                                 product:products (id, name)
