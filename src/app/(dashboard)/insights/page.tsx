@@ -295,10 +295,14 @@ function InsightsContent() {
                 // 3. Treasury Balances (using same RPC as accounting page)
                 supabase.rpc('get_treasury_balances', { p_business_id: activeBusiness.id }),
                 supabase.from('financial_accounts').select('name').eq('business_id', activeBusiness.id),
-                // 4. Stock Value
+                // 4. Stock Value — this store's variants only. The query had
+                //    no business filter, so an account that can see several
+                //    stores (a system admin sees all of them) got the whole
+                //    platform's stock added into this store's value.
                 fetchAll((from, to) =>
                     supabase.from('variants')
                         .select('cost_price, stock_qty')
+                        .eq('business_id', activeBusiness.id)
                         .range(from, to)
                 ),
                 // 5. What we owe suppliers, from the ledger.

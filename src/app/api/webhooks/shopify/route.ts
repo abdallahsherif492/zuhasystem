@@ -278,10 +278,16 @@ export async function POST(req: Request) {
                 // Try to match variant by SKU
                 let matchedVariantId: string | null = null;
                 if (sku) {
+                    // Scoped to this store. The lookup ran across every
+                    // business, so a code another store also uses could map
+                    // this order's line to that store's product — or, when
+                    // two matched, maybeSingle() errored and nothing mapped.
                     const { data: v, error: vError } = await supabase
                         .from('variants')
                         .select('id')
+                        .eq('business_id', businessId)
                         .eq('sku', sku)
+                        .limit(1)
                         .maybeSingle();
                     if (vError) console.error(`[Shopify Webhook Debug] Error searching for variant sku ${sku}: ${vError.message}`);
                     if (v) matchedVariantId = v.id;
