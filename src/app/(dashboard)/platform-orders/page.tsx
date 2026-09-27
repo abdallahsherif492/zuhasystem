@@ -380,6 +380,17 @@ function PlatformOrdersContent() {
     const ordersRef = useRef<Order[]>([]);
     useEffect(() => { ordersRef.current = orders; }, [orders]);
 
+    // One order's writes go out one at a time, in the order they were made.
+    // Fired side by side, a slow request can land after a newer one and put
+    // back the older value: typing a price of 100 wrote 1, 10 and 100, and the
+    // order kept whichever arrived last — 1, while the screen showed 100.
+    const saveQueue = useRef(new Map<string, Promise<unknown>>());
+    const enqueueSave = (orderId: string, write: () => Promise<void>) => {
+        const next = (saveQueue.current.get(orderId) ?? Promise.resolve()).catch(() => {}).then(write);
+        saveQueue.current.set(orderId, next);
+        return next;
+    };
+
     const updateCustomerInfo = async (order: Order, field: string, value: string) => {
         const latest = ordersRef.current.find(o => o.id === order.id)?.customer_info
             ?? order.customer_info;
@@ -406,9 +417,13 @@ function PlatformOrdersContent() {
 
     
     const updateOrderField = async (order: Order, field: string, value: any) => {
-        setOrders(prev => prev.map(o => o.id === order.id ? { ...o, [field]: value } : o));
+        await updateOrderFields(order, { [field]: value });
+    };
+
+    const updateOrderFields = async (order: Order, updates: Partial<Order>) => {
+        setOrders(prev => prev.map(o => o.id === order.id ? { ...o, ...updates } : o));
         try {
-            await handleUpdateOrder(order.id, { [field]: value });
+            await enqueueSave(order.id, () => handleUpdateOrder(order.id, updates));
         } catch(e) {
             toast.error(t("Failed to save"));
         }
@@ -440,7 +455,7 @@ function PlatformOrdersContent() {
             : o));
 
         try {
-            await handleUpdateOrder(orderId, { subtotal: newSubtotal, total_amount: newTotal });
+            await enqueueSave(orderId, () => handleUpdateOrder(orderId, { subtotal: newSubtotal, total_amount: newTotal }));
         } catch (e) {
             toast.error(t("Failed to save"));
         }
@@ -451,7 +466,7 @@ function PlatformOrdersContent() {
             items.map(item => item.id === itemId ? { ...item, [field]: value } : item));
 
         try {
-            await handleUpdateItem(itemId, { [field]: value });
+            await enqueueSave(orderId, () => handleUpdateItem(itemId, { [field]: value }));
         } catch(e) {
             toast.error(t("Failed to update item"));
         }
@@ -482,7 +497,7 @@ function PlatformOrdersContent() {
             : item));
 
         try {
-            await handleUpdateItem(itemId, { variant_id: variantId });
+            await enqueueSave(orderId, () => handleUpdateItem(itemId, { variant_id: variantId }));
 
             if (activeBusiness && targetOrder) {
                 logBusinessAction({
@@ -991,7 +1006,8 @@ function PlatformOrdersContent() {
                                                                 return o;
                                                             }));
                                                             
-                                                            handleUpdateOrder(order.id, { subtotal: newTotal - order.shipping_cost, total_amount: newTotal });
+                                                            enqueueSave(order.id, () => handleUpdateOrder(order.id, { subtotal: newTotal - order.shipping_cost, total_amount: newTotal }))
+                                                                .catch(() => toast.error(t("Failed to save")));
                                                             
                                                             setAddItemOpen(prev => ({...prev, [order.id]: false}));
                                                             setSelectedProductForAdd(prev => ({...prev, [order.id]: ""}));
@@ -1129,21 +1145,23 @@ function PlatformOrdersContent() {
                                                         <div className="flex items-center gap-3 pt-1 border-t text-xs">
                                                             <div className="flex items-center gap-1">
                                                                 <Label className="text-[11px] text-muted-foreground">{t("Qty")}:</Label>
-                                                                <Input 
-                                                                    type="number" 
+                                                                <AutosaveField
+                                                                    type="number"
                                                                     min="1"
-                                                                    className="w-14 h-7 text-xs" 
-                                                                    value={item.quantity}
-                                                                    onChange={(e) => updateOrderItem(order.id, item.id, 'quantity', parseInt(e.target.value) || 1)}
+                                                                    inputMode="numeric"
+                                                                    className="w-14 h-7 text-xs"
+                                                                    value={String(item.quantity)}
+                                                                    onCommit={v => updateOrderItem(order.id, item.id, 'quantity', parseInt(v) || 1)}
                                                                 />
                                                             </div>
                                                             <div className="flex items-center gap-1">
                                                                 <Label className="text-[11px] text-muted-foreground">{t("Price")}:</Label>
-                                                                <Input 
-                                                                    type="number" 
-                                                                    className="w-20 h-7 text-xs" 
-                                                                    value={item.price_at_sale}
-                                                                    onChange={(e) => updateOrderItem(order.id, item.id, 'price_at_sale', parseFloat(e.target.value) || 0)}
+                                                                <AutosaveField
+                                                                    type="number"
+                                                                    inputMode="decimal"
+                                                                    className="w-20 h-7 text-xs"
+                                                                    value={String(item.price_at_sale)}
+                                                                    onCommit={v => updateOrderItem(order.id, item.id, 'price_at_sale', parseFloat(v) || 0)}
                                                                 />
                                                             </div>
                                                             <div className="ml-auto font-bold">
@@ -1163,15 +1181,15 @@ function PlatformOrdersContent() {
                                             </div>
                                             <div className="flex justify-between items-center text-xs">
                                                 <span className="text-muted-foreground">{t("Shipping Cost")}</span>
-                                                <Input 
-                                                    type="number" 
+                                                <AutosaveField
+                                                    type="number"
+                                                    inputMode="decimal"
                                                     className="w-24 h-7 text-xs text-right"
-                                                    value={order.shipping_cost}
-                                                    onChange={(e) => {
-                                                        const val = parseFloat(e.target.value) || 0;
-                                                        const newTotal = order.subtotal + val;
-                                                        updateOrderField(order, 'shipping_cost', val);
-                                                        updateOrderField(order, 'total_amount', newTotal);
+                                                    value={String(order.shipping_cost)}
+                                                    onCommit={v => {
+                                                        const val = parseFloat(v) || 0;
+                                                        const subtotal = ordersRef.current.find(o => o.id === order.id)?.subtotal ?? order.subtotal;
+                                                        updateOrderFields(order, { shipping_cost: val, total_amount: subtotal + val });
                                                     }}
                                                 />
                                             </div>
@@ -1200,11 +1218,12 @@ function PlatformOrdersContent() {
                                             {(order.payment_status === 'Partially Paid' || order.payment_status === 'Partial') && (
                                                 <div className="flex justify-between items-center">
                                                     <Label>{t("Paid Amount")}</Label>
-                                                    <Input 
-                                                        type="number" 
-                                                        className="w-[150px] h-8" 
-                                                        value={order.paid_amount || 0}
-                                                        onChange={(e) => updateOrderField(order, 'paid_amount', parseFloat(e.target.value) || 0)}
+                                                    <AutosaveField
+                                                        type="number"
+                                                        inputMode="decimal"
+                                                        className="w-[150px] h-8"
+                                                        value={String(order.paid_amount || 0)}
+                                                        onCommit={v => updateOrderField(order, 'paid_amount', parseFloat(v) || 0)}
                                                     />
                                                 </div>
                                             )}
