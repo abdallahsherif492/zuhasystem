@@ -52,6 +52,7 @@ const DESTINATIONS: Dest[] = [
     { label: "صافي الأرباح", href: "/insights/actual-returns", icon: LineChart, keywords: "profit net actual returns ارباح صافي" },
     { label: "الفريق", href: "/team", icon: Users, keywords: "team staff فريق موظفين" },
     { label: "الحضور", href: "/team/attendance", icon: Calendar, keywords: "attendance حضور انصراف" },
+    { label: "المرتبات", href: "/team/payroll", icon: Wallet, keywords: "payroll salary payslip مرتبات مرتب قسيمة سلفة خصم بونص" },
     { label: "حضوري", hint: "My HR", href: "/my-hr", icon: Calendar, keywords: "my hr حضوري بصمة" },
     { label: "سجل العمليات", href: "/actions-log", icon: History, keywords: "log audit سجل عمليات" },
     { label: "دليل النظام", href: "/guide", icon: BookOpen, keywords: "guide help دليل شرح مساعدة" },

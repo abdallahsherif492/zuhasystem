@@ -2,6 +2,7 @@
 
 import { updateTeamMemberAction, addTeamMemberAction } from "./actions";
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import { useBusiness } from "@/contexts/BusinessContext";
 import { useLanguage } from "@/contexts/LanguageContext";
@@ -255,6 +256,12 @@ export default function TeamManagementPage() {
                     <p className="text-xs text-muted-foreground mt-1">{t("Manage your staff, cashiers, and managers.")}</p>
                 </div>
                 
+                <div className="flex gap-2">
+                {canSeePay && (
+                    <Button asChild variant="outline" className="gap-2 text-xs font-semibold">
+                        <Link href="/team/payroll"><Wallet className="h-4 w-4" /> {t("Payroll")}</Link>
+                    </Button>
+                )}
                 {/* Add Member Button Dialog */}
                 <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
                     <DialogTrigger asChild>
@@ -380,6 +387,7 @@ export default function TeamManagementPage() {
                         </form>
                     </DialogContent>
                 </Dialog>
+                </div>
             </div>
 
             {/* Top Summary Metrics */}

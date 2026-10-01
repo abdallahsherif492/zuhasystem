@@ -130,3 +130,12 @@
   }
 }
 
+/* A page with a [data-print-root] (payslips) prints that and nothing else:
+   the dashboard's sidebar, header and floating widgets stay on screen. */
+@media print {
+  body:has([data-print-root]) * { visibility: hidden; }
+  body:has([data-print-root]) [data-print-root],
+  body:has([data-print-root]) [data-print-root] * { visibility: visible; }
+  body:has([data-print-root]) [data-print-root] { position: absolute; inset: 0 0 auto 0; }
+}
+

@@ -14,6 +14,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogT
 import { Loader2, Plus, Calendar, Clock, LogIn, LogOut } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { toast } from "sonner";
+import { MyPayslipsCard } from "@/components/payroll/my-payslips-card";
 
 type HRRequest = {
     id: string;
@@ -616,6 +617,8 @@ export default function MyHRPage() {
                     )}
                 </CardContent>
             </Card>
+
+            {activeBusiness && <MyPayslipsCard businessId={activeBusiness.id} />}
         </div>
     );
 }

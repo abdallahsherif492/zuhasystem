@@ -227,6 +227,7 @@ export function SidebarContent({ onLinkClick }: { onLinkClick?: () => void }) {
                     subItems: [
                         { title: t("Attendance"), href: "/team/attendance", icon: Clock },
                         { title: t("Leave Requests"), href: "/team/requests", icon: Inbox },
+                        { title: t("Payroll"), href: "/team/payroll", icon: Wallet },
                     ]
                 },
                 { title: t("Actions Log"), href: "/actions-log", icon: History, adminOnly: true },
