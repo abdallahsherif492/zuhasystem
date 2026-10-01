@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
 import {
-    AlertTriangle, CheckCircle2, ChevronLeft, ChevronRight, FileText, Loader2, Lock, Plus, Trash2, Unlock, Wallet,
+    AlertTriangle, CheckCircle2, ChevronLeft, ChevronRight, FileText, ListChecks, Loader2, Lock, Pencil, Plus, Trash2, Unlock, Wallet,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useBusiness } from "@/contexts/BusinessContext";
@@ -61,7 +61,7 @@ export default function PayrollPage() {
     const [missing, setMissing] = useState(false);
     const [showAll, setShowAll] = useState(false);
 
-    const [adding, setAdding] = useState<{ row: Row; kind: AdjustmentKind } | null>(null);
+    const [adding, setAdding] = useState<{ row: Row; kind: AdjustmentKind; editing?: Adjustment } | null>(null);
     const [details, setDetails] = useState<string | null>(null);
     const [settling, setSettling] = useState<string | null>(null);
     const [bulkOpen, setBulkOpen] = useState(false);
@@ -228,6 +228,11 @@ export default function PayrollPage() {
                                             </td>
                                             <td>
                                                 <div className="flex justify-end gap-1">
+                                                    {r.items.length > 0 && (
+                                                        <Button size="sm" variant="ghost" className="h-8 px-2" onClick={() => setDetails(r.id)} title={t("عرض وتعديل الحركات", "View and edit entries")}>
+                                                            <ListChecks className="me-1 h-3.5 w-3.5" />{r.items.length}
+                                                        </Button>
+                                                    )}
                                                     {!r.payslip && (
                                                         <Button size="sm" variant="outline" className="h-8" onClick={() => setAdding({ row: r, kind: "bonus" })}>
                                                             <Plus className="me-1 h-3.5 w-3.5" />{t("إضافة", "Add")}
@@ -256,6 +261,7 @@ export default function PayrollPage() {
                 <AddAdjustmentDialog
                     row={adding.row}
                     initialKind={adding.kind}
+                    editing={adding.editing}
                     period={period}
                     accounts={accounts}
                     ar={ar}
@@ -273,6 +279,7 @@ export default function PayrollPage() {
                     onClose={() => setDetails(null)}
                     onChanged={load}
                     onAdd={kind => setAdding({ row: detailRow, kind })}
+                    onEdit={item => setAdding({ row: detailRow, kind: item.kind, editing: item })}
                 />
             )}
             {settling && rows.some(r => r.id === settling && !r.payslip) && (
@@ -367,20 +374,23 @@ const rpcError = (e: { message?: string } | null, fallback: string) => {
     return /[؀-ۿ]/.test(m) ? m : fallback;
 };
 
-function AddAdjustmentDialog({ row, initialKind, period, accounts, ar, onClose, onSaved }: {
-    row: Row; initialKind: AdjustmentKind; period: string; accounts: string[]; ar: boolean;
+/** Add an entry, or correct one already added (`editing`). */
+function AddAdjustmentDialog({ row, initialKind, editing, period, accounts, ar, onClose, onSaved }: {
+    row: Row; initialKind: AdjustmentKind; editing?: Adjustment; period: string; accounts: string[]; ar: boolean;
     onClose: () => void; onSaved: () => void;
 }) {
     const t = (a: string, e: string) => (ar ? a : e);
-    const [kind, setKind] = useState<AdjustmentKind>(initialKind);
-    const [amount, setAmount] = useState("");
+    const [kind, setKind] = useState<AdjustmentKind>(editing?.kind ?? initialKind);
+    const [amount, setAmount] = useState(editing ? String(editing.amount) : "");
     const [days, setDays] = useState("");
-    const [reason, setReason] = useState("");
+    const [reason, setReason] = useState(editing?.reason ?? "");
     // Within the month being viewed; today when that is this month.
-    const [date, setDate] = useState(() => (today().startsWith(period) ? today() : `${period}-01`));
+    const [date, setDate] = useState(() => editing?.entry_date ?? (today().startsWith(period) ? today() : `${period}-01`));
     const [book, setBook] = useState(false);
     const [account, setAccount] = useState<string>("");
-    const [deduct, setDeduct] = useState(true);
+    const [deduct, setDeduct] = useState(editing ? applies(editing) : true);
+    // An advance already in accounting: whether its expense follows the edit. Off by default.
+    const [syncTx, setSyncTx] = useState(false);
     const [saving, setSaving] = useState(false);
     const rate = dayRate(row.salary);
     // An entry belongs to the month of its date, not to whichever month is on screen.
@@ -391,7 +401,15 @@ function AddAdjustmentDialog({ row, initialKind, period, accounts, ar, onClose, 
         if (!(value > 0)) { toast.error(t("اكتب مبلغ أكبر من صفر", "Enter an amount above zero")); return; }
         if (kind === "advance" && book && !account) { toast.error(t("اختار الحساب اللي اتصرفت منه", "Pick the account it was paid from")); return; }
         setSaving(true);
-        const { error } = await supabase.rpc("payroll_add_adjustment", {
+        const { error } = editing ? await supabase.rpc("payroll_update_adjustment", {
+            p_id: editing.id,
+            p_kind: kind,
+            p_amount: value,
+            p_reason: reason.trim(),
+            p_entry_date: date,
+            p_apply_to_salary: kind === "bonus" ? true : deduct,
+            p_update_transaction: syncTx,
+        }) : await supabase.rpc("payroll_add_adjustment", {
             p_business_user_id: row.id,
             p_period: periodDate(month),
             p_kind: kind,
@@ -403,7 +421,7 @@ function AddAdjustmentDialog({ row, initialKind, period, accounts, ar, onClose, 
         });
         setSaving(false);
         if (error) { console.error(error); toast.error(rpcError(error, t("ماتحفظش، جرّب تاني", "Not saved, try again"))); return; }
-        toast.success(t("اتسجّل", "Saved"));
+        toast.success(editing ? t("اتعدّل", "Updated") : t("اتسجّل", "Saved"));
         onSaved();
     };
 
@@ -411,7 +429,7 @@ function AddAdjustmentDialog({ row, initialKind, period, accounts, ar, onClose, 
         <Dialog open onOpenChange={o => !o && onClose()}>
             <DialogContent dir={ar ? "rtl" : "ltr"} className="sm:max-w-md">
                 <DialogHeader>
-                    <DialogTitle>{row.name} — {monthLabel(month, ar)}</DialogTitle>
+                    <DialogTitle>{editing ? t("تعديل — ", "Edit — ") : ""}{row.name} — {monthLabel(month, ar)}</DialogTitle>
                     <DialogDescription>{t("المرتب الأساسي", "Base salary")} {formatCurrency(row.salary)}</DialogDescription>
                 </DialogHeader>
                 <div className="space-y-4">
@@ -457,7 +475,16 @@ function AddAdjustmentDialog({ row, initialKind, period, accounts, ar, onClose, 
                             <Switch checked={deduct} onCheckedChange={setDeduct} />
                         </label>
                     )}
-                    {kind === "advance" && (
+                    {editing?.transaction_id && (
+                        <label className="flex items-start gap-2 rounded-md border p-2.5 text-sm">
+                            <Checkbox checked={syncTx} onCheckedChange={v => setSyncTx(v === true)} className="mt-0.5" />
+                            <span>
+                                {t("عدّل المصروف المتسجل في الحسابات كمان (المبلغ والتاريخ)", "Also update the expense recorded in accounting (amount and date)")}
+                                {!syncTx && <span className="block text-xs text-muted-foreground">{t("لو سيبتها، المصروف في الحسابات هيفضل زي ما هو.", "Left off, the expense in accounting stays as it is.")}</span>}
+                            </span>
+                        </label>
+                    )}
+                    {kind === "advance" && !editing && (
                         <AccountingChoice
                             on={book} onToggle={setBook} account={account} onAccount={setAccount} accounts={accounts} ar={ar}
                             label={t("سجّلها مصروف في الحسابات", "Record as an expense in accounting")}
@@ -468,16 +495,16 @@ function AddAdjustmentDialog({ row, initialKind, period, accounts, ar, onClose, 
                     )}
                 </div>
                 <DialogFooter>
-                    <Button onClick={save} disabled={saving}>{saving && <Loader2 className="me-2 h-4 w-4 animate-spin" />}{t("حفظ", "Save")}</Button>
+                    <Button onClick={save} disabled={saving}>{saving && <Loader2 className="me-2 h-4 w-4 animate-spin" />}{editing ? t("حفظ التعديل", "Save changes") : t("حفظ", "Save")}</Button>
                 </DialogFooter>
             </DialogContent>
         </Dialog>
     );
 }
 
-function DetailsDialog({ row, period, businessId, editorEmail, ar, onClose, onChanged, onAdd }: {
+function DetailsDialog({ row, period, businessId, editorEmail, ar, onClose, onChanged, onAdd, onEdit }: {
     row: Row; period: string; businessId: string; editorEmail: string | null; ar: boolean;
-    onClose: () => void; onChanged: () => void; onAdd: (k: AdjustmentKind) => void;
+    onClose: () => void; onChanged: () => void; onAdd: (k: AdjustmentKind) => void; onEdit: (item: Adjustment) => void;
 }) {
     const t = (a: string, e: string) => (ar ? a : e);
     const [name, setName] = useState(row.hasSalaryRow && row.name !== row.email.split("@")[0] ? row.name : "");
@@ -553,7 +580,7 @@ function DetailsDialog({ row, period, businessId, editorEmail, ar, onClose, onCh
                     <div className="flex items-center justify-between border-b px-3 py-2">
                         <span className="text-sm font-medium">{t(`حركات ${monthLabel(period, ar)}`, `${monthLabel(period, ar)} entries`)}</span>
                         {row.payslip
-                            ? <span className="flex items-center gap-1 text-xs text-muted-foreground"><Lock className="h-3 w-3" />{t("اتسوّى", "Settled")}</span>
+                            ? <span className="flex items-center gap-1 text-xs text-muted-foreground"><Lock className="h-3 w-3" />{t("اتسوّى — افتح التسوية عشان تعدّل", "Settled — reopen to edit")}</span>
                             : <div className="flex gap-1">
                                 {ADJUSTMENT_KINDS.map(k => <Button key={k.key} size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={() => onAdd(k.key)}>+ {ar ? k.ar : k.en}</Button>)}
                             </div>}
@@ -579,7 +606,10 @@ function DetailsDialog({ row, period, businessId, editorEmail, ar, onClose, onCh
                                             <Switch checked={on} disabled={busy === it.id} onCheckedChange={v => toggle(it, v)} aria-label={t("يتخصم", "Deduct")} title={t("يتخصم من المرتب", "Deduct from pay")} />
                                         )}
                                         {!row.payslip && it.id && (
-                                            <Button size="icon" variant="ghost" className="h-7 w-7 text-red-500" onClick={() => setDeleting(it)} aria-label={t("مسح", "Delete")}><Trash2 className="h-3.5 w-3.5" /></Button>
+                                            <>
+                                                <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => onEdit(it)} aria-label={t("تعديل", "Edit")} title={t("تعديل", "Edit")}><Pencil className="h-3.5 w-3.5" /></Button>
+                                                <Button size="icon" variant="ghost" className="h-7 w-7 text-red-500" onClick={() => setDeleting(it)} aria-label={t("مسح", "Delete")} title={t("مسح", "Delete")}><Trash2 className="h-3.5 w-3.5" /></Button>
+                                            </>
                                         )}
                                     </div>
                                 </div>
