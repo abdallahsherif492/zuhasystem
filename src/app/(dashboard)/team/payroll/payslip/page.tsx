@@ -7,7 +7,7 @@ import { supabase } from "@/lib/supabase";
 import { useBusiness } from "@/contexts/BusinessContext";
 import { PayslipDocument, type PayslipDocumentProps } from "@/components/payroll/payslip-document";
 import { PayslipShell } from "@/components/payroll/payslip-shell";
-import { payTotals, payslipTotals, periodDate, type Adjustment, type Payslip } from "@/lib/payroll";
+import { applies, payTotals, payslipTotals, periodDate, type Adjustment, type Payslip } from "@/lib/payroll";
 
 /** A manager's payslip for any member and month: the settled one, or a draft from this month's entries so far. */
 function ManagerPayslip() {
@@ -26,7 +26,7 @@ function ManagerPayslip() {
                 supabase.from("business_users").select("user_email").eq("business_id", b).eq("id", member).maybeSingle(),
                 supabase.from("employee_salaries").select("monthly_salary, employee_name, job_title").eq("business_user_id", member).maybeSingle(),
                 supabase.from("payslips").select("*").eq("business_id", b).eq("business_user_id", member).eq("period", periodDate(period)).maybeSingle(),
-                supabase.from("payroll_adjustments").select("kind, amount, reason, entry_date").eq("business_id", b).eq("business_user_id", member).eq("period", periodDate(period)).order("entry_date"),
+                supabase.from("payroll_adjustments").select("kind, amount, reason, entry_date, apply_to_salary").eq("business_id", b).eq("business_user_id", member).eq("period", periodDate(period)).order("entry_date"),
             ]);
             if (!m.data) { setError("الموظف ده مش موجود."); return; }
             const p = slip.data as Payslip | null;
@@ -37,7 +37,8 @@ function ManagerPayslip() {
                     settled: { paid_on: p.paid_on, account_name: p.account_name }, notes: p.notes,
                 });
             } else {
-                const items = ((adj.data || []) as Adjustment[]).map(a => ({ ...a, amount: Number(a.amount) }));
+                // Entries switched off for this month are on record but not on the payslip.
+                const items = ((adj.data || []) as Adjustment[]).filter(applies).map(a => ({ ...a, amount: Number(a.amount) }));
                 setDoc({
                     employee: { name: sal.data?.employee_name || m.data.user_email.split("@")[0], email: m.data.user_email, title: sal.data?.job_title },
                     period, totals: payTotals(Number(sal.data?.monthly_salary || 0), items), items, settled: null,

@@ -19,6 +19,8 @@ export interface Adjustment {
     reason: string;
     entry_date: string;
     transaction_id?: string | null;
+    /** Off: a deduction or advance on record that does not come off this month's pay. */
+    apply_to_salary?: boolean;
 }
 
 export interface Payslip {
@@ -48,8 +50,10 @@ export interface PayTotals {
     net: number;
 }
 
+export const applies = (i: Adjustment) => i.apply_to_salary !== false;
+
 export function payTotals(base: number, items: Adjustment[]): PayTotals {
-    const sum = (k: AdjustmentKind) => items.filter(i => i.kind === k).reduce((s, i) => s + Number(i.amount), 0);
+    const sum = (k: AdjustmentKind) => items.filter(i => i.kind === k && applies(i)).reduce((s, i) => s + Number(i.amount), 0);
     const bonuses = sum("bonus");
     const deductions = sum("deduction");
     const advances = sum("advance");

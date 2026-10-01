@@ -17,9 +17,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import {
-    ADJUSTMENT_KINDS, addMonths, attendanceSummary, dayRate, kindInfo, monthLabel, payTotals, payslipTotals, periodDate, periodKey,
+    ADJUSTMENT_KINDS, addMonths, applies, attendanceSummary, dayRate, kindInfo, monthLabel, payTotals, payslipTotals, periodDate, periodKey,
     type Adjustment, type AdjustmentKind, type AttendanceSummary, type PayTotals, type Payslip,
 } from "@/lib/payroll";
 
@@ -62,7 +63,7 @@ export default function PayrollPage() {
 
     const [adding, setAdding] = useState<{ row: Row; kind: AdjustmentKind } | null>(null);
     const [details, setDetails] = useState<string | null>(null);
-    const [settling, setSettling] = useState<Row | null>(null);
+    const [settling, setSettling] = useState<string | null>(null);
     const [bulkOpen, setBulkOpen] = useState(false);
 
     const load = useCallback(async () => {
@@ -74,7 +75,7 @@ export default function PayrollPage() {
             const [members, salaries, adjustments, payslips, logs, accs] = await Promise.all([
                 supabase.from("business_users").select("id, user_email, role, weekend_days").eq("business_id", b),
                 supabase.from("employee_salaries").select("business_user_id, monthly_salary, employee_name, job_title").eq("business_id", b),
-                supabase.from("payroll_adjustments").select("id, business_user_id, kind, amount, reason, entry_date, transaction_id").eq("business_id", b).eq("period", start).order("entry_date"),
+                supabase.from("payroll_adjustments").select("id, business_user_id, kind, amount, reason, entry_date, transaction_id, apply_to_salary").eq("business_id", b).eq("period", start).order("entry_date"),
                 supabase.from("payslips").select("*").eq("business_id", b).eq("period", start),
                 supabase.from("attendance_logs").select("user_email, date, delay_minutes").eq("business_id", b).gte("date", start).lt("date", end),
                 supabase.from("financial_accounts").select("name").eq("business_id", b),
@@ -182,7 +183,7 @@ export default function PayrollPage() {
                         <CardContent className="overflow-x-auto p-0">
                             <table className="w-full min-w-[820px] text-sm">
                                 <thead className="border-b bg-muted/40 text-xs text-muted-foreground">
-                                    <tr className="[&>th]:px-3 [&>th]:py-2.5 [&>th]:text-start [&>th]:font-medium">
+                                    <tr className="[&>th]:px-2 [&>th]:py-2.5 [&>th]:text-start [&>th]:font-medium [&>th:first-child]:ps-3">
                                         <th>{t("الموظف", "Employee")}</th>
                                         <th>{t("الأساسي", "Base")}</th>
                                         <th>{t("بونص", "Bonus")}</th>
@@ -201,7 +202,7 @@ export default function PayrollPage() {
                                         </td></tr>
                                     )}
                                     {visible.map(r => (
-                                        <tr key={r.id} className="hover:bg-muted/30 [&>td]:px-3 [&>td]:py-2.5">
+                                        <tr key={r.id} className="whitespace-nowrap hover:bg-muted/30 [&>td]:px-2 [&>td]:py-2.5 [&>td:first-child]:ps-3 [&>td:last-child]:pe-3">
                                             <td>
                                                 <button className="text-start" onClick={() => setDetails(r.id)}>
                                                     <div className="font-medium hover:underline">{r.name}</div>
@@ -212,7 +213,7 @@ export default function PayrollPage() {
                                             <td className="text-emerald-600 dark:text-emerald-400">{r.totals.bonuses ? <span dir="ltr">+{formatCurrency(r.totals.bonuses)}</span> : "—"}</td>
                                             <td className="text-red-600 dark:text-red-400">{r.totals.deductions ? <span dir="ltr">−{formatCurrency(r.totals.deductions)}</span> : "—"}</td>
                                             <td className="text-red-600 dark:text-red-400">{r.totals.advances ? <span dir="ltr">−{formatCurrency(r.totals.advances)}</span> : "—"}</td>
-                                            <td className={cn("font-bold", r.totals.net < 0 && "text-red-600")}>{formatCurrency(r.totals.net)}</td>
+                                            <td className={cn("font-bold", r.totals.net < 0 && "text-red-600")}><span dir="ltr">{formatCurrency(r.totals.net)}</span></td>
                                             <td className="text-xs">
                                                 {/* No clock-in at all this month: they don't use it, not 26 days absent. */}
                                                 {r.attendance.present === 0 ? <span className="text-muted-foreground">—</span> : <>
@@ -235,7 +236,7 @@ export default function PayrollPage() {
                                                     <Button size="icon" variant="ghost" className="h-8 w-8" asChild title={t("القسيمة", "Payslip")}>
                                                         <Link href={`/team/payroll/payslip?member=${r.id}&period=${period}`} target="_blank" aria-label={t("القسيمة", "Payslip")}><FileText className="h-4 w-4" /></Link>
                                                     </Button>
-                                                    {!r.payslip && <Button size="sm" className="h-8" onClick={() => setSettling(r)}>{t("صرف", "Pay")}</Button>}
+                                                    {!r.payslip && <Button size="sm" className="h-8" onClick={() => setSettling(r.id)}>{t("صرف", "Pay")}</Button>}
                                                 </div>
                                             </td>
                                         </tr>
@@ -245,8 +246,8 @@ export default function PayrollPage() {
                         </CardContent>
                     </Card>
                     <p className="text-xs text-muted-foreground">
-                        {t("السلفة بتتسجل مصروف \"Salaries\" في الحسابات يوم ما تتصرف، والصرف في آخر الشهر بيسجّل الصافي بس — فإجمالي مصروف المرتبات بيطلع مظبوط من غير تكرار. الحضور من سجل البصمة، ومش بيطرح الإجازات.",
-                            "An advance is booked as a Salaries expense the day it is given; paying at month end books only the net, so the month's salary expense adds up without double counting. Attendance comes from clock-ins and does not subtract leave.")}
+                        {t("مفيش حاجة بتتسجل في الحسابات غير لما تختار ده بنفسك، ولا خصم بيتخصم غير لما يكون متفعّل. لو سجّلت السلفة والمرتب الاتنين في الحسابات، الصرف بيسجّل الصافي بس فمفيش تكرار. الحضور من سجل البصمة، ومش بيطرح الإجازات.",
+                            "Nothing is recorded in accounting unless you choose it, and nothing is deducted unless it is switched on. If both the advance and the salary are recorded, paying records only the net, so nothing is counted twice. Attendance comes from clock-ins and does not subtract leave.")}
                     </p>
                 </>
             )}
@@ -274,11 +275,11 @@ export default function PayrollPage() {
                     onAdd={kind => setAdding({ row: detailRow, kind })}
                 />
             )}
-            {settling && (
-                <SettleDialog rows={[settling]} period={period} accounts={accounts} ar={ar} onClose={() => setSettling(null)} onDone={() => { setSettling(null); load(); }} />
+            {settling && rows.some(r => r.id === settling && !r.payslip) && (
+                <SettleDialog rows={rows.filter(r => r.id === settling)} period={period} accounts={accounts} ar={ar} onClose={() => setSettling(null)} onDone={() => { setSettling(null); load(); }} onChanged={load} />
             )}
             {bulkOpen && (
-                <SettleDialog rows={visible.filter(r => !r.payslip && r.totals.base > 0)} period={period} accounts={accounts} ar={ar} onClose={() => setBulkOpen(false)} onDone={() => { setBulkOpen(false); load(); }} />
+                <SettleDialog rows={visible.filter(r => !r.payslip && r.totals.base > 0)} period={period} accounts={accounts} ar={ar} onClose={() => setBulkOpen(false)} onDone={() => { setBulkOpen(false); load(); }} onChanged={load} />
             )}
         </div>
     );
@@ -298,6 +299,69 @@ function Kpi({ label, value, hint, tone, strong }: { label: string; value: strin
     );
 }
 
+/**
+ * Whether something is booked in accounting, and from which account. Off by
+ * default: nothing reaches accounting unless it is switched on here.
+ */
+function AccountingChoice({ on, onToggle, account, onAccount, accounts, label, hint, ar }: {
+    on: boolean; onToggle: (v: boolean) => void; account: string; onAccount: (v: string) => void;
+    accounts: string[]; label: string; hint: string; ar: boolean;
+}) {
+    return (
+        <div className="space-y-2 rounded-md border p-2.5">
+            <label className="flex items-center justify-between gap-3 text-sm">
+                <span>{label}</span>
+                <Switch checked={on} onCheckedChange={onToggle} disabled={!accounts.length} />
+            </label>
+            {on && (
+                <Select value={account} onValueChange={onAccount}>
+                    <SelectTrigger className="h-9"><SelectValue placeholder={ar ? "من أنهي حساب؟" : "From which account?"} /></SelectTrigger>
+                    <SelectContent>{accounts.map(a => <SelectItem key={a} value={a}>{a}</SelectItem>)}</SelectContent>
+                </Select>
+            )}
+            <p className="text-xs text-muted-foreground">{accounts.length ? hint : (ar ? "مفيش حسابات متعرّفة في صفحة الحسابات." : "No accounts are set up on the Accounting page.")}</p>
+        </div>
+    );
+}
+
+/** A deduction or advance switched on or off for this month's pay. */
+async function setApplies(item: Adjustment, on: boolean, ar: boolean) {
+    const { error } = await supabase.from("payroll_adjustments").update({ apply_to_salary: on }).eq("id", item.id!);
+    if (error) { console.error(error); toast.error(rpcError(error, ar ? "ماتحفظش" : "Not saved")); return false; }
+    return true;
+}
+
+/** Yes/no with one extra, unticked-by-default choice — used where accounting may be touched. */
+function ConfirmWithOption({ title, body, option, confirmLabel, ar, onCancel, onConfirm }: {
+    title: string; body: string; option: string | null; confirmLabel: string; ar: boolean;
+    onCancel: () => void; onConfirm: (optionChecked: boolean) => Promise<void>;
+}) {
+    const [checked, setChecked] = useState(false);
+    const [busy, setBusy] = useState(false);
+    return (
+        <Dialog open onOpenChange={o => !o && !busy && onCancel()}>
+            <DialogContent dir={ar ? "rtl" : "ltr"} className="sm:max-w-sm">
+                <DialogHeader>
+                    <DialogTitle>{title}</DialogTitle>
+                    <DialogDescription>{body}</DialogDescription>
+                </DialogHeader>
+                {option && (
+                    <label className="flex items-start gap-2 rounded-md border p-2.5 text-sm">
+                        <Checkbox checked={checked} onCheckedChange={v => setChecked(v === true)} className="mt-0.5" />
+                        <span>{option}</span>
+                    </label>
+                )}
+                <DialogFooter className="gap-2">
+                    <Button variant="outline" onClick={onCancel} disabled={busy}>{ar ? "إلغاء" : "Cancel"}</Button>
+                    <Button variant="destructive" disabled={busy} onClick={async () => { setBusy(true); await onConfirm(checked); setBusy(false); }}>
+                        {busy && <Loader2 className="me-2 h-4 w-4 animate-spin" />}{confirmLabel}
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    );
+}
+
 const rpcError = (e: { message?: string } | null, fallback: string) => {
     const m = e?.message || "";
     return /[؀-ۿ]/.test(m) ? m : fallback;
@@ -312,24 +376,30 @@ function AddAdjustmentDialog({ row, initialKind, period, accounts, ar, onClose, 
     const [amount, setAmount] = useState("");
     const [days, setDays] = useState("");
     const [reason, setReason] = useState("");
-    // Within the month being edited; today when that is this month.
+    // Within the month being viewed; today when that is this month.
     const [date, setDate] = useState(() => (today().startsWith(period) ? today() : `${period}-01`));
-    const [account, setAccount] = useState<string>(accounts[0] ?? "__none__");
+    const [book, setBook] = useState(false);
+    const [account, setAccount] = useState<string>("");
+    const [deduct, setDeduct] = useState(true);
     const [saving, setSaving] = useState(false);
     const rate = dayRate(row.salary);
+    // An entry belongs to the month of its date, not to whichever month is on screen.
+    const month = /^\d{4}-\d{2}/.test(date) ? date.slice(0, 7) : period;
 
     const save = async () => {
         const value = parseFloat(amount);
         if (!(value > 0)) { toast.error(t("اكتب مبلغ أكبر من صفر", "Enter an amount above zero")); return; }
+        if (kind === "advance" && book && !account) { toast.error(t("اختار الحساب اللي اتصرفت منه", "Pick the account it was paid from")); return; }
         setSaving(true);
         const { error } = await supabase.rpc("payroll_add_adjustment", {
             p_business_user_id: row.id,
-            p_period: periodDate(period),
+            p_period: periodDate(month),
             p_kind: kind,
             p_amount: value,
             p_reason: reason.trim(),
             p_entry_date: date,
-            p_account_name: kind === "advance" && account !== "__none__" ? account : null,
+            p_account_name: kind === "advance" && book ? account : null,
+            p_apply_to_salary: kind === "bonus" ? true : deduct,
         });
         setSaving(false);
         if (error) { console.error(error); toast.error(rpcError(error, t("ماتحفظش، جرّب تاني", "Not saved, try again"))); return; }
@@ -341,7 +411,7 @@ function AddAdjustmentDialog({ row, initialKind, period, accounts, ar, onClose, 
         <Dialog open onOpenChange={o => !o && onClose()}>
             <DialogContent dir={ar ? "rtl" : "ltr"} className="sm:max-w-md">
                 <DialogHeader>
-                    <DialogTitle>{row.name} — {monthLabel(period, ar)}</DialogTitle>
+                    <DialogTitle>{row.name} — {monthLabel(month, ar)}</DialogTitle>
                     <DialogDescription>{t("المرتب الأساسي", "Base salary")} {formatCurrency(row.salary)}</DialogDescription>
                 </DialogHeader>
                 <div className="space-y-4">
@@ -375,22 +445,26 @@ function AddAdjustmentDialog({ row, initialKind, period, accounts, ar, onClose, 
                         <Label>{t("السبب", "Reason")}</Label>
                         <Input value={reason} onChange={e => setReason(e.target.value)} placeholder={kind === "bonus" ? t("مثلاً: تارجت الشهر", "e.g. monthly target") : kind === "deduction" ? t("مثلاً: غياب يوم", "e.g. one day absent") : t("مثلاً: سلفة", "e.g. advance")} />
                     </div>
+                    {month !== period && (
+                        <p className="text-xs text-amber-700 dark:text-amber-300">{t(`هتتسجل على مرتب ${monthLabel(month, ar)} حسب التاريخ.`, `Goes on ${monthLabel(month, ar)}'s pay, by its date.`)}</p>
+                    )}
+                    {kind !== "bonus" && (
+                        <label className="flex items-center justify-between gap-3 rounded-md border p-2.5 text-sm">
+                            <span>
+                                {kind === "advance" ? t("تتخصم من مرتب الشهر ده", "Deduct from this month's pay") : t("يتخصم من مرتب الشهر ده", "Deduct from this month's pay")}
+                                {!deduct && <span className="block text-xs text-muted-foreground">{t("هتتسجل بس، وتقدر تفعّل الخصم بعدين من تفاصيل الموظف.", "Recorded only; switch the deduction on later from the employee's details.")}</span>}
+                            </span>
+                            <Switch checked={deduct} onCheckedChange={setDeduct} />
+                        </label>
+                    )}
                     {kind === "advance" && (
-                        <div className="space-y-1.5">
-                            <Label>{t("اتصرفت منين؟", "Paid from")}</Label>
-                            <Select value={account} onValueChange={setAccount}>
-                                <SelectTrigger><SelectValue /></SelectTrigger>
-                                <SelectContent>
-                                    {accounts.map(a => <SelectItem key={a} value={a}>{a}</SelectItem>)}
-                                    <SelectItem value="__none__">{t("متسجلة في الحسابات قبل كده", "Already recorded in accounting")}</SelectItem>
-                                </SelectContent>
-                            </Select>
-                            <p className="text-xs text-muted-foreground">
-                                {account === "__none__"
-                                    ? t("هتتخصم من المرتب بس، من غير ما تتسجل مصروف تاني.", "Only deducted from the salary; no second expense is recorded.")
-                                    : t("هتتسجل مصروف Salaries من الحساب ده بتاريخها، وتتخصم من المرتب في آخر الشهر.", "Recorded as a Salaries expense from this account on its date, and deducted from the salary at month end.")}
-                            </p>
-                        </div>
+                        <AccountingChoice
+                            on={book} onToggle={setBook} account={account} onAccount={setAccount} accounts={accounts} ar={ar}
+                            label={t("سجّلها مصروف في الحسابات", "Record as an expense in accounting")}
+                            hint={book
+                                ? t("هتتسجل مصروف Salaries من الحساب ده بتاريخها.", "Recorded as a Salaries expense from this account, on its date.")
+                                : t("مش هيتسجل حاجة في الحسابات — مناسب لو سجلتها هناك بإيدك قبل كده.", "Nothing goes to accounting — right if you already recorded it there by hand.")}
+                        />
                     )}
                 </div>
                 <DialogFooter>
@@ -411,6 +485,8 @@ function DetailsDialog({ row, period, businessId, editorEmail, ar, onClose, onCh
     const [salary, setSalary] = useState(row.salary ? String(row.salary) : "");
     const [saving, setSaving] = useState(false);
     const [busy, setBusy] = useState<string | null>(null);
+    const [deleting, setDeleting] = useState<Adjustment | null>(null);
+    const [reopening, setReopening] = useState(false);
     const items = row.payslip ? row.payslip.items : row.items;
 
     const saveInfo = async () => {
@@ -431,25 +507,26 @@ function DetailsDialog({ row, period, businessId, editorEmail, ar, onClose, onCh
         onChanged();
     };
 
-    const remove = async (a: Adjustment) => {
-        const extra = a.transaction_id ? t(" والمصروف اللي اتسجل ليها في الحسابات هيتمسح كمان.", " The expense recorded for it in accounting is deleted too.") : "";
-        if (!confirm(t(`تمسح ${kindInfo(a.kind).ar} ${formatCurrency(a.amount)}؟`, `Delete this ${kindInfo(a.kind).en.toLowerCase()} of ${formatCurrency(a.amount)}?`) + extra)) return;
-        setBusy(a.id!);
-        const { error } = await supabase.rpc("payroll_delete_adjustment", { p_id: a.id });
-        setBusy(null);
+    const remove = async (a: Adjustment, deleteTx: boolean) => {
+        const { error } = await supabase.rpc("payroll_delete_adjustment", { p_id: a.id, p_delete_transaction: deleteTx });
         if (error) { toast.error(rpcError(error, t("ماتمسحش", "Not deleted"))); return; }
+        setDeleting(null);
         onChanged();
     };
 
-    const reopen = async () => {
+    const reopen = async (deleteTx: boolean) => {
         if (!row.payslip) return;
-        if (!confirm(t("تفتح التسوية تاني؟ مصروف المرتب اللي اتسجل في الحسابات هيتمسح، وتقدر تعدّل وتصرف من جديد.", "Reopen this month? The salary expense it recorded is deleted, and you can edit and pay again."))) return;
-        setBusy("reopen");
-        const { error } = await supabase.rpc("payroll_reopen", { p_payslip_id: row.payslip.id });
-        setBusy(null);
+        const { error } = await supabase.rpc("payroll_reopen", { p_payslip_id: row.payslip.id, p_delete_transaction: deleteTx });
         if (error) { toast.error(rpcError(error, t("ماتفتحتش", "Could not reopen"))); return; }
+        setReopening(false);
         toast.success(t("اتفتحت", "Reopened"));
         onChanged();
+    };
+
+    const toggle = async (it: Adjustment, on: boolean) => {
+        setBusy(it.id!);
+        if (await setApplies(it, on, ar)) onChanged();
+        setBusy(null);
     };
 
     const a = row.attendance;
@@ -485,29 +562,37 @@ function DetailsDialog({ row, period, businessId, editorEmail, ar, onClose, onCh
                         <div className="flex justify-between px-3 py-2"><span>{t("المرتب الأساسي", "Base salary")}</span><span className="font-medium">{formatCurrency(row.totals.base)}</span></div>
                         {items.map((it, i) => {
                             const k = kindInfo(it.kind);
+                            const on = applies(it);
                             return (
-                                <div key={it.id ?? i} className="flex items-center justify-between gap-2 px-3 py-2">
+                                <div key={it.id ?? i} className={cn("flex items-center justify-between gap-2 px-3 py-2", !on && "bg-muted/30")}>
                                     <div className="min-w-0">
-                                        <div>{ar ? k.ar : k.en}{it.reason && <span className="text-muted-foreground"> — {it.reason}</span>}</div>
-                                        <div className="text-xs text-muted-foreground">{it.entry_date}{it.transaction_id && t(" · متسجلة في الحسابات", " · in accounting")}</div>
+                                        <div className={cn(!on && "text-muted-foreground")}>{ar ? k.ar : k.en}{it.reason && <span className="text-muted-foreground"> — {it.reason}</span>}</div>
+                                        <div className="text-xs text-muted-foreground">
+                                            {it.entry_date}
+                                            {it.transaction_id && t(" · متسجلة في الحسابات", " · in accounting")}
+                                            {!on && t(" · مش هتتخصم الشهر ده", " · not deducted this month")}
+                                        </div>
                                     </div>
-                                    <div className="flex items-center gap-1">
-                                        <span dir="ltr" className={cn("font-medium", k.sign > 0 ? "text-emerald-600" : "text-red-600")}>{k.sign > 0 ? "+" : "−"}{formatCurrency(it.amount)}</span>
+                                    <div className="flex items-center gap-1.5">
+                                        <span dir="ltr" className={cn("font-medium", !on ? "text-muted-foreground line-through" : k.sign > 0 ? "text-emerald-600" : "text-red-600")}>{k.sign > 0 ? "+" : "−"}{formatCurrency(it.amount)}</span>
+                                        {!row.payslip && it.id && it.kind !== "bonus" && (
+                                            <Switch checked={on} disabled={busy === it.id} onCheckedChange={v => toggle(it, v)} aria-label={t("يتخصم", "Deduct")} title={t("يتخصم من المرتب", "Deduct from pay")} />
+                                        )}
                                         {!row.payslip && it.id && (
-                                            <Button size="icon" variant="ghost" className="h-7 w-7 text-red-500" disabled={busy === it.id} onClick={() => remove(it)} aria-label={t("مسح", "Delete")}><Trash2 className="h-3.5 w-3.5" /></Button>
+                                            <Button size="icon" variant="ghost" className="h-7 w-7 text-red-500" onClick={() => setDeleting(it)} aria-label={t("مسح", "Delete")}><Trash2 className="h-3.5 w-3.5" /></Button>
                                         )}
                                     </div>
                                 </div>
                             );
                         })}
-                        <div className="flex justify-between bg-muted/40 px-3 py-2 font-bold"><span>{t("الصافي", "Net")}</span><span>{formatCurrency(row.totals.net)}</span></div>
+                        <div className="flex justify-between bg-muted/40 px-3 py-2 font-bold"><span>{t("الصافي", "Net")}</span><span dir="ltr">{formatCurrency(row.totals.net)}</span></div>
                     </div>
                 </div>
 
                 {row.payslip && (
                     <div className="flex items-center justify-between rounded-lg border border-emerald-300 bg-emerald-50 p-3 text-sm dark:bg-emerald-950/30">
                         <span>{t(`اتصرف ${row.payslip.paid_on}`, `Paid ${row.payslip.paid_on}`)}{row.payslip.account_name && ` · ${row.payslip.account_name}`}</span>
-                        <Button size="sm" variant="outline" onClick={reopen} disabled={busy === "reopen"}><Unlock className="me-1 h-3.5 w-3.5" />{t("فتح التسوية", "Reopen")}</Button>
+                        <Button size="sm" variant="outline" onClick={() => setReopening(true)}><Unlock className="me-1 h-3.5 w-3.5" />{t("فتح التسوية", "Reopen")}</Button>
                     </div>
                 )}
 
@@ -521,6 +606,29 @@ function DetailsDialog({ row, period, businessId, editorEmail, ar, onClose, onCh
                     <p className="text-xs text-muted-foreground">{t("تغيير المرتب بيأثر على الشهور اللي لسه ماتصرفتش بس.", "A salary change only affects months not paid yet.")}</p>
                     <Button size="sm" onClick={saveInfo} disabled={saving}>{saving && <Loader2 className="me-2 h-4 w-4 animate-spin" />}{t("حفظ البيانات", "Save details")}</Button>
                 </div>
+
+                {deleting && (
+                    <ConfirmWithOption
+                        ar={ar}
+                        title={t(`تمسح ${kindInfo(deleting.kind).ar} ${formatCurrency(deleting.amount)}؟`, `Delete this ${kindInfo(deleting.kind).en.toLowerCase()} of ${formatCurrency(deleting.amount)}?`)}
+                        body={t("هتتشال من مرتب الموظف.", "It comes off the employee's pay record.")}
+                        option={deleting.transaction_id ? t("امسح المصروف اللي اتسجل ليها في الحسابات كمان", "Also delete the expense recorded for it in accounting") : null}
+                        confirmLabel={t("مسح", "Delete")}
+                        onCancel={() => setDeleting(null)}
+                        onConfirm={opt => remove(deleting, opt)}
+                    />
+                )}
+                {reopening && row.payslip && (
+                    <ConfirmWithOption
+                        ar={ar}
+                        title={t("تفتح التسوية تاني؟", "Reopen this month?")}
+                        body={t("القسيمة هتتلغي وتقدر تعدّل وتصرف من جديد.", "The payslip is cancelled so you can edit and pay again.")}
+                        option={row.payslip.account_name ? t(`امسح مصروف المرتب اللي اتسجل في الحسابات (${row.payslip.account_name})`, `Also delete the salary expense recorded in accounting (${row.payslip.account_name})`) : null}
+                        confirmLabel={t("فتح التسوية", "Reopen")}
+                        onCancel={() => setReopening(false)}
+                        onConfirm={opt => reopen(opt)}
+                    />
+                )}
             </DialogContent>
         </Dialog>
     );
@@ -530,18 +638,24 @@ function Mini({ label, value }: { label: string; value: string }) {
     return <div className="rounded-md border p-2 text-center"><div className="text-[11px] text-muted-foreground">{label}</div><div className="font-semibold">{value}</div></div>;
 }
 
-function SettleDialog({ rows, period, accounts, ar, onClose, onDone }: {
-    rows: Row[]; period: string; accounts: string[]; ar: boolean; onClose: () => void; onDone: () => void;
+function SettleDialog({ rows, period, accounts, ar, onClose, onDone, onChanged }: {
+    rows: Row[]; period: string; accounts: string[]; ar: boolean; onClose: () => void; onDone: () => void; onChanged: () => void;
 }) {
     const t = (a: string, e: string) => (ar ? a : e);
-    const [account, setAccount] = useState<string>(accounts[0] ?? "__none__");
+    const [book, setBook] = useState(false);
+    const [account, setAccount] = useState<string>("");
+    const [carry, setCarry] = useState(true);
+    const [busyItem, setBusyItem] = useState<string | null>(null);
     const [paidOn, setPaidOn] = useState(today());
     const [notes, setNotes] = useState("");
     const [saving, setSaving] = useState(false);
     const single = rows.length === 1 ? rows[0] : null;
     const total = useMemo(() => rows.reduce((s, r) => s + Math.max(0, r.totals.net), 0), [rows]);
 
+    const owing = rows.filter(r => r.totals.net < 0);
+
     const settle = async () => {
+        if (book && !account) { toast.error(t("اختار الحساب اللي اتصرف منه", "Pick the account it was paid from")); return; }
         setSaving(true);
         let ok = 0;
         for (const r of rows) {
@@ -549,8 +663,9 @@ function SettleDialog({ rows, period, accounts, ar, onClose, onDone }: {
                 p_business_user_id: r.id,
                 p_period: periodDate(period),
                 p_paid_on: paidOn,
-                p_account_name: account === "__none__" ? null : account,
+                p_account_name: book ? account : null,
                 p_notes: single ? notes : "",
+                p_carry_over: carry,
             });
             if (error) { console.error(error); toast.error(`${r.name}: ${rpcError(error, t("ماتصرفش", "not paid"))}`); }
             else ok++;
@@ -575,40 +690,54 @@ function SettleDialog({ rows, period, accounts, ar, onClose, onDone }: {
                         {single.totals.advances > 0 && <Line label={t("سلف", "Advances")} value={`− ${formatCurrency(single.totals.advances)}`} />}
                         <div className="border-t pt-1"><Line label={t("الصافي", "Net")} value={formatCurrency(single.totals.net)} bold /></div>
                     </div>
-                ) : (
+                ) : null}
+                {single && single.items.some(i => i.kind !== "bonus") && (
+                    <div className="rounded-lg border text-sm">
+                        <div className="border-b px-3 py-1.5 text-xs font-medium text-muted-foreground">{t("تتخصم الشهر ده؟", "Deduct this month?")}</div>
+                        <div className="divide-y">
+                            {single.items.filter(i => i.kind !== "bonus").map(it => (
+                                <label key={it.id} className="flex items-center justify-between gap-2 px-3 py-1.5">
+                                    <span className={cn(!applies(it) && "text-muted-foreground")}>
+                                        {kindInfo(it.kind)[ar ? "ar" : "en"]}{it.reason && ` — ${it.reason}`} <span dir="ltr" className="text-xs">({formatCurrency(it.amount)})</span>
+                                    </span>
+                                    <Switch checked={applies(it)} disabled={busyItem === it.id}
+                                        onCheckedChange={async v => { setBusyItem(it.id!); if (await setApplies(it, v, ar)) onChanged(); setBusyItem(null); }} />
+                                </label>
+                            ))}
+                        </div>
+                    </div>
+                )}
+                {single ? null : (
                     <div className="max-h-48 divide-y overflow-y-auto rounded-lg border text-sm">
                         {rows.map(r => <div key={r.id} className="flex justify-between px-3 py-1.5"><span>{r.name}</span><span className="font-medium">{formatCurrency(r.totals.net)}</span></div>)}
                         <div className="flex justify-between bg-muted/40 px-3 py-1.5 font-bold"><span>{t("الإجمالي", "Total")}</span><span>{formatCurrency(total)}</span></div>
                     </div>
                 )}
-                {rows.some(r => r.totals.net < 0) && (
-                    <div className="flex gap-2 rounded-md border border-amber-300 bg-amber-50 p-2.5 text-xs text-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
-                        <AlertTriangle className="h-4 w-4 shrink-0" />
-                        {t("السلف أكبر من المرتب: مش هيتصرف حاجة، والباقي هيتخصم أوتوماتيك من مرتب الشهر الجاي.", "Advances exceed the pay: nothing is paid, and the rest is deducted from next month automatically.")}
+                {owing.length > 0 && (
+                    <div className="space-y-2 rounded-md border border-amber-300 bg-amber-50 p-2.5 text-xs text-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+                        <div className="flex gap-2">
+                            <AlertTriangle className="h-4 w-4 shrink-0" />
+                            {t(`السلف أكبر من المرتب${single ? "" : ` عند ${owing.map(r => r.name).join("، ")}`}: مش هيتصرف حاجة.`, `Advances exceed the pay${single ? "" : ` for ${owing.map(r => r.name).join(", ")}`}: nothing is paid.`)}
+                        </div>
+                        <label className="flex items-center justify-between gap-3 text-sm">
+                            <span>{t("رحّل الباقي يتخصم من مرتب الشهر الجاي", "Carry the rest into next month's pay")}{single && <span dir="ltr"> ({formatCurrency(-single.totals.net)})</span>}</span>
+                            <Switch checked={carry} onCheckedChange={setCarry} />
+                        </label>
                     </div>
                 )}
-                <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1.5">
-                        <Label>{t("اتصرف من", "Paid from")}</Label>
-                        <Select value={account} onValueChange={setAccount}>
-                            <SelectTrigger><SelectValue /></SelectTrigger>
-                            <SelectContent>
-                                {accounts.map(a => <SelectItem key={a} value={a}>{a}</SelectItem>)}
-                                <SelectItem value="__none__">{t("مش هسجّله في الحسابات", "Don't record in accounting")}</SelectItem>
-                            </SelectContent>
-                        </Select>
-                    </div>
-                    <div className="space-y-1.5">
-                        <Label>{t("تاريخ الصرف", "Paid on")}</Label>
-                        <Input type="date" value={paidOn} onChange={e => setPaidOn(e.target.value)} />
-                    </div>
+                <div className="space-y-1.5">
+                    <Label>{t("تاريخ الصرف", "Paid on")}</Label>
+                    <Input type="date" value={paidOn} onChange={e => setPaidOn(e.target.value)} />
                 </div>
+                <AccountingChoice
+                    on={book} onToggle={setBook} account={account} onAccount={setAccount} accounts={accounts} ar={ar}
+                    label={t("سجّل الصافي مصروف في الحسابات", "Record the net as an expense in accounting")}
+                    hint={book
+                        ? t("هيتسجل الصافي مصروف Salaries من الحساب ده بتاريخ الصرف.", "The net is recorded as a Salaries expense from this account on the pay date.")
+                        : t("القسيمة هتتقفل من غير ما يتسجل أي حاجة في الحسابات.", "The payslip is closed without anything recorded in accounting.")}
+                />
                 {single && <Textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder={t("ملاحظات على القسيمة (اختياري)", "Notes on the payslip (optional)")} rows={2} />}
-                <p className="text-xs text-muted-foreground">
-                    {account === "__none__"
-                        ? t("القسيمة هتتقفل من غير ما يتسجل مصروف.", "The payslip is closed without recording an expense.")
-                        : t(`هيتسجل الصافي مصروف Salaries من ${account}. بعد الصرف الشهر بيتقفل، وتقدر تفتحه تاني من تفاصيل الموظف.`, `The net is recorded as a Salaries expense from ${account}. The month is then closed; reopen it from the employee's details.`)}
-                </p>
+                <p className="text-xs text-muted-foreground">{t("بعد الصرف الشهر بيتقفل، وتقدر تفتحه تاني من تفاصيل الموظف.", "After paying, the month is closed; reopen it from the employee's details.")}</p>
                 <DialogFooter>
                     <Button onClick={settle} disabled={saving}>{saving && <Loader2 className="me-2 h-4 w-4 animate-spin" />}{t("تأكيد الصرف", "Confirm payment")}</Button>
                 </DialogFooter>
