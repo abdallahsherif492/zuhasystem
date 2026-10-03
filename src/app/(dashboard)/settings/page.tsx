@@ -195,13 +195,13 @@ export default function SettingsPage() {
         }
     }, [activeBusiness]);
 
+    // Everyone else gets the one part of this page that is theirs: their own
+    // language and direction. The business settings stay with the owner.
     if (!userRole || (userRole !== "owner" && !userRole.toLowerCase().includes("super"))) {
         return (
-            <div className="flex items-center justify-center h-[60vh]">
-                <div className="text-center">
-                    <h2 className="text-2xl font-bold tracking-tight text-red-600 mb-2">Access Denied</h2>
-                    <p className="text-muted-foreground">You do not have permission to access business settings.</p>
-                </div>
+            <div className="min-w-0 flex-1 space-y-4 p-0 sm:p-4 lg:p-8 pt-6">
+                <h2 className="text-3xl font-bold tracking-tight">{t("Settings")}</h2>
+                <MyPreferences />
             </div>
         );
     }

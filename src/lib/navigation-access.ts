@@ -2,7 +2,8 @@
 export function canOpenPage(path: string, role: string | null, allowed: string[], systemAdmin = false) {
     const normalizedRole = (role || "").trim().toLowerCase().replace(/_/g, " ");
     if (systemAdmin || ["owner", "admin", "platform admin", "super admin"].includes(normalizedRole)) return true;
-    if (["/dashboard", "/guide", "/getting-started"].includes(path) || path === "/my-hr" || path.startsWith("/my-hr/")) return true;
+    // Settings opens for everyone: staff see only their own preferences there.
+    if (["/dashboard", "/guide", "/getting-started", "/settings"].includes(path) || path === "/my-hr" || path.startsWith("/my-hr/")) return true;
     const normalize = (route: string) => route.replace(/^\/easy-orders(?=\/|$)/, "/platform-orders");
     return allowed.some(route => {
         const prefix = normalize(route);

@@ -231,7 +231,7 @@ export function SidebarContent({ onLinkClick }: { onLinkClick?: () => void }) {
                     ]
                 },
                 { title: t("Actions Log"), href: "/actions-log", icon: History, adminOnly: true },
-                { title: t("Settings"), href: "/settings", icon: Settings, adminOnly: true },
+                { title: t("Settings"), href: "/settings", icon: Settings },
             ]
         }
 
