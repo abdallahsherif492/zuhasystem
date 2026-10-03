@@ -35,6 +35,7 @@ function ChannelAnalyticsContent() {
     const [prev, setPrev] = useState<ChannelAnalytics | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<"missing" | "failed" | null>(null);
+    const [errorDetail, setErrorDetail] = useState("");
     const [view, setView] = useState<"channel" | "group">("channel");
     const [productChannel, setProductChannel] = useState<string | null>(null);
 
@@ -56,6 +57,7 @@ function ChannelAnalyticsContent() {
                 if (cancelled) return;
                 if (now.error) {
                     console.error("channel_analytics failed:", now.error);
+                    setErrorDetail([now.error.code, now.error.message].filter(Boolean).join(" — "));
                     setError(now.error.code === "PGRST202" || /could not find|does not exist/i.test(now.error.message) ? "missing" : "failed");
                     return;
                 }
@@ -109,7 +111,10 @@ function ChannelAnalyticsContent() {
                     </CardContent>
                 </Card>
             ) : error === "failed" ? (
-                <p className="p-10 text-center text-muted-foreground">{t("مش قادر أحمّل البيانات. جرّب تاني.", "Could not load the data. Try again.")}</p>
+                <div className="p-10 text-center text-muted-foreground">
+                    <p>{t("مش قادر أحمّل البيانات. جرّب تاني.", "Could not load the data. Try again.")}</p>
+                    {errorDetail && <p className="mt-2 font-mono text-xs" dir="ltr">{errorDetail}</p>}
+                </div>
             ) : loading || !data ? (
                 <div className="flex justify-center p-20"><Loader2 className="h-8 w-8 animate-spin" /></div>
             ) : all.orders === 0 ? (
