@@ -25,6 +25,24 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
+
+const ORDER_SELECT = `
+    *,
+    order_items (
+        id, variant_id, quantity, price_at_sale, unmapped_name, unmapped_sku,
+        variants (
+            title, sku, product_id,
+            products (name)
+        )
+    )
+`;
+
+/** Waiting, and from a store (EasyOrders or Shopify): what this page lists. */
+function isWaitingPlatformOrder(o: { status?: string | null; easyorders_id?: string | null; tags?: unknown }) {
+    if (String(o.status || '').trim().toLowerCase() !== 'waiting') return false;
+    const tags = o.tags ? JSON.stringify(o.tags).toLowerCase() : "";
+    return !!o.easyorders_id || tags.includes("easyorders") || tags.includes("shopify");
+}
 import {
     AlertDialog,
     AlertDialogAction,
@@ -172,16 +190,7 @@ function PlatformOrdersContent() {
         if (!activeBusiness) return;
         const { data, error } = await supabase
             .from('orders')
-            .select(`
-                *,
-                order_items (
-                    id, variant_id, quantity, price_at_sale, unmapped_name, unmapped_sku,
-                    variants (
-                        title, sku, product_id,
-                        products (name)
-                    )
-                )
-            `)
+            .select(ORDER_SELECT)
             .eq('business_id', activeBusiness.id)
             .ilike('status', 'waiting')
             .order('created_at', { ascending: false });
@@ -190,19 +199,136 @@ function PlatformOrdersContent() {
             console.error("Error fetching platform orders:", error);
             toast.error(t("Failed to load Platform Orders"));
         } else {
-            const platformOrders = (data || []).filter(o => {
-                const isWaitingStatus = String(o.status || '').trim().toLowerCase() === 'waiting';
-                if (!isWaitingStatus) return false;
-
-                const isEasy = !!o.easyorders_id || (o.tags && JSON.stringify(o.tags).toLowerCase().includes("easyorders"));
-                const isShopify = (o.tags && JSON.stringify(o.tags).toLowerCase().includes("shopify"));
-                return isEasy || isShopify;
-            });
-            setOrders(platformOrders);
+            setOrders((data || []).filter(isWaitingPlatformOrder) as Order[]);
+            loadedRef.current = true;
         }
 
         setLoading(false);
     };
+
+    // -----------------------------------------------------------------
+    // Several moderators work this list at once. Each page used to know
+    // only what it loaded: an order a colleague had just moved stayed on
+    // everyone else's screen until they refreshed, and in the first week of
+    // October six orders were moved to Pending twice, by two people,
+    // seconds to minutes apart. Three things keep the pages honest now.
+    // -----------------------------------------------------------------
+
+    const loadedRef = useRef(false);
+    // Orders this page has just taken off the screen and is still saving.
+    // The sync must not bring them back while their write is in flight.
+    const inFlight = useRef(new Set<string>());
+
+    /**
+     * 1. Moving an order out of Waiting only happens while it is still
+     * Waiting. If a colleague got there first the update matches no row,
+     * which comes back as "gone" instead of a second confirmation. A request
+     * that has not answered in 20 seconds is given up on, so a stuck
+     * connection shows an error rather than an endless spinner.
+     */
+    const leaveWaiting = async (orderId: string, updates: Record<string, unknown>): Promise<"done" | "gone"> => {
+        const { data, error } = await supabase
+            .from('orders')
+            .update(updates)
+            .eq('business_id', activeBusiness!.id)
+            .eq('id', orderId)
+            .ilike('status', 'waiting')
+            .select('id')
+            .abortSignal(AbortSignal.timeout(20_000));
+        if (error) throw error;
+        return data && data.length ? "done" : "gone";
+    };
+
+    /**
+     * 2. The card leaves the screen the moment the moderator confirms, not
+     * when the database answers; they move straight on to the next order.
+     * Returns a function that puts it back where it was if the save fails.
+     */
+    const takeOut = (orderId: string) => {
+        const index = ordersRef.current.findIndex(o => o.id === orderId);
+        const removed = ordersRef.current[index];
+        inFlight.current.add(orderId);
+        setOrders(prev => prev.filter(o => o.id !== orderId));
+        return {
+            restore: () => {
+                inFlight.current.delete(orderId);
+                if (!removed) return;
+                setOrders(prev => {
+                    if (prev.some(o => o.id === orderId)) return prev;
+                    const next = [...prev];
+                    next.splice(Math.min(index, next.length), 0, removed);
+                    return next;
+                });
+            },
+            settle: () => { setTimeout(() => inFlight.current.delete(orderId), 60_000); },
+        };
+    };
+
+    const saveFailed = (e: unknown, fallback: string) => {
+        const name = (e as { name?: string })?.name;
+        const message = (e as { message?: string })?.message || "";
+        if (name === "AbortError" || name === "TimeoutError" || /abort|timed? ?out/i.test(message)) {
+            toast.error("الاتصال بطيء ومش متأكدين إن الحفظ وصل. الأوردر رجع مكانه — لو اختفى بعد شوية يبقى اتحفظ.");
+        } else {
+            toast.error(fallback);
+        }
+    };
+
+    /**
+     * 3. Every 30 seconds while the page is open and visible, and whenever
+     * the moderator comes back to the tab, ask which orders are still
+     * Waiting — ids only, a couple of kilobytes. Orders a colleague moved
+     * leave the screen; new ones from the store are fetched and added.
+     */
+    useEffect(() => {
+        if (!activeBusiness) return;
+        const businessId = activeBusiness.id;
+        let running = false;
+        const sync = async () => {
+            if (!loadedRef.current || running || document.visibilityState === "hidden") return;
+            running = true;
+            try {
+                const { data, error } = await supabase
+                    .from('orders')
+                    .select('id, status, easyorders_id, tags')
+                    .eq('business_id', businessId)
+                    .ilike('status', 'waiting');
+                if (error || !data) return;
+                const live = new Set(data.filter(isWaitingPlatformOrder).map(o => o.id as string));
+                const current = ordersRef.current;
+                const gone = current.filter(o => !live.has(o.id));
+                if (gone.length) {
+                    setOrders(prev => prev.filter(o => live.has(o.id)));
+                    toast.info(gone.length === 1
+                        ? "أوردر اتنقل أو اتلغى من زميلك، فاتشال من الصفحة."
+                        : `${gone.length} أوردرات اتنقلت أو اتلغت من زملائك، فاتشالت من الصفحة.`);
+                }
+                const known = new Set(current.map(o => o.id));
+                const fresh = [...live].filter(id => !known.has(id) && !inFlight.current.has(id));
+                if (fresh.length) {
+                    const { data: rows } = await supabase.from('orders').select(ORDER_SELECT).in('id', fresh);
+                    const added = ((rows || []) as Order[]).filter(isWaitingPlatformOrder);
+                    if (added.length) {
+                        setOrders(prev => {
+                            const have = new Set(prev.map(o => o.id));
+                            return [...added.filter(o => !have.has(o.id)), ...prev]
+                                .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
+                        });
+                    }
+                }
+            } finally {
+                running = false;
+            }
+        };
+        const timer = setInterval(sync, 30_000);
+        document.addEventListener("visibilitychange", sync);
+        window.addEventListener("focus", sync);
+        return () => {
+            clearInterval(timer);
+            document.removeEventListener("visibilitychange", sync);
+            window.removeEventListener("focus", sync);
+        };
+    }, [activeBusiness]);
 
     // Both of these ask for the changed rows back and insist on getting one.
     //
@@ -241,8 +367,26 @@ function PlatformOrdersContent() {
         setDepositLoading(true);
         setSaving(order.id);
         try {
+            // The move first, and only while the order is still Waiting: the
+            // deposit used to be recorded first, so a second moderator
+            // confirming the same order recorded the same money twice.
+            const moved = await leaveWaiting(order.id, {
+                status: 'Pending',
+                // Confirming the order IS closing it. If the reviewer never
+                // touched the dropdown, they are the one who did it — leaving
+                // it null would drop the order out of the league entirely.
+                ...(order.closed_by ? {} : { closed_by: currentUser?.email ?? null }),
+            });
+            if (moved === "gone") {
+                toast.info("الأوردر ده اتنقل قبل كده من زميلك، والعربون ماتسجلش تاني.");
+                setDepositModalOpen(false);
+                setDepositOrder(null);
+                setOrders(prev => prev.filter(o => o.id !== order.id));
+                return;
+            }
+
             if (order.paid_amount && order.paid_amount > 0) {
-                await supabase.from('transactions').insert({
+                const { error: txError } = await supabase.from('transactions').insert({
                     business_id: activeBusiness?.id,
                     transaction_date: new Date().toISOString().split('T')[0],
                     type: 'revenue',
@@ -252,15 +396,11 @@ function PlatformOrdersContent() {
                     description: `Payment collection for Platform Order ${order.easyorders_id || order.id.slice(0,8)}`,
                     account_name: accountName
                 });
+                if (txError) {
+                    console.error("Deposit not recorded:", txError);
+                    toast.error("الأوردر اتنقل، بس العربون ماتسجلش في الحسابات. سجّله من صفحة الحسابات.");
+                }
             }
-
-            await handleUpdateOrder(order.id, {
-                status: 'Pending',
-                // Confirming the order IS closing it. If the reviewer never
-                // touched the dropdown, they are the one who did it — leaving
-                // it null would drop the order out of the league entirely.
-                ...(order.closed_by ? {} : { closed_by: currentUser?.email ?? null }),
-            });
 
             if (activeBusiness) {
                 logBusinessAction({
@@ -284,7 +424,7 @@ function PlatformOrdersContent() {
             setOrders(prev => prev.filter(o => o.id !== order.id));
         } catch (e: any) {
             console.error("Error moving order & recording deposit:", e);
-            toast.error(t("Failed to move order"));
+            saveFailed(e, t("Failed to move order"));
         } finally {
             setDepositLoading(false);
             setSaving(null);
@@ -303,15 +443,20 @@ function PlatformOrdersContent() {
             setDepositOrder(order);
             setDepositModalOpen(true);
         } else {
-            setSaving(order.id);
+            const card = takeOut(order.id);
             try {
-                await handleUpdateOrder(order.id, {
-                status: 'Pending',
-                // Confirming the order IS closing it. If the reviewer never
-                // touched the dropdown, they are the one who did it — leaving
-                // it null would drop the order out of the league entirely.
-                ...(order.closed_by ? {} : { closed_by: currentUser?.email ?? null }),
-            });
+                const moved = await leaveWaiting(order.id, {
+                    status: 'Pending',
+                    // Confirming the order IS closing it. If the reviewer never
+                    // touched the dropdown, they are the one who did it — leaving
+                    // it null would drop the order out of the league entirely.
+                    ...(order.closed_by ? {} : { closed_by: currentUser?.email ?? null }),
+                });
+                card.settle();
+                if (moved === "gone") {
+                    toast.info("الأوردر ده اتنقل أو اتلغى قبل كده من زميلك.");
+                    return;
+                }
 
                 if (activeBusiness) {
                     logBusinessAction({
@@ -328,21 +473,24 @@ function PlatformOrdersContent() {
                 }
 
                 toast.success(t("Order moved to Pending successfully"));
-                setOrders(prev => prev.filter(o => o.id !== order.id));
             } catch (error) {
                 console.error("Error moving to pending:", error);
-                toast.error(t("Failed to move order"));
-            } finally {
-                setSaving(null);
+                card.restore();
+                saveFailed(error, t("Failed to move order"));
             }
         }
     };
 
     const handleCancelOrder = async (orderId: string) => {
-        setSaving(orderId);
+        const targetOrder = orders.find(o => o.id === orderId);
+        const card = takeOut(orderId);
         try {
-            const targetOrder = orders.find(o => o.id === orderId);
-            await handleUpdateOrder(orderId, { status: 'Cancelled' });
+            const moved = await leaveWaiting(orderId, { status: 'Cancelled' });
+            card.settle();
+            if (moved === "gone") {
+                toast.info("الأوردر ده اتنقل أو اتلغى قبل كده من زميلك.");
+                return;
+            }
 
             if (activeBusiness && targetOrder) {
                 logBusinessAction({
@@ -359,13 +507,10 @@ function PlatformOrdersContent() {
             }
 
             toast.success(t("Order cancelled"));
-            setOrders(orders.filter(o => o.id !== orderId));
         } catch (error) {
-
             console.error("Error cancelling order:", error);
-            toast.error(t("Failed to cancel order"));
-        } finally {
-            setSaving(null);
+            card.restore();
+            saveFailed(error, t("Failed to cancel order"));
         }
     };
 
