@@ -25,6 +25,7 @@ import * as XLSX from "xlsx";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { logBusinessAction } from "@/lib/logs/actions-logger";
+import { ago, minutesSince } from "@/components/orders/confirmation-attempts";
 
 interface Issue {
     order_id: string;
@@ -53,18 +54,44 @@ interface Followup {
     created_at: string;
 }
 
-/** The outcomes a call can end in, in the order they actually happen. */
-const OUTCOMES: { value: string; label: string; tone: "good" | "warn" | "bad" }[] = [
-    { value: "reached_rescheduled", label: "رد واتفقنا على ميعاد جديد", tone: "good" },
-    { value: "reached_confirmed", label: "رد ومتمسك بالأوردر", tone: "good" },
-    { value: "courier_contacted", label: "اتكلمت مع شركة الشحن", tone: "warn" },
-    { value: "no_answer", label: "محدش رد", tone: "warn" },
-    { value: "phone_off", label: "الرقم مقفول", tone: "warn" },
-    { value: "wrong_number", label: "رقم غلط", tone: "bad" },
-    { value: "customer_refused", label: "العميل رفض الاستلام", tone: "bad" },
-    { value: "other", label: "حاجة تانية", tone: "warn" },
+/**
+ * The outcomes a call can end in. "reached" means the call got somewhere —
+ * the customer answered, or the courier did — and the order now waits on the
+ * delivery; "failed" means it did not, and someone has to try again. A failed
+ * call has to say why, so whoever calls next knows what happened.
+ */
+type OutcomeKind = "reached" | "failed";
+const OUTCOMES: { value: string; label: string; kind: OutcomeKind; needsNote?: boolean; needsDate?: boolean; hint?: string }[] = [
+    { value: "reached_rescheduled", label: "رد واتفقنا على ميعاد تسليم", kind: "reached", needsDate: true },
+    { value: "reached_confirmed", label: "رد ومتمسك بالأوردر", kind: "reached" },
+    { value: "courier_contacted", label: "كلمت شركة الشحن", kind: "reached", hint: "اكتب قالولك إيه" },
+    { value: "no_answer", label: "مابيردش", kind: "failed" },
+    { value: "phone_off", label: "الموبايل مقفول", kind: "failed" },
+    { value: "wrong_number", label: "الرقم غلط", kind: "failed" },
+    { value: "call_later", label: "طلب نكلمه وقت تاني", kind: "failed", hint: "اكتب الميعاد اللي قال عليه" },
+    { value: "whatsapp_pending", label: "بعتناله واتساب ومستنيين رده", kind: "failed" },
+    { value: "customer_away", label: "مسافر / مش موجود دلوقتي", kind: "failed" },
+    { value: "address_issue", label: "العنوان غلط أو ناقص", kind: "failed", hint: "اكتب العنوان الصح" },
+    { value: "customer_refused", label: "رفض الاستلام", kind: "failed", hint: "قال ليه؟" },
+    { value: "other", label: "سبب تاني", kind: "failed", needsNote: true, hint: "لازم تكتب السبب" },
 ];
 const outcomeLabel = (v: string | null) => OUTCOMES.find(o => o.value === v)?.label || v || "—";
+const isFailed = (v: string | null) => OUTCOMES.find(o => o.value === v)?.kind === "failed";
+
+/**
+ * How far following an order up has got — separate from its shipping status.
+ *   new      nobody has called about it yet
+ *   retry    the last call did not reach anyone: call again
+ *   reached  the customer (or courier) was reached; waiting on the delivery
+ */
+type Stage = "new" | "retry" | "reached";
+const stageOf = (r: { followup_count: number; last_outcome: string | null }): Stage =>
+    Number(r.followup_count) === 0 ? "new" : isFailed(r.last_outcome) ? "retry" : "reached";
+
+/** An hour after a failed call, the order is due to be tried again. */
+const RETRY_AFTER_MIN = 60;
+/** From this many follow-ups that ended in a failed call, a final return is suggested. */
+const SUGGEST_RETURN_AT = 3;
 
 const BUCKETS = [
     { key: "all", label: "الكل" },
@@ -98,6 +125,7 @@ export default function ShippingIssuesPage() {
     const [loading, setLoading] = useState(true);
     const [unavailable, setUnavailable] = useState(false);
     const [bucket, setBucket] = useState("all");
+    const [stage, setStage] = useState<Stage | "all">("new");
     // Courier by name — the RPC returns the name, and one courier's problems
     // are one conversation with one account manager.
     const [courier, setCourier] = useState("all");
@@ -142,7 +170,8 @@ export default function ShippingIssuesPage() {
         setHistory(prev => ({ ...prev, [orderId]: (data as Followup[]) || [] }));
     }
 
-    const filtered = useMemo(() => {
+    // Every filter except the follow-up stage: the tabs count from this.
+    const base = useMemo(() => {
         const q = normalizeSearchText(query);
         return rows.filter(r => {
             if (bucket !== "all" && r.bucket !== bucket) return false;
@@ -153,6 +182,26 @@ export default function ShippingIssuesPage() {
             return hay.includes(q);
         });
     }, [rows, bucket, courier, query]);
+
+    const stageCounts = useMemo(() => ({
+        new: base.filter(r => stageOf(r) === "new").length,
+        retry: base.filter(r => stageOf(r) === "retry").length,
+        due: base.filter(r => stageOf(r) === "retry" && (minutesSince(r.last_followup) ?? 0) >= RETRY_AFTER_MIN).length,
+        reached: base.filter(r => stageOf(r) === "reached").length,
+        overdue: base.filter(r => stageOf(r) === "reached" && r.next_action_at && r.next_action_at <= todayStr()).length,
+        all: base.length,
+    }), [base]);
+
+    // New keeps the longest-stuck first. Retry starts with whoever has waited
+    // longest since the last failed call; Reached with the follow-up date that
+    // comes first — today's and overdue ones at the top.
+    const filtered = useMemo(() => {
+        if (stage === "all") return base;
+        const list = base.filter(r => stageOf(r) === stage);
+        if (stage === "retry") return [...list].sort((a, b) => String(a.last_followup ?? "").localeCompare(String(b.last_followup ?? "")));
+        if (stage === "reached") return [...list].sort((a, b) => String(a.next_action_at ?? "9999").localeCompare(String(b.next_action_at ?? "9999")));
+        return list;
+    }, [base, stage]);
 
     /** Couriers present in the current bucket, with how many each is holding. */
     const couriers = useMemo(() => {
@@ -244,12 +293,13 @@ export default function ShippingIssuesPage() {
         }
     }
 
+    // The cards sum up every stuck order the filters show, whichever tab is open.
     const totals = useMemo(() => {
-        const val = filtered.reduce((s, r) => s + Number(r.total_amount || 0), 0);
-        const overdue = filtered.filter(r => r.next_action_at && r.next_action_at < todayStr()).length;
-        const untouched = filtered.filter(r => Number(r.followup_count) === 0).length;
-        return { count: filtered.length, val, overdue, untouched };
-    }, [filtered]);
+        const val = base.reduce((s, r) => s + Number(r.total_amount || 0), 0);
+        const overdue = base.filter(r => r.next_action_at && r.next_action_at < todayStr()).length;
+        const untouched = base.filter(r => Number(r.followup_count) === 0).length;
+        return { count: base.length, val, overdue, untouched };
+    }, [base]);
 
     function openDialog(r: Issue) {
         setForm({ outcome: "", note: "", next: "", newStatus: "" });
@@ -259,6 +309,9 @@ export default function ShippingIssuesPage() {
     async function saveFollowup() {
         if (!activeBusiness || !dialog) return;
         if (!form.outcome) return toast.error(t("اختار نتيجة المكالمة"));
+        const chosen = OUTCOMES.find(o => o.value === form.outcome);
+        if (chosen?.needsNote && !form.note.trim()) return toast.error("اكتب السبب");
+        if (chosen?.needsDate && !form.next) return toast.error("اختار ميعاد التسليم اللي اتفقتوا عليه");
         setSaving(true);
         try {
             const { error } = await supabase.from("shipping_followups").insert({
@@ -301,7 +354,10 @@ export default function ShippingIssuesPage() {
             setHistory(prev => { const n = { ...prev }; delete n[dialog.order_id]; return n; });
             load();
         } catch (e: any) {
-            toast.error(e.message || t("فشل حفظ المتابعة"));
+            const newReason = /outcome_check/.test(e?.message || "");
+            toast.error(newReason
+                ? "السبب ده محتاج migration 20261007_shipping_followup_reasons.sql يتشغّل الأول."
+                : e.message || t("فشل حفظ المتابعة"));
         } finally {
             setSaving(false);
         }
@@ -382,6 +438,8 @@ export default function ShippingIssuesPage() {
                 </Card>
             </div>
 
+            <FollowupTabs value={stage} onChange={setStage} counts={stageCounts} />
+
             <div className="flex flex-wrap items-center gap-2 bg-muted/30 p-3 rounded-xl border">
                 {BUCKETS.map(b => {
                     const c = b.key === "all" ? rows.length : rows.filter(r => r.bucket === b.key).length;
@@ -425,7 +483,15 @@ export default function ShippingIssuesPage() {
                 <div className="flex justify-center p-16"><Loader2 className="h-7 w-7 animate-spin text-muted-foreground" /></div>
             ) : filtered.length === 0 ? (
                 <Card><CardContent className="p-16 text-center text-sm text-muted-foreground">
-                    مفيش أوردرات عالقة في الفلتر ده — شغل كويس.
+                    {stage === "new" ? "مفيش أوردرات محدش تابعها 👌"
+                        : stage === "retry" ? "مفيش أوردرات محتاجة إعادة محاولة 👌"
+                        : stage === "reached" ? "مفيش أوردرات اتوصلنا فيها لحد."
+                        : "مفيش أوردرات عالقة في الفلتر ده — شغل كويس."}
+                    {stage === "new" && stageCounts.retry > 0 && (
+                        <button className="mt-2 block w-full text-primary underline" onClick={() => setStage("retry")}>
+                            فيه {stageCounts.retry} في إعادة المحاولة
+                        </button>
+                    )}
                 </CardContent></Card>
             ) : (
                 <div className="space-y-4">
@@ -463,6 +529,7 @@ export default function ShippingIssuesPage() {
                                             )}>
                                                 {r.status}
                                             </Badge>
+                                            <StageChip r={r} />
                                             <div className={cn("text-sm font-bold",
                                                 r.days_stuck >= 14 ? "text-red-600"
                                                     : r.days_stuck >= 7 ? "text-amber-600" : "text-muted-foreground")}>
@@ -511,7 +578,8 @@ export default function ShippingIssuesPage() {
                                             <>
                                                 <span>
                                                     <span className="text-muted-foreground">آخر متابعة: </span>
-                                                    <span className="font-medium">{outcomeLabel(r.last_outcome)}</span>
+                                                    <span className={cn("font-medium", isFailed(r.last_outcome) ? "text-orange-700 dark:text-orange-300" : "text-emerald-700 dark:text-emerald-400")}>{outcomeLabel(r.last_outcome)}</span>
+                                                    {r.last_followup && <span className="text-muted-foreground"> · {ago(r.last_followup)}</span>}
                                                 </span>
                                                 <span className="text-muted-foreground">{r.followup_count} متابعة</span>
                                                 {overdue && (
@@ -526,6 +594,16 @@ export default function ShippingIssuesPage() {
                                         )}
                                         {r.closed_by && (
                                             <span className="text-muted-foreground">أكده {r.closed_by}</span>
+                                        )}
+                                        {r.last_outcome === "customer_refused" && (
+                                            <span className="basis-full text-xs font-medium text-red-700 dark:text-red-300">
+                                                العميل رفض الاستلام — لو اتأكدت، غيّر الحالة لـ &quot;مرتجع نهائي&quot; من سجّل متابعة.
+                                            </span>
+                                        )}
+                                        {stageOf(r) === "retry" && r.last_outcome !== "customer_refused" && Number(r.followup_count) >= SUGGEST_RETURN_AT && (
+                                            <span className="basis-full text-xs font-medium text-red-700 dark:text-red-300">
+                                                {r.followup_count} متابعات من غير ما نوصل للعميل — اتكلم مع شركة الشحن أو فكّر ترجّعه.
+                                            </span>
                                         )}
                                         <Button variant="ghost" size="sm" className="h-8 gap-1 ms-auto text-xs"
                                                 onClick={() => { setExpanded(open ? null : r.order_id); if (!open) loadHistory(r.order_id); }}>
@@ -582,26 +660,36 @@ export default function ShippingIssuesPage() {
                     </DialogHeader>
 
                     <div className="space-y-4 py-2">
-                        <div className="space-y-2">
-                            <Label>نتيجة المكالمة</Label>
-                            <Select value={form.outcome} onValueChange={v => setForm({ ...form, outcome: v })}>
-                                <SelectTrigger className="w-full"><SelectValue placeholder="اختار..." /></SelectTrigger>
-                                <SelectContent>
-                                    {OUTCOMES.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
-                                </SelectContent>
-                            </Select>
-                        </div>
+                        {(["reached", "failed"] as const).map(kind => (
+                            <div key={kind} className="space-y-1.5">
+                                <Label className={kind === "reached" ? "text-emerald-700 dark:text-emerald-400" : "text-orange-700 dark:text-orange-300"}>
+                                    {kind === "reached" ? "✓ اتوصلنا" : "✗ ماوصلناش — اختار السبب"}
+                                </Label>
+                                <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+                                    {OUTCOMES.filter(o => o.kind === kind).map(o => (
+                                        <button key={o.value} type="button"
+                                                onClick={() => setForm({ ...form, outcome: o.value })}
+                                                className={cn("rounded-lg border p-2 text-start text-sm transition-colors",
+                                                    form.outcome === o.value
+                                                        ? kind === "reached" ? "border-emerald-500 bg-emerald-500/10 ring-1 ring-emerald-500" : "border-orange-500 bg-orange-500/10 ring-1 ring-orange-500"
+                                                        : "hover:bg-muted/60")}>
+                                            {o.label}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        ))}
 
                         <div className="space-y-2">
-                            <Label>ملاحظات</Label>
+                            <Label>ملاحظات{OUTCOMES.find(o => o.value === form.outcome)?.needsNote ? " (لازم)" : ""}</Label>
                             <Textarea rows={2} value={form.note}
                                       onChange={e => setForm({ ...form, note: e.target.value })}
-                                      placeholder="العميل قال إيه بالظبط، وإيه اللي اتفقتوا عليه" />
+                                      placeholder={OUTCOMES.find(o => o.value === form.outcome)?.hint ?? "العميل قال إيه بالظبط، وإيه اللي اتفقتوا عليه"} />
                         </div>
 
                         <div className="grid grid-cols-2 gap-4">
                             <div className="space-y-2">
-                                <Label>متابعة تاني يوم</Label>
+                                <Label>{OUTCOMES.find(o => o.value === form.outcome)?.needsDate ? "ميعاد التسليم (لازم)" : "متابعة تاني يوم"}</Label>
                                 <Input type="date" value={form.next}
                                        onChange={e => setForm({ ...form, next: e.target.value })} />
                             </div>
@@ -632,13 +720,60 @@ export default function ShippingIssuesPage() {
 
                     <DialogFooter>
                         <Button variant="outline" onClick={() => setDialog(null)}>إلغاء</Button>
-                        <Button onClick={saveFollowup} disabled={saving}>
+                        <Button onClick={saveFollowup} disabled={saving || !form.outcome
+                            || (!!OUTCOMES.find(o => o.value === form.outcome)?.needsNote && !form.note.trim())
+                            || (!!OUTCOMES.find(o => o.value === form.outcome)?.needsDate && !form.next)}>
                             {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
                             سجّل المتابعة
                         </Button>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
+        </div>
+    );
+}
+
+/** Where following an order up has got, under its shipping status. */
+function StageChip({ r }: { r: Issue }) {
+    const st = stageOf(r);
+    if (st === "new") return <span dir="rtl" className="rounded-full border border-yellow-200 bg-yellow-50 px-2.5 py-0.5 text-xs font-medium text-yellow-800 dark:border-yellow-900 dark:bg-yellow-950/40 dark:text-yellow-300">محدش تابعه لسه</span>;
+    if (st === "retry") {
+        const due = (minutesSince(r.last_followup) ?? 0) >= RETRY_AFTER_MIN;
+        return <span dir="rtl" className="rounded-full border border-orange-200 bg-orange-50 px-2.5 py-0.5 text-xs font-medium text-orange-800 dark:border-orange-900 dark:bg-orange-950/40 dark:text-orange-300">ماوصلناش{due ? " · جاهز تتصل تاني" : ""}</span>;
+    }
+    const overdue = r.next_action_at && r.next_action_at <= todayStr();
+    return <span dir="rtl" className={cn("rounded-full border px-2.5 py-0.5 text-xs font-medium",
+        overdue ? "border-red-200 bg-red-50 text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300"
+            : "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-300")}>
+        {overdue ? "النهارده ميعاد متابعته" : "اتوصلنا"}
+    </span>;
+}
+
+/** Tabs over the list: by how far following each order up has got. */
+function FollowupTabs({ value, onChange, counts }: {
+    value: Stage | "all";
+    onChange: (v: Stage | "all") => void;
+    counts: { new: number; retry: number; due: number; reached: number; overdue: number; all: number };
+}) {
+    const tabs: { key: Stage | "all"; label: string; sub: string; count: number; tone?: string }[] = [
+        { key: "new", label: "جديدة", sub: "محدش تابعها لسه", count: counts.new },
+        { key: "retry", label: "إعادة المحاولة", sub: counts.due ? `${counts.due} جاهزين تتصل تاني` : "آخر مكالمة ماوصلتش", count: counts.retry, tone: "bg-orange-100 text-orange-800 dark:bg-orange-900/50 dark:text-orange-200" },
+        { key: "reached", label: "اتوصلنا", sub: counts.overdue ? `${counts.overdue} ميعادهم النهارده أو فات` : "مستنيين التسليم", count: counts.reached, tone: counts.overdue ? "bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-200" : "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-200" },
+        { key: "all", label: "الكل", sub: "كل الأوردرات العالقة", count: counts.all },
+    ];
+    return (
+        <div dir="rtl" className="grid grid-cols-2 gap-1 rounded-xl border bg-muted/50 p-1 sm:grid-cols-4">
+            {tabs.map(tab => (
+                <button key={tab.key} type="button" onClick={() => onChange(tab.key)}
+                        className={cn("rounded-lg px-3 py-2 text-start transition-colors",
+                            value === tab.key ? "bg-background shadow-sm" : "text-muted-foreground hover:text-foreground")}>
+                    <div className="flex items-center gap-2">
+                        <span className="text-sm font-semibold">{tab.label}</span>
+                        <span className={cn("rounded-full px-2 text-xs font-bold tabular-nums", tab.count && tab.tone ? tab.tone : "bg-muted text-foreground")}>{tab.count}</span>
+                    </div>
+                    <div className="mt-0.5 truncate text-[11px]">{tab.sub}</div>
+                </button>
+            ))}
         </div>
     );
 }
