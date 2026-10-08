@@ -139,25 +139,45 @@ export default function ShippingIssuesPage() {
     const [form, setForm] = useState({ outcome: "", note: "", next: "", newStatus: "" });
     const [saving, setSaving] = useState(false);
 
-    const load = useCallback(async () => {
+    // `quiet`: the automatic refresh — no spinner, and a failed refresh
+    // leaves the list as it was instead of replacing it with an error.
+    const load = useCallback(async (quiet = false) => {
         if (!activeBusiness) return;
-        setLoading(true);
+        if (!quiet) setLoading(true);
         const { data, error } = await supabase.rpc("get_shipping_issues", {
             p_business_id: activeBusiness.id,
             p_stale_days: staleDays,
         });
         if (error) {
             console.error("Shipping issues failed to load:", error);
-            setUnavailable(true);
-            setRows([]);
+            if (!quiet) { setUnavailable(true); setRows([]); }
         } else {
             setUnavailable(false);
-            setRows((data as Issue[]) || []);
+            // The reference is the order's own: its first 8 characters, as
+            // printed on the waybill. The function in the database returned
+            // the EasyOrders id for some orders — a UUID that matches no
+            // parcel — so it is worked out here rather than trusted.
+            setRows(((data as Issue[]) || []).map(r => ({ ...r, reference: String(r.order_id).slice(0, 8) })));
         }
-        setLoading(false);
+        if (!quiet) setLoading(false);
     }, [activeBusiness, staleDays]);
 
     useEffect(() => { load(); }, [load]);
+
+    // Several people work this list. Every minute while the page is visible,
+    // and whenever someone comes back to the tab, it reloads quietly, so a
+    // follow-up a colleague recorded moves the order to its tab here too.
+    useEffect(() => {
+        const refresh = () => { if (document.visibilityState === "visible") load(true); };
+        const timer = setInterval(refresh, 60_000);
+        document.addEventListener("visibilitychange", refresh);
+        window.addEventListener("focus", refresh);
+        return () => {
+            clearInterval(timer);
+            document.removeEventListener("visibilitychange", refresh);
+            window.removeEventListener("focus", refresh);
+        };
+    }, [load]);
 
     async function loadHistory(orderId: string) {
         if (history[orderId] || !activeBusiness) return;
@@ -412,7 +432,7 @@ export default function ShippingIssuesPage() {
                             left on by accident is noticed before sending it. */}
                         تصدير Excel ({filtered.length})
                     </Button>
-                    <Button variant="outline" onClick={load} className="gap-2">
+                    <Button variant="outline" onClick={() => load()} className="gap-2">
                         <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
                         {t("تحديث")}
                     </Button>
