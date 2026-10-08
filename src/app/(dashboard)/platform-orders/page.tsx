@@ -18,13 +18,17 @@ import { Input } from "@/components/ui/input";
 import { AutosaveField } from "@/components/ui/autosave-field";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Check, X, AlertTriangle, Search, PackageSearch, ChevronsUpDown, Repeat } from "lucide-react";
+import { Loader2, Check, X, AlertTriangle, Search, PackageSearch, ChevronsUpDown, Repeat, PhoneMissed } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
+import {
+    AttemptBadge, AttemptHistory, ConfirmTabs, FailedAttemptDialog, LastAttempt, RETRY_AFTER_MIN, minutesSince, stageOf,
+    type AttemptSummary, type ConfirmStage,
+} from "@/components/orders/confirmation-attempts";
 
 const ORDER_SELECT = `
     *,
@@ -88,6 +92,12 @@ interface Order {
     closed_by?: string | null;
     notes?: string | null;
     order_items: OrderItem[];
+    // Confirmation attempts (20261006_confirmation_attempts.sql)
+    confirm_attempts?: number | null;
+    last_attempt_at?: string | null;
+    last_attempt_reason?: string | null;
+    last_attempt_note?: string | null;
+    last_attempt_by?: string | null;
 }
 
 interface Variant {
@@ -288,12 +298,26 @@ function PlatformOrdersContent() {
             if (!loadedRef.current || running || document.visibilityState === "hidden") return;
             running = true;
             try {
-                const { data, error } = await supabase
-                    .from('orders')
-                    .select('id, status, easyorders_id, tags')
-                    .eq('business_id', businessId)
-                    .ilike('status', 'waiting');
-                if (error || !data) return;
+                // With the attempt summary when the column exists; without it
+                // until 20261006_confirmation_attempts.sql has been run.
+                const query = (cols: string) => supabase.from('orders').select(cols).eq('business_id', businessId).ilike('status', 'waiting');
+                let res = await query('id, status, easyorders_id, tags, confirm_attempts, last_attempt_at, last_attempt_reason, last_attempt_note, last_attempt_by');
+                if (res.error) res = await query('id, status, easyorders_id, tags');
+                const data = res.data as unknown as (AttemptSummary & { id: string; status: string; easyorders_id: string | null; tags: unknown })[] | null;
+                if (res.error || !data) return;
+                const attemptsById = new Map(data.map(o => [o.id, o]));
+                if (data.some(o => o.confirm_attempts !== undefined)) {
+                    setOrders(prev => {
+                        let changed = false;
+                        const next = prev.map(o => {
+                            const a = attemptsById.get(o.id);
+                            if (!a || (a.confirm_attempts ?? 0) === (o.confirm_attempts ?? 0)) return o;
+                            changed = true;
+                            return { ...o, confirm_attempts: a.confirm_attempts, last_attempt_at: a.last_attempt_at, last_attempt_reason: a.last_attempt_reason, last_attempt_note: a.last_attempt_note, last_attempt_by: a.last_attempt_by };
+                        });
+                        return changed ? next : prev;
+                    });
+                }
                 const live = new Set(data.filter(isWaitingPlatformOrder).map(o => o.id as string));
                 const current = ordersRef.current;
                 const gone = current.filter(o => !live.has(o.id));
@@ -737,7 +761,43 @@ function PlatformOrdersContent() {
     const [repeatOnly, setRepeatOnly] = useState(false);
     const repeatCount = filteredOrders.filter(o => repeats.has(o.id)).length;
     const doubleRiskCount = filteredOrders.filter(o => repeats.get(o.id)?.doubleRisk).length;
-    const visibleOrders = repeatOnly ? filteredOrders.filter(o => repeats.has(o.id)) : filteredOrders;
+    const listed = repeatOnly ? filteredOrders.filter(o => repeats.has(o.id)) : filteredOrders;
+
+    // New orders, orders to try again, or both. The order's status stays
+    // Waiting throughout; the tab is how far confirming it has got.
+    const [stageTab, setStageTab] = useState<ConfirmStage | "all">("new");
+    const [failing, setFailing] = useState<Order | null>(null);
+    const stageCounts = {
+        new: listed.filter(o => stageOf(o) === "new").length,
+        retry: listed.filter(o => stageOf(o) === "retry").length,
+        due: listed.filter(o => stageOf(o) === "retry" && (minutesSince(o.last_attempt_at) ?? 0) >= RETRY_AFTER_MIN).length,
+        all: listed.length,
+    };
+    // The retry list starts with whoever has waited longest since their last
+    // try; everything else keeps the newest-first order it always had.
+    const visibleOrders = stageTab === "all" ? listed
+        : stageTab === "new" ? listed.filter(o => stageOf(o) === "new")
+        : listed.filter(o => stageOf(o) === "retry")
+            .sort((a, b) => String(a.last_attempt_at ?? "").localeCompare(String(b.last_attempt_at ?? "")));
+
+    const onAttemptSaved = (order: Order, summary: AttemptSummary) => {
+        setOrders(prev => prev.map(o => o.id === order.id ? { ...o, ...summary } : o));
+        setFailing(null);
+        toast.success(stageTab === "new"
+            ? "اتسجلت المحاولة، والأوردر اتنقل لتاب إعادة المحاولة."
+            : "اتسجلت المحاولة.");
+        if (activeBusiness) {
+            logBusinessAction({
+                businessId: activeBusiness.id,
+                userEmail: currentUser?.email || "Staff",
+                actionType: "edit",
+                entityType: "order",
+                entityId: order.id,
+                entityName: orderLogName(order.id, order.customer_info, "Platform Order"),
+                changes: [{ field: "Confirmation attempt", old_value: null, new_value: `${summary.last_attempt_reason}${summary.last_attempt_note ? `: ${summary.last_attempt_note}` : ""}` }],
+            });
+        }
+    };
     // A twin that is itself a card on screen is linked by anchor; anything
     // else opens in a new tab.
     const onPageIds = new Set(visibleOrders.map(o => o.id));
@@ -806,6 +866,22 @@ function PlatformOrdersContent() {
                 )}
             </div>
 
+            {failing && (
+                <FailedAttemptDialog
+                    orderId={failing.id}
+                    customerName={failing.customer_info?.name || ""}
+                    attempts={failing.confirm_attempts ?? 0}
+                    open={!!failing}
+                    onOpenChange={o => { if (!o) setFailing(null); }}
+                    onSaved={summary => onAttemptSaved(failing, summary)}
+                    onGone={() => {
+                        toast.info("الأوردر ده اتنقل أو اتلغى قبل كده من زميلك.");
+                        setOrders(prev => prev.filter(o => o.id !== failing.id));
+                        setFailing(null);
+                    }}
+                />
+            )}
+
             {/* Treasury Transaction Modal */}
             <AlertDialog open={depositModalOpen} onOpenChange={setDepositModalOpen}>
                 <AlertDialogContent>
@@ -842,8 +918,24 @@ function PlatformOrdersContent() {
                 </AlertDialogContent>
             </AlertDialog>
 
+            {orders.length > 0 && (
+                <ConfirmTabs value={stageTab} onChange={setStageTab} counts={stageCounts} />
+            )}
+
             <div id="platform-orders-table">
-            {visibleOrders.length === 0 ? (
+            {visibleOrders.length === 0 && orders.length > 0 ? (
+                <div className="flex flex-col items-center justify-center rounded-lg border border-dashed bg-muted/20 p-14 text-center text-muted-foreground" dir="rtl">
+                    <PackageSearch className="mb-3 h-10 w-10 opacity-20" />
+                    <p className="font-medium">
+                        {stageTab === "new" ? "مفيش أوردرات جديدة 👌" : stageTab === "retry" ? "مفيش أوردرات محتاجة إعادة محاولة 👌" : "مفيش أوردرات بالفلتر ده"}
+                    </p>
+                    {stageTab === "new" && stageCounts.retry > 0 && (
+                        <button className="mt-2 text-sm text-primary underline" onClick={() => setStageTab("retry")}>
+                            فيه {stageCounts.retry} في إعادة المحاولة
+                        </button>
+                    )}
+                </div>
+            ) : visibleOrders.length === 0 ? (
                 <div className="flex flex-col items-center justify-center p-20 text-muted-foreground bg-muted/20 rounded-lg border border-dashed">
                     <PackageSearch className="h-12 w-12 mb-4 opacity-20" />
                     <p className="text-lg font-medium">{t("No waiting platform orders")}</p>
@@ -883,9 +975,7 @@ function PlatformOrdersContent() {
                                     </div>
                                     <div className="flex items-center justify-between sm:flex-col sm:items-end gap-2 shrink-0">
                                         <p className="text-xl font-bold text-primary">{formatCurrency(order.total_amount)}</p>
-                                        <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200">
-                                            Waiting Review
-                                        </Badge>
+                                        <AttemptBadge order={order} />
                                     </div>
                                 </div>
 
@@ -895,6 +985,10 @@ function PlatformOrdersContent() {
                                 {repeats.has(order.id) && (
                                     <RepeatOrdersAlert info={repeats.get(order.id)!} onPage={onPageIds} />
                                 )}
+                                {/* What the last person to call was told, before
+                                    the next one picks up the phone. */}
+                                <LastAttempt order={order} />
+                                <AttemptHistory orderId={order.id} count={order.confirm_attempts ?? 0} />
                                 {/* Calling is the first thing that happens to one
                                     of these orders, so it is the first thing on
                                     the card rather than a field to select and
@@ -1400,6 +1494,15 @@ function PlatformOrdersContent() {
                                         </AlertDialogFooter>
                                     </AlertDialogContent>
                                 </AlertDialog>
+
+                                <Button
+                                    variant="outline"
+                                    className="w-full sm:w-auto border-orange-300 text-orange-800 hover:bg-orange-50 dark:border-orange-900 dark:text-orange-300"
+                                    onClick={() => setFailing(order)}
+                                >
+                                    <PhoneMissed className="mr-2 h-4 w-4" />
+                                    ماتأكدش
+                                </Button>
 
                                 <AlertDialog>
                                     <AlertDialogTrigger asChild>
