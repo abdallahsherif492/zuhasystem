@@ -324,7 +324,9 @@ function LogisticsContent() {
                     const o = orders.find(x => x.id === oid);
                     return {
                         id: oid,
-                        reference: (o as any)?.easyorders_id || oid.substring(0, 8),
+                        // The system's reference, as printed on the waybill —
+                        // never the EasyOrders id, a UUID nobody can match.
+                        reference: oid.substring(0, 8),
                         customer: (o?.customer_info as any)?.name || "Customer",
                         from: o?.status ?? null,
                     };

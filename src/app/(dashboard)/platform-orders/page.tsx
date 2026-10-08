@@ -417,7 +417,7 @@ function PlatformOrdersContent() {
                     category: 'orders_collection',
                     order_id: order.id,
                     amount: order.paid_amount,
-                    description: `Payment collection for Platform Order ${order.easyorders_id || order.id.slice(0,8)}`,
+                    description: `Payment collection for Platform Order #${order.id.slice(0, 8)}${order.customer_info?.name ? ` (${order.customer_info.name})` : ""}`,
                     account_name: accountName
                 });
                 if (txError) {

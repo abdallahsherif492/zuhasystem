@@ -624,7 +624,9 @@ export default function ActionsLogPage() {
                                                                                 {bulkOrders.map((o, i) => (
                                                                                     <tr key={o.id || i} className="border-b last:border-0">
                                                                                         <td className="p-2 text-muted-foreground">{i + 1}</td>
-                                                                                        <td className="p-2 font-mono">{o.reference || String(o.id || "").slice(0, 8)}</td>
+                                                                                        {/* From the id, not the stored reference: older bulk entries
+                                                                                            stored the EasyOrders UUID there. */}
+                                                                                        <td className="p-2 font-mono">{String(o.id || o.reference || "").slice(0, 8)}</td>
                                                                                         <td className="p-2">{o.customer || "—"}</td>
                                                                                         <td className="p-2 text-muted-foreground">{o.from || "—"}</td>
                                                                                     </tr>
