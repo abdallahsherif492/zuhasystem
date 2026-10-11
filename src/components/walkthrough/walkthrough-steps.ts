@@ -43,6 +43,14 @@ export const walkthroughPages: PageWalkthrough[] = [
         },
       },
       {
+        element: "#dash-attention",
+        popover: {
+          title: "🔔 محتاج انتباهك",
+          description: "أول حاجة تبص عليها: كل اللي مستني حد يتحرك — أوردرات محدش كلّمها، شحن محدش تابعه، منتجات خلصت، مرتبات ماتصرفتش — والأهم الأول، وجنب كل واحدة لينك يوديك تخلّصها.",
+          side: "bottom",
+        },
+      },
+      {
         element: "#dash-performance",
         popover: {
           title: "📊 أداء الفترة",

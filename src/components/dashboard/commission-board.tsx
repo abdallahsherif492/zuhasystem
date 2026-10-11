@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { endOfMonth, format, startOfMonth, subDays, subMonths } from "date-fns";
-import { BadgePercent, Clock, Settings2 } from "lucide-react";
+import { BadgePercent, Settings2 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useBusiness } from "@/contexts/BusinessContext";
 import { formatCurrency, cn } from "@/lib/utils";
@@ -12,12 +12,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 interface BoardRow {
     email: string;
     is_me: boolean;
-    eligible_orders: number;
-    eligible_sales: number;   // without shipping
-    eligible_total: number;   // with shipping
-    aov: number | null;
+    confirmed_orders: number | null;   // every order they confirmed (20261010)
+    confirmed_sales: number | null;    // without shipping
+    eligible_orders: number;           // delivered, from the minimum up
+    eligible_sales: number;            // without shipping
     below_min: number;
-    awaiting_orders: number;
+    awaiting_orders: number;           // qualify, still on their way
+    awaiting_total: number | null;     // with shipping (20261010)
     returned: number;
     cancelled: number;
     min_total: number;
@@ -35,12 +36,17 @@ const PERIODS = [
 ] as const;
 const MEDALS = ["🥇", "🥈", "🥉"];
 const n = (v: unknown) => Number(v) || 0;
+const nn = (v: unknown) => (v === null || v === undefined ? null : Number(v) || 0);
+const int = (v: number) => Math.round(v).toLocaleString("en");
+const money = (v: number) => formatCurrency(Math.round(v)).replace(/\.00$/, "");
 
 /**
- * Moderator commission on the main page: a ranking by orders that earn
- * commission, with their average value and total. A commission figure shows
- * only to its own moderator and to managers — the database decides, not this
- * component (commission_board in 20261008_moderator_commission.sql).
+ * Moderator commission on the main page, open to the whole sales team.
+ * For each moderator, three things side by side: the orders they confirmed,
+ * the delivered ones that earned commission, and the ones that qualify but
+ * have not been delivered yet — whose commission is not earned until they
+ * are. Ranked by orders that earned commission (commission_board in
+ * 20261008/20261010).
  */
 export function CommissionBoard() {
     const { activeBusiness } = useBusiness();
@@ -61,19 +67,17 @@ export function CommissionBoard() {
                 ...b,
                 rows: (b.rows || []).map(r => ({
                     ...r,
-                    eligible_orders: n(r.eligible_orders), eligible_sales: n(r.eligible_sales), eligible_total: n(r.eligible_total),
-                    below_min: n(r.below_min), awaiting_orders: n(r.awaiting_orders), min_total: n(r.min_total),
-                    aov: r.aov === null ? null : n(r.aov),
-                    commission: r.commission === null ? null : n(r.commission),
-                    awaiting_commission: r.awaiting_commission === null ? null : n(r.awaiting_commission),
+                    confirmed_orders: nn(r.confirmed_orders), confirmed_sales: nn(r.confirmed_sales),
+                    eligible_orders: n(r.eligible_orders), eligible_sales: n(r.eligible_sales),
+                    below_min: n(r.below_min), awaiting_orders: n(r.awaiting_orders), awaiting_total: nn(r.awaiting_total),
+                    returned: n(r.returned), cancelled: n(r.cancelled), min_total: n(r.min_total),
+                    rate: nn(r.rate), commission: nn(r.commission), awaiting_commission: nn(r.awaiting_commission),
                 })),
             });
         });
         return () => { cancelled = true; };
     }, [activeBusiness, period]);
 
-    // Nothing to show until commission is set up — and nothing at all for
-    // staff then, or before the migration has been run.
     if (failed || !board) return null;
     if (!board.configured) {
         if (!board.is_manager) return null;
@@ -87,13 +91,12 @@ export function CommissionBoard() {
         );
     }
 
-    const rows = board.rows;
-    const totalOrders = rows.reduce((s, r) => s + r.eligible_orders, 0);
-    const totalSales = rows.reduce((s, r) => s + r.eligible_sales, 0);
-    const me = rows.find(r => r.is_me);
-    const commissionTotal = board.is_manager ? rows.reduce((s, r) => s + (r.commission ?? 0), 0) : me?.commission ?? null;
-    const awaitingTotal = board.is_manager ? rows.reduce((s, r) => s + (r.awaiting_commission ?? 0), 0) : me?.awaiting_commission ?? null;
-    const top = Math.max(1, ...rows.map(r => r.eligible_orders));
+    const rows = [...board.rows].sort((a, b) =>
+        b.eligible_orders - a.eligible_orders || b.awaiting_orders - a.awaiting_orders || n(b.confirmed_orders) - n(a.confirmed_orders));
+    const sum = (f: (r: BoardRow) => number | null) => rows.reduce((s, r) => s + n(f(r)), 0);
+    const hasConfirmed = rows.some(r => r.confirmed_orders !== null);
+    const minTotal = rows[0]?.min_total ?? 0;
+    const sameMin = rows.every(r => r.min_total === minTotal);
 
     return (
         <Card dir="rtl">
@@ -101,13 +104,13 @@ export function CommissionBoard() {
                 <div>
                     <CardTitle className="flex items-center gap-2 text-lg"><BadgePercent className="h-5 w-5 text-primary" />كوميشن المودريتورز</CardTitle>
                     <CardDescription>
-                        على الأوردرات اللي اتسلمت للعميل · المبيعات والكوميشن من غير الشحن · الترتيب بعدد الأوردرات
+                        الكوميشن بيتحسب على الأوردر لما يتسلم للعميل{sameMin ? ` ويكون إجماليه بالشحن ${int(minTotal)} ج أو أكتر` : ""}، على المبلغ من غير الشحن.
                     </CardDescription>
                 </div>
-                <div className="inline-flex rounded-lg border bg-muted p-1">
+                <div className="inline-flex shrink-0 rounded-lg border bg-muted p-1">
                     {PERIODS.map(p => (
                         <button key={p.key} onClick={() => setPeriod(p.key)}
-                                className={cn("rounded-md px-2.5 py-1 text-xs font-medium", period === p.key ? "bg-background shadow-sm" : "text-muted-foreground")}>
+                                className={cn("rounded-md px-2.5 py-1 text-xs font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring", period === p.key ? "bg-background shadow-sm" : "text-muted-foreground")}>
                             {p.label}
                         </button>
                     ))}
@@ -115,62 +118,66 @@ export function CommissionBoard() {
             </CardHeader>
             <CardContent className="space-y-4">
                 <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
-                    <Stat label="أوردرات ليها كوميشن" value={totalOrders.toLocaleString("en")} />
-                    <Stat label="المبيعات (من غير شحن)" value={formatCurrency(totalSales)} />
-                    <Stat label="متوسط الأوردر" value={totalOrders ? formatCurrency(totalSales / totalOrders) : "—"} />
-                    {commissionTotal !== null && (
-                        <Stat
-                            label={board.is_manager ? "إجمالي الكوميشن" : "الكوميشن بتاعك"}
-                            value={formatCurrency(commissionTotal)}
-                            hint={awaitingTotal ? `+ ${formatCurrency(awaitingTotal)} مستني التسليم` : undefined}
-                            strong
-                        />
+                    {hasConfirmed && (
+                        <Stat label="الأوردرات المؤكدة" value={int(sum(r => r.confirmed_orders))} hint={`مبيعاتها ${money(sum(r => r.confirmed_sales))} من غير شحن`} />
                     )}
+                    <Stat label="اتسلمت وليها كوميشن" value={int(sum(r => r.eligible_orders))} hint={`مبيعاتها ${money(sum(r => r.eligible_sales))}`} />
+                    <Stat label="الكوميشن المستحق" value={money(sum(r => r.commission))} hint="على الأوردرات اللي اتسلمت" tone="good" />
+                    <Stat label="كوميشن مستني التسليم" value={money(sum(r => r.awaiting_commission))}
+                          hint={`${int(sum(r => r.awaiting_orders))} أوردر لسه في الشحن${hasConfirmed ? ` بإجمالي ${money(sum(r => r.awaiting_total))}` : ""}`} tone="pending" />
                 </div>
 
-                <div className="divide-y rounded-lg border">
-                    {rows.map((r, i) => (
-                        <div key={r.email} className={cn("flex flex-col gap-2 p-3 sm:flex-row sm:items-center sm:gap-4", r.is_me && "bg-primary/[0.04]")}>
-                            <div className="flex min-w-0 items-center gap-3 sm:w-56">
-                                <span className="w-7 shrink-0 text-center text-lg">{MEDALS[i] ?? <span className="text-sm font-bold text-muted-foreground">#{i + 1}</span>}</span>
-                                <div className="min-w-0">
-                                    <div className="flex items-center gap-1.5 truncate font-semibold" title={r.email}>
-                                        {r.email.split("@")[0]}
-                                        {r.is_me && <span className="rounded-full bg-primary/10 px-1.5 text-[10px] font-medium text-primary">إنت</span>}
-                                    </div>
-                                    <div className="text-[11px] text-muted-foreground">
-                                        {r.rate !== null ? `${r.rate}% · ` : ""}من {r.min_total.toLocaleString("en")} ج
-                                    </div>
-                                </div>
-                            </div>
-                            <div className="flex-1">
-                                <div className="flex items-baseline justify-between text-sm">
-                                    <span><b className="text-base">{r.eligible_orders}</b> <span className="text-muted-foreground">أوردر</span></span>
-                                    <span className="text-xs text-muted-foreground">متوسط <span dir="ltr">{r.aov !== null ? formatCurrency(r.aov) : "—"}</span></span>
-                                </div>
-                                <div className="mt-1 h-2 rounded-full bg-muted">
-                                    <div className="h-2 rounded-full bg-primary" style={{ width: `${(r.eligible_orders / top) * 100}%` }} />
-                                </div>
-                                <div className="mt-1 flex flex-wrap gap-x-3 text-[11px] text-muted-foreground">
-                                    {r.awaiting_orders > 0 && <span className="inline-flex items-center gap-1"><Clock className="h-3 w-3" />{r.awaiting_orders} مستني التسليم</span>}
-                                    {r.below_min > 0 && <span>{r.below_min} اتسلموا بس أقل من {r.min_total.toLocaleString("en")} ج</span>}
-                                    {r.returned > 0 && <span>{r.returned} مرتجع</span>}
-                                </div>
-                            </div>
-                            <div className="flex items-center justify-between gap-4 sm:w-56 sm:justify-end">
-                                <div className="text-end">
-                                    <div className="text-[11px] text-muted-foreground">المبيعات</div>
-                                    <div className="text-sm font-medium"><span dir="ltr">{formatCurrency(r.eligible_sales)}</span></div>
-                                </div>
-                                {r.commission !== null && (
-                                    <div className="text-end">
-                                        <div className="text-[11px] text-muted-foreground">الكوميشن</div>
-                                        <div className="font-bold text-emerald-600 dark:text-emerald-400"><span dir="ltr">{formatCurrency(r.commission)}</span></div>
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-                    ))}
+                <div className="overflow-x-auto rounded-lg border">
+                    <table className="w-full min-w-[720px] text-sm">
+                        <thead className="bg-muted/40 text-xs text-muted-foreground">
+                            <tr className="[&>th]:px-3 [&>th]:py-2 [&>th]:text-start [&>th]:font-medium">
+                                <th>المودريتور</th>
+                                {hasConfirmed && <th>أكّد</th>}
+                                <th>اتسلم وليه كوميشن</th>
+                                <th>مستني التسليم</th>
+                                <th className="text-end">الكوميشن</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y">
+                            {rows.map((r, i) => (
+                                <tr key={r.email} className={cn("align-top [&>td]:px-3 [&>td]:py-2.5", r.is_me && "bg-primary/[0.05]")}>
+                                    <td>
+                                        <div className="flex items-center gap-2">
+                                            <span className="w-6 shrink-0 text-center">{MEDALS[i] ?? <span className="text-xs font-semibold text-muted-foreground">{i + 1}</span>}</span>
+                                            <div className="min-w-0">
+                                                <div className="flex items-center gap-1.5 truncate font-semibold" title={r.email}>
+                                                    {r.email.split("@")[0]}
+                                                    {r.is_me && <span className="rounded-full bg-primary/10 px-1.5 text-[10px] font-medium text-primary">إنت</span>}
+                                                </div>
+                                                <div className="text-[11px] text-muted-foreground">{r.rate !== null ? `${r.rate}%` : ""}{!sameMin ? ` من ${int(r.min_total)} ج` : ""}</div>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    {hasConfirmed && (
+                                        <td>
+                                            <div className="font-medium tabular-nums">{int(n(r.confirmed_orders))} أوردر</div>
+                                            <div className="text-xs text-muted-foreground"><span dir="ltr">{money(n(r.confirmed_sales))}</span></div>
+                                            {n(r.confirmed_orders) > 0 && <div className="text-[11px] text-muted-foreground">متوسط <span dir="ltr">{money(n(r.confirmed_sales) / n(r.confirmed_orders))}</span></div>}
+                                        </td>
+                                    )}
+                                    <td>
+                                        <div className="font-medium tabular-nums">{int(r.eligible_orders)} أوردر</div>
+                                        <div className="text-xs text-muted-foreground"><span dir="ltr">{money(r.eligible_sales)}</span></div>
+                                        {r.below_min > 0 && <div className="text-[11px] text-muted-foreground">{int(r.below_min)} اتسلموا تحت الحد</div>}
+                                    </td>
+                                    <td>
+                                        <div className="font-medium tabular-nums">{int(r.awaiting_orders)} أوردر</div>
+                                        {r.awaiting_total !== null && r.awaiting_orders > 0 && <div className="text-xs text-muted-foreground">إجمالي <span dir="ltr">{money(r.awaiting_total)}</span></div>}
+                                        {r.awaiting_commission ? <div className="text-xs text-amber-700 dark:text-amber-400">كوميشنهم <span dir="ltr">{money(r.awaiting_commission)}</span></div> : null}
+                                    </td>
+                                    <td className="text-end">
+                                        <div className="font-bold tabular-nums text-emerald-700 dark:text-emerald-400"><span dir="ltr">{money(n(r.commission))}</span></div>
+                                        {r.awaiting_commission ? <div className="text-[11px] text-muted-foreground">+ <span dir="ltr">{money(r.awaiting_commission)}</span> لو اتسلموا</div> : null}
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
                 </div>
                 {board.is_manager && (
                     <div className="text-end">
@@ -182,12 +189,16 @@ export function CommissionBoard() {
     );
 }
 
-function Stat({ label, value, hint, strong }: { label: string; value: string; hint?: string; strong?: boolean }) {
+function Stat({ label, value, hint, tone }: { label: string; value: string; hint?: string; tone?: "good" | "pending" }) {
     return (
-        <div className={cn("rounded-lg border p-3", strong && "border-emerald-300 bg-emerald-50/60 dark:border-emerald-900 dark:bg-emerald-950/20")}>
+        <div className={cn("rounded-lg border p-3",
+            tone === "good" && "border-emerald-300 bg-emerald-50/60 dark:border-emerald-900 dark:bg-emerald-950/20",
+            tone === "pending" && "border-amber-300 bg-amber-50/60 dark:border-amber-900 dark:bg-amber-950/20")}>
             <div className="text-xs text-muted-foreground">{label}</div>
-            <div className={cn("mt-0.5 text-lg font-bold", strong && "text-emerald-700 dark:text-emerald-400")}><span dir="ltr">{value}</span></div>
-            {hint && <div className="text-[11px] text-muted-foreground" dir="rtl">{hint}</div>}
+            <div className={cn("mt-0.5 text-lg font-bold tabular-nums", tone === "good" && "text-emerald-700 dark:text-emerald-400", tone === "pending" && "text-amber-800 dark:text-amber-300")}>
+                <span dir="ltr">{value}</span>
+            </div>
+            {hint && <div className="text-[11px] text-muted-foreground">{hint}</div>}
         </div>
     );
 }

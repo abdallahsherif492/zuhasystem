@@ -20,7 +20,8 @@ import { ModeratorsLeague } from "@/components/dashboard/moderators-league";
 import { CommissionBoard } from "@/components/dashboard/commission-board";
 import { AdvancedAnalytics } from "@/components/dashboard/advanced-analytics";
 import {
-  Disclosure, PerformanceStrip, PlatformQueue, Section, ShippingQueue, normalizeOverview, type Overview,
+  AttentionList, Disclosure, FulfilmentStrip, MoneyPanel, PerformanceStrip, PlatformQueue, Section, ShippingQueue,
+  moneyAttention, normalizeMoney, normalizeOverview, overviewAttention, type AttentionItem, type Money, type Overview,
 } from "@/components/dashboard/overview";
 
 // The dashboard is read in Arabic, and the app's own typeface has no Arabic
@@ -40,6 +41,7 @@ interface RestockAlertItem {
 }
 
 const MIGRATION = "supabase/migrations/20261009_dashboard_overview.sql";
+const MIGRATION_OWNER = "supabase/migrations/20261010_dashboard_owner.sql";
 
 interface RecentOrder { id: string; created_at: string; status: string; total_amount: number; channel: string | null; customer_info: { name?: string } | null }
 interface TopProduct { product_name?: string; name?: string; total_sold?: number; total_units?: number; quantity?: number; total_revenue?: number }
@@ -50,13 +52,16 @@ const unitsOf = (p: TopProduct) => Number(p.total_sold ?? p.total_units ?? p.qua
 
 /**
  * The dashboard, in the order the questions come:
+ *   0. What needs someone right now?     one list, most urgent first, each with its page
  *   1. How did the period go?            sales, orders, confirmation, delivery, AOV
- *   2. What work is waiting, and who did what?
+ *   2. The money (managers)              profit after returns, ads and running costs;
+ *                                        treasury, money still with couriers, suppliers
+ *   3. What work is waiting, and who did what?
  *                                        store orders to confirm, shipping problems,
- *                                        commission, the moderators league
- *   3. Sales in detail                   by day, latest orders, advanced analytics
- *   4. Products and stock                best sellers, what to restock, stock value
- * Sections 1 and 2 come from one call to dashboard_overview().
+ *                                        preparing and shipping, commission, the league
+ *   4. Sales in detail                   by day, latest orders, advanced analytics
+ *   5. Products and stock                best sellers, what to restock, stock value
+ * The figures come from dashboard_overview() and dashboard_money().
  */
 function DashboardContent() {
   const { activeBusiness } = useBusiness();
@@ -69,6 +74,9 @@ function DashboardContent() {
   const [pendingOrderAlert, setPendingOrderAlert] = useState<{ id: string; name: string; total: number } | null>(null);
   const [overview, setOverview] = useState<Overview | null>(null);
   const [overviewError, setOverviewError] = useState<"missing" | "failed" | null>(null);
+  const [moneyData, setMoneyData] = useState<Money | null>(null);
+  const [treasury, setTreasury] = useState<{ account_name: string; balance: number }[] | null>(null);
+  const [couriers, setCouriers] = useState<{ company_name: string | null; outstanding: number }[] | null>(null);
   const [stock, setStock] = useState({ value: 0, units: 0 });
   const [recentOrders, setRecentOrders] = useState<RecentOrder[]>([]);
   const [topProducts, setTopProducts] = useState<TopProduct[]>([]);
@@ -115,9 +123,11 @@ function DashboardContent() {
     const end = `${to}T23:59:59`;
 
     try {
-      const [ov, dailyRes, topRes, recentRes] = await Promise.all([
-        // Sections 1 and 2: the period, its predecessor and the queues, in one call.
+      const [ov, mo, dailyRes, topRes, recentRes] = await Promise.all([
+        // The period, its predecessor and the queues, in one call.
         supabase.rpc("dashboard_overview", { p_business_id: activeBusiness.id, p_from: from, p_to: to }),
+        // The money; {allowed: false} for anyone who is not a manager.
+        supabase.rpc("dashboard_money", { p_business_id: activeBusiness.id, p_from: from, p_to: to }),
         supabase.rpc("get_daily_sales", { from_date: start, to_date: end, p_business_id: activeBusiness.id }),
         supabase.rpc("get_top_products", { from_date: start, to_date: end, limit_count: 5, p_business_id: activeBusiness.id }),
         supabase.from("orders")
@@ -135,6 +145,19 @@ function DashboardContent() {
       } else {
         setOverviewError(null);
         setOverview(normalizeOverview(ov.data as Overview));
+      }
+
+      const m = mo.error ? null : normalizeMoney(mo.data as Money);
+      setMoneyData(m);
+      if (m?.allowed) {
+        // Where the cash is, from the functions the accounting and courier
+        // pages already use, so the three screens agree.
+        const [tr, cm] = await Promise.all([
+          supabase.rpc("get_treasury_balances", { p_business_id: activeBusiness.id }),
+          supabase.rpc("get_courier_collection_match", { p_business_id: activeBusiness.id, p_from: "2020-01-01T00:00:00Z", p_to: new Date().toISOString() }),
+        ]);
+        setTreasury(tr.error ? null : ((tr.data || []) as { account_name: string; balance: number }[]));
+        setCouriers(cm.error ? null : ((cm.data || []) as { company_name: string | null; outstanding: number }[]));
       }
 
       setRecentOrders((recentRes.data || []) as RecentOrder[]);
@@ -235,6 +258,18 @@ function DashboardContent() {
   const maxSold = Math.max(1, ...topProducts.map(unitsOf));
   const waitingCount = overview?.platform.waiting ?? 0;
 
+  // Everything that needs someone, gathered from every section below.
+  const soldOut = restockAlerts.filter(r => r.currentStock <= 0);
+  const attention: AttentionItem[] = [
+    ...(overview ? overviewAttention(overview, ar) : []),
+    ...(moneyData?.allowed ? moneyAttention(moneyData, ar) : []),
+    ...(soldOut.length ? [{
+      key: "sold-out", tone: "risk" as const, href: "/purchases", action: c("اطلب", "Restock"),
+      text: c(`${soldOut.length} منتج بيتباع خلص من المخزون: ${soldOut.slice(0, 2).map(r => r.productName).join("، ")}${soldOut.length > 2 ? " وغيرهم" : ""}.`,
+              `${soldOut.length} selling products are out of stock: ${soldOut.slice(0, 2).map(r => r.productName).join(", ")}${soldOut.length > 2 ? " and more" : ""}.`),
+    }] : []),
+  ];
+
   const overviewNotice = overviewError && (
     <div className="rounded-xl border border-dashed p-5 text-sm text-muted-foreground">
       {overviewError === "missing"
@@ -287,6 +322,12 @@ function DashboardContent() {
         </div>
       </div>
 
+      {/* 0 — What needs someone right now */}
+      <Section id="dash-attention" title={c("محتاج انتباهك", "Needs your attention")}
+               description={c("كل اللي مستني حد يتحرك، الأهم الأول.", "Everything waiting on someone, most urgent first.")}>
+        {overviewError === "missing" ? overviewNotice : <AttentionList items={attention} ar={ar} loading={!overview && !overviewError} />}
+      </Section>
+
       {/* 1 — How the period went */}
       <Section id="dash-performance" title={c("أداء الفترة", "How the period went")}
                description={c("مقارنة بنفس عدد الأيام اللي قبلها.", "Against the same number of days before.")}>
@@ -295,7 +336,20 @@ function DashboardContent() {
           : <div className="h-[118px] animate-pulse rounded-xl border bg-muted/30 motion-reduce:animate-none" />)}
       </Section>
 
-      {/* 2 — The moderators' work */}
+      {/* 2 — The money: managers only */}
+      {moneyData?.allowed && (
+        <Section id="dash-money" title={c("الفلوس", "Money")}
+                 description={c("ربح الفترة بعد المرتجعات والإعلانات والمصاريف، وفين الكاش دلوقتي.", "The period's profit after returns, ads and costs, and where the cash is now.")}>
+          <MoneyPanel m={moneyData} treasury={treasury} couriers={couriers} ar={ar} />
+        </Section>
+      )}
+      {moneyData === null && overview && overview.fulfilment === null && (
+        <p className="-mt-6 text-xs text-muted-foreground">
+          {c("الأرقام المالية والتجهيز محتاجين migration:", "Money and fulfilment need a migration:")} <code className="rounded bg-muted px-1" dir="ltr">{MIGRATION_OWNER}</code>
+        </p>
+      )}
+
+      {/* 3 — The moderators' work */}
       <Section id="dash-work" title={c("شغل المودريتورز", "The moderators' work")}
                description={c("اللي مستني دلوقتي، واللي عمله كل مودريتور.", "What is waiting now, and what each moderator did.")}>
         {overviewNotice || (overview ? (
@@ -304,13 +358,14 @@ function DashboardContent() {
             <ShippingQueue o={overview} ar={ar} periodLabel={periodPhrase} />
           </div>
         ) : <div className="h-72 animate-pulse rounded-xl border bg-muted/30 motion-reduce:animate-none" />)}
+        {overview && <FulfilmentStrip o={overview} ar={ar} />}
         <div className="mt-4"><CommissionBoard /></div>
         <Disclosure storageKey="ecx:dash:league" label={c("تفاصيل المودريتورز: الترتيب والرسوم والأهداف", "Moderator details: ranking, charts and targets")}>
           <ModeratorsLeague />
         </Disclosure>
       </Section>
 
-      {/* 3 — Sales in detail */}
+      {/* 4 — Sales in detail */}
       <Section id="dash-sales" title={c("المبيعات بالتفصيل", "Sales in detail")}>
         <div className="grid gap-4 lg:grid-cols-5">
           <div className="rounded-xl border bg-card p-4 lg:col-span-3">
@@ -367,7 +422,7 @@ function DashboardContent() {
         </Disclosure>
       </Section>
 
-      {/* 4 — Products and stock */}
+      {/* 5 — Products and stock */}
       <Section id="dash-stock" title={c("المنتجات والمخزون", "Products and stock")}
                aside={<div className="text-sm text-muted-foreground">{c("قيمة المخزون", "Stock value")} <span className="font-semibold text-foreground" dir="ltr">{formatCurrency(stock.value)}</span> {c(`في ${stock.units.toLocaleString("en")} قطعة`, `across ${stock.units.toLocaleString("en")} units`)}</div>}>
         <div className="grid gap-4 lg:grid-cols-5">

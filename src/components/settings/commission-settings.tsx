@@ -118,7 +118,7 @@ export function CommissionSettings() {
             <CardHeader>
                 <CardTitle className="flex items-center gap-2"><BadgePercent className="h-5 w-5" />كوميشن المودريتورز</CardTitle>
                 <CardDescription>
-                    نسبة لكل مودريتور على الأوردرات اللي أكّدها. بتظهر في الصفحة الرئيسية: كل مودريتور بيشوف الكوميشن بتاعه بس، والإدارة بتشوف الكل.
+                    نسبة لكل مودريتور على الأوردرات اللي أكّدها. بتظهر في الصفحة الرئيسية لكل فريق السيلز: الترتيب والكوميشن والنسب.
                 </CardDescription>
             </CardHeader>
             <CardContent className="space-y-5">
