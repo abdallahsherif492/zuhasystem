@@ -30,6 +30,7 @@ import { AdvancedSearch } from "@/components/dashboard/advanced-search";
 import { format } from "date-fns";
 import { RecentSales } from "@/components/dashboard/recent-sales";
 import { ModeratorsLeague } from "@/components/dashboard/moderators-league";
+import { CommissionBoard } from "@/components/dashboard/commission-board";
 import { AdvancedAnalytics } from "@/components/dashboard/advanced-analytics";
 
 interface RestockAlertItem {
@@ -563,6 +564,10 @@ function DashboardContent() {
       {/* Moderators League — directly under the KPIs rather than at the foot of
           the page. It is a scoreboard, and a scoreboard nobody scrolls to is
           not one. */}
+      {/* Commission next to the league it pays out on. Shows nothing until
+          commission is set up in Settings. */}
+      <CommissionBoard />
+
       <ModeratorsLeague />
 
       {/* Everything the tiles above cannot say: the same period broken out by

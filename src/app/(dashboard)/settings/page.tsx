@@ -7,6 +7,7 @@ import { useState, useEffect } from "react";
 import { useBusiness } from "@/contexts/BusinessContext";
 import { useLanguage, DEFAULT_LANGUAGE, DEFAULT_DIRECTION } from "@/contexts/LanguageContext";
 import { MyPreferences } from "@/components/settings/my-preferences";
+import { CommissionSettings } from "@/components/settings/commission-settings";
 import { supabase } from "@/lib/supabase";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -55,7 +56,7 @@ export default function SettingsPage() {
     const [activeTab, setActiveTab] = useState("theme");
     useEffect(() => {
         const tab = new URLSearchParams(window.location.search).get("tab");
-        if (tab && ["theme", "shipping", "platforms", "tools", "inventory", "billing"].includes(tab)) setActiveTab(tab);
+        if (tab && ["theme", "shipping", "platforms", "tools", "inventory", "commission", "billing"].includes(tab)) setActiveTab(tab);
     }, []);
     
     // Form state
@@ -379,6 +380,7 @@ export default function SettingsPage() {
                     <TabsTrigger value="platforms">{t("Order Platforms")}</TabsTrigger>
                     <TabsTrigger value="tools">{t("Tools")}</TabsTrigger>
                     <TabsTrigger value="inventory">{t("Inventory")}</TabsTrigger>
+                    <TabsTrigger value="commission">{t("Commission")}</TabsTrigger>
                     <TabsTrigger value="billing">{t("Billing & Subscription")}</TabsTrigger>
                     <TabsTrigger value="logs">{t("System Logs")}</TabsTrigger>
                 </TabsList>
@@ -1393,6 +1395,10 @@ export default function SettingsPage() {
                 </TabsContent>
 
                 {/* System Logs Tab */}
+                <TabsContent value="commission" className="space-y-4">
+                    <CommissionSettings />
+                </TabsContent>
+
                 <TabsContent value="logs" className="space-y-4">
                     <IntegrationLogs />
                 </TabsContent>
