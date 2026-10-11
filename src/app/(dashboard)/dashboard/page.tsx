@@ -3,35 +3,30 @@
 import { useEffect, useState, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
+import { IBM_Plex_Sans_Arabic } from "next/font/google";
 import { GettingStarted } from "@/components/onboarding/getting-started";
 import { supabase } from "@/lib/supabase";
 import { useBusiness } from "@/contexts/BusinessContext";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { formatCurrency } from "@/lib/utils";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { formatCurrency, cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Progress } from "@/components/ui/progress";
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  Tooltip,
-  ResponsiveContainer,
-  Legend,
-} from "recharts";
-import { 
-  Loader2, DollarSign, Package, AlertTriangle, CheckCircle2, 
-  Clock, Plus, Globe, ArrowUpRight, X, Bell, TrendingUp, Award, Layers
-} from "lucide-react";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend, CartesianGrid } from "recharts";
+import { Loader2, DollarSign, AlertTriangle, CheckCircle2, Plus, Globe, Bell, X } from "lucide-react";
 import { DateRangePicker } from "@/components/date-range-picker";
 import { AdvancedSearch } from "@/components/dashboard/advanced-search";
 import { format } from "date-fns";
-import { RecentSales } from "@/components/dashboard/recent-sales";
 import { ModeratorsLeague } from "@/components/dashboard/moderators-league";
 import { CommissionBoard } from "@/components/dashboard/commission-board";
 import { AdvancedAnalytics } from "@/components/dashboard/advanced-analytics";
+import {
+  Disclosure, PerformanceStrip, PlatformQueue, Section, ShippingQueue, normalizeOverview, type Overview,
+} from "@/components/dashboard/overview";
+
+// The dashboard is read in Arabic, and the app's own typeface has no Arabic
+// letters, so it fell back to whatever the computer had. One family with
+// Arabic and Latin drawn to match, and figures that line up in columns.
+const plex = IBM_Plex_Sans_Arabic({ subsets: ["arabic", "latin"], weight: ["400", "500", "600", "700"], display: "swap" });
 
 interface RestockAlertItem {
   variantId: string;
@@ -44,670 +39,398 @@ interface RestockAlertItem {
   needToBuy: number;
 }
 
+const MIGRATION = "supabase/migrations/20261009_dashboard_overview.sql";
+
+interface RecentOrder { id: string; created_at: string; status: string; total_amount: number; channel: string | null; customer_info: { name?: string } | null }
+interface TopProduct { product_name?: string; name?: string; total_sold?: number; total_units?: number; quantity?: number; total_revenue?: number }
+interface DailySale { day_date: string; total_sales: number; order_count: number }
+interface ChartPoint { name: string; sales: number; orders: number }
+interface VariantRow { id: string; title: string; sku: string | null; stock_qty: number | null; cost_price: number | null; products: { name: string } | { name: string }[] | null }
+const unitsOf = (p: TopProduct) => Number(p.total_sold ?? p.total_units ?? p.quantity ?? 0);
+
+/**
+ * The dashboard, in the order the questions come:
+ *   1. How did the period go?            sales, orders, confirmation, delivery, AOV
+ *   2. What work is waiting, and who did what?
+ *                                        store orders to confirm, shipping problems,
+ *                                        commission, the moderators league
+ *   3. Sales in detail                   by day, latest orders, advanced analytics
+ *   4. Products and stock                best sellers, what to restock, stock value
+ * Sections 1 and 2 come from one call to dashboard_overview().
+ */
 function DashboardContent() {
   const { activeBusiness } = useBusiness();
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
+  const ar = language !== "en";
+  const c = (a: string, e: string) => (ar ? a : e);
   const searchParams = useSearchParams();
   const router = useRouter();
-  const [loading, setLoading] = useState(true);
 
-  // Realtime Pending Order Alert State
   const [pendingOrderAlert, setPendingOrderAlert] = useState<{ id: string; name: string; total: number } | null>(null);
-
-  // Stats
-  const [stats, setStats] = useState({
-    totalSales: 0,
-    totalOrders: 0,
-    stockValue: 0,
-    totalItems: 0,
-    lowStockCount: 0,
-    salesChange: 0,
-    ordersChange: 0,
-    waitingCount: 0,
-    waitingValue: 0,
-    confirmedCount: 0,
-    confirmedValue: 0,
-  });
-
-  // Lists
-  const [recentOrders, setRecentOrders] = useState<any[]>([]);
-  const [topProducts, setTopProducts] = useState<any[]>([]);
+  const [overview, setOverview] = useState<Overview | null>(null);
+  const [overviewError, setOverviewError] = useState<"missing" | "failed" | null>(null);
+  const [stock, setStock] = useState({ value: 0, units: 0 });
+  const [recentOrders, setRecentOrders] = useState<RecentOrder[]>([]);
+  const [topProducts, setTopProducts] = useState<TopProduct[]>([]);
   const [restockAlerts, setRestockAlerts] = useState<RestockAlertItem[]>([]);
-
-  // Charts
-  const [chartData, setChartData] = useState<any[]>([]);
+  const [chartData, setChartData] = useState<ChartPoint[]>([]);
 
   const fromDate = searchParams.get("from");
   const toDate = searchParams.get("to");
+  const todayStr = format(new Date(), "yyyy-MM-dd");
 
-  // Default to Today if no filters
+  // Default to today.
   useEffect(() => {
     if (!fromDate && !toDate) {
-      const todayStr = format(new Date(), "yyyy-MM-dd");
       router.replace(`?from=${todayStr}&to=${todayStr}`, { scroll: false });
     }
-  }, [fromDate, toDate, router]);
+  }, [fromDate, toDate, router, todayStr]);
 
-  // Realtime Pending Order Notification Listener
+  // A banner when an order moves to Pending somewhere else.
   useEffect(() => {
     if (!activeBusiness) return;
-
     const channel = supabase
       .channel("dashboard-pending-orders-realtime")
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "orders",
-          filter: `business_id=eq.${activeBusiness.id}`
-        },
-        (payload: any) => {
-          if (payload.new && String(payload.new.status || "").toLowerCase() === "pending") {
-            const name = payload.new.customer_info?.name || "Customer";
-            const total = payload.new.total_amount || 0;
-            setPendingOrderAlert({ id: payload.new.id, name, total });
+      .on("postgres_changes", { event: "*", schema: "public", table: "orders", filter: `business_id=eq.${activeBusiness.id}` },
+        (payload: { new?: { id?: string; status?: string; total_amount?: number; customer_info?: { name?: string } } }) => {
+          const o = payload.new;
+          if (o?.id && String(o.status || "").toLowerCase() === "pending") {
+            setPendingOrderAlert({ id: o.id, name: o.customer_info?.name || "Customer", total: o.total_amount || 0 });
           }
-        }
-      )
+        })
       .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
+    return () => { supabase.removeChannel(channel); };
   }, [activeBusiness]);
 
   useEffect(() => {
-    if (fromDate && activeBusiness) {
-      fetchDashboardData();
-    }
+    if (fromDate && activeBusiness) fetchDashboardData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fromDate, toDate, activeBusiness]);
 
   async function fetchDashboardData() {
     if (!activeBusiness) return;
+    const from = fromDate || todayStr;
+    const to = toDate || from;
+    const start = `${from}T00:00:00`;
+    const end = `${to}T23:59:59`;
+
     try {
-      setLoading(true);
+      const [ov, dailyRes, topRes, recentRes] = await Promise.all([
+        // Sections 1 and 2: the period, its predecessor and the queues, in one call.
+        supabase.rpc("dashboard_overview", { p_business_id: activeBusiness.id, p_from: from, p_to: to }),
+        supabase.rpc("get_daily_sales", { from_date: start, to_date: end, p_business_id: activeBusiness.id }),
+        supabase.rpc("get_top_products", { from_date: start, to_date: end, limit_count: 5, p_business_id: activeBusiness.id }),
+        supabase.from("orders")
+          .select("id, created_at, status, total_amount, channel, customer_info")
+          .eq("business_id", activeBusiness.id)
+          .gte("created_at", start)
+          .lte("created_at", end)
+          .order("created_at", { ascending: false })
+          .limit(6),
+      ]);
 
-      const start = fromDate ? `${fromDate}T00:00:00` : new Date().toISOString();
-      const end = toDate ? `${toDate}T23:59:59` : new Date().toISOString();
+      if (ov.error) {
+        console.error("dashboard_overview failed:", ov.error);
+        setOverviewError(ov.error.code === "PGRST202" || /could not find|does not exist/i.test(ov.error.message) ? "missing" : "failed");
+      } else {
+        setOverviewError(null);
+        setOverview(normalizeOverview(ov.data as Overview));
+      }
 
-      // Calculate Previous Period
-      const startDate = new Date(start);
-      const endDate = new Date(end);
-      const diffTime = Math.abs(endDate.getTime() - startDate.getTime());
-      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      setRecentOrders((recentRes.data || []) as RecentOrder[]);
+      setTopProducts((topRes.data || []) as TopProduct[]);
+      setChartData(((dailyRes.data || []) as DailySale[]).map(d => ({
+        name: format(new Date(d.day_date), "dd/MM"),
+        sales: d.total_sales,
+        orders: d.order_count,
+      })));
 
-      const prevStartDate = new Date(startDate);
-      prevStartDate.setDate(prevStartDate.getDate() - diffDays);
-      const prevStartStr = prevStartDate.toISOString();
-
-      const prevEndDate = new Date(endDate);
-      prevEndDate.setDate(prevEndDate.getDate() - diffDays);
-      const prevEndStr = prevEndDate.toISOString();
-
-      // 1. Dashboard Stats (RPC)
-      const { data: statsData } = await supabase
-        .rpc('get_dashboard_stats', { from_date: start, to_date: end, p_business_id: activeBusiness.id });
-
-      const { data: prevStatsData } = await supabase
-        .rpc('get_dashboard_stats', { from_date: prevStartStr, to_date: prevEndStr, p_business_id: activeBusiness.id });
-
-      // 2. Daily Sales Chart (RPC)
-      const { data: dailyData } = await supabase
-        .rpc('get_daily_sales', { from_date: start, to_date: end, p_business_id: activeBusiness.id });
-
-      // 3. Top Products (RPC)
-      const { data: topProds } = await supabase
-        .rpc('get_top_products', { from_date: start, to_date: end, limit_count: 5, p_business_id: activeBusiness.id });
-
-      // 4. Recent Sales (Raw Query)
-      const { data: recent } = await supabase
-        .from("orders")
-        .select("*, customer_info")
-        .eq("business_id", activeBusiness.id)
-        .gte("created_at", start)
-        .lte("created_at", end)
-        .order("created_at", { ascending: false })
-        .limit(5);
-
-      // 5. Restock Predictor Calculation for Inventory Alerts (Exact Logic from Purchases)
+      // Restock predictor: units sold over the history window against what
+      // is on the shelf. Same logic as the Purchases page.
       const hDays = activeBusiness.theme_config?.restock_history_days || 14;
       const cDays = activeBusiness.theme_config?.restock_coverage_days || 14;
 
-      let allVariants: any[] = [];
-      let vPage = 0;
-      let vHasMore = true;
-      while (vHasMore) {
-        const { data: vData } = await supabase
+      const allVariants: VariantRow[] = [];
+      for (let page = 0; ; page++) {
+        const { data } = await supabase
           .from("variants")
           .select("id, title, sku, stock_qty, cost_price, products(name)")
           .eq("business_id", activeBusiness.id)
-          .range(vPage * 1000, (vPage + 1) * 1000 - 1);
-        if (vData && vData.length > 0) {
-          allVariants.push(...vData);
-          if (vData.length < 1000) vHasMore = false;
-          else vPage++;
-        } else {
-          vHasMore = false;
-        }
+          .range(page * 1000, (page + 1) * 1000 - 1);
+        if (!data || data.length === 0) break;
+        allVariants.push(...(data as VariantRow[]));
+        if (data.length < 1000) break;
       }
 
-      const restockStartDate = new Date();
-      restockStartDate.setDate(restockStartDate.getDate() - hDays);
-
-      let restockOrders: any[] = [];
-      let rPage = 0;
-      let rHasMore = true;
-      while (rHasMore) {
-        const { data: rOrders } = await supabase
+      const restockStart = new Date();
+      restockStart.setDate(restockStart.getDate() - hDays);
+      const restockOrders: { id: string }[] = [];
+      for (let page = 0; ; page++) {
+        const { data } = await supabase
           .from("orders")
-          .select("id, status")
+          .select("id")
           .eq("business_id", activeBusiness.id)
-          .gte("created_at", restockStartDate.toISOString())
+          .gte("created_at", restockStart.toISOString())
           .neq("status", "Cancelled")
           .neq("status", "Waiting")
-          .range(rPage * 1000, (rPage + 1) * 1000 - 1);
-        if (rOrders && rOrders.length > 0) {
-          restockOrders.push(...rOrders);
-          if (rOrders.length < 1000) rHasMore = false;
-          else rPage++;
-        } else {
-          rHasMore = false;
-        }
+          .range(page * 1000, (page + 1) * 1000 - 1);
+        if (!data || data.length === 0) break;
+        restockOrders.push(...data);
+        if (data.length < 1000) break;
       }
 
       const orderIds = restockOrders.map(o => o.id);
-      let restockOrderItems: any[] = [];
-      const chunkSize = 200;
-      for (let i = 0; i < orderIds.length; i += chunkSize) {
-        const chunk = orderIds.slice(i, i + chunkSize);
-        if (chunk.length === 0) continue;
-        const { data: itemsData } = await supabase
-          .from("order_items")
-          .select("variant_id, quantity")
-          .in("order_id", chunk);
-        if (itemsData) restockOrderItems.push(...itemsData);
+      const restockItems: { variant_id: string | null; quantity: number | null }[] = [];
+      for (let i = 0; i < orderIds.length; i += 200) {
+        const { data } = await supabase.from("order_items").select("variant_id, quantity").in("order_id", orderIds.slice(i, i + 200));
+        if (data) restockItems.push(...data);
       }
 
-      const salesMap: Record<string, number> = {};
-      restockOrderItems.forEach(item => {
-        if (item.variant_id) {
-          salesMap[item.variant_id] = (salesMap[item.variant_id] || 0) + (item.quantity || 1);
-        }
+      const sold: Record<string, number> = {};
+      restockItems.forEach(item => {
+        if (item.variant_id) sold[item.variant_id] = (sold[item.variant_id] || 0) + (item.quantity || 1);
       });
 
-      const predictedAlerts: RestockAlertItem[] = [];
+      const alerts: RestockAlertItem[] = [];
+      let stockValue = 0;
+      let stockUnits = 0;
       allVariants.forEach(v => {
-        const totalSold = salesMap[v.id] || 0;
-        const dailyVelocity = totalSold / hDays;
+        const dailyVelocity = (sold[v.id] || 0) / hDays;
         const predictedDemand = dailyVelocity * cDays;
         const currentStock = v.stock_qty || 0;
         const needToBuy = Math.max(0, Math.ceil(predictedDemand - currentStock));
-
+        stockValue += ((v.stock_qty || 0) * (v.cost_price || 0)) || 0;
+        stockUnits += v.stock_qty || 0;
         if (needToBuy > 0) {
-          predictedAlerts.push({
+          alerts.push({
             variantId: v.id,
-            productName: v.products?.name || "Unknown Product",
+            productName: (Array.isArray(v.products) ? v.products[0]?.name : v.products?.name) || "Unknown Product",
             variantTitle: v.title,
             sku: v.sku || "N/A",
             currentStock,
             dailyVelocity: Number(dailyVelocity.toFixed(2)),
             predictedDemand: Math.ceil(predictedDemand),
-            needToBuy
+            needToBuy,
           });
         }
       });
-
-      predictedAlerts.sort((a, b) => b.needToBuy - a.needToBuy);
-      setRestockAlerts(predictedAlerts.slice(0, 5));
-
-      // 6. Confirmed and Waiting Metrics
-      let allPeriodOrders: any[] = [];
-      let pageP = 0;
-      let hasMoreP = true;
-      while (hasMoreP) {
-        const { data } = await supabase
-          .from("orders")
-          .select("status, total_amount")
-          .eq("business_id", activeBusiness.id)
-          .gte("created_at", start)
-          .lte("created_at", end)
-          .range(pageP * 1000, (pageP + 1) * 1000 - 1);
-        if (data && data.length > 0) {
-          allPeriodOrders.push(...data);
-          if (data.length < 1000) hasMoreP = false;
-          else pageP++;
-        } else {
-          hasMoreP = false;
-        }
-      }
-
-      let allWaitingOrders: any[] = [];
-      let pageW = 0;
-      let hasMoreW = true;
-      while (hasMoreW) {
-        const { data } = await supabase
-          .from("orders")
-          .select("total_amount")
-          .eq("business_id", activeBusiness.id)
-          .ilike("status", "waiting")
-          .range(pageW * 1000, (pageW + 1) * 1000 - 1);
-        if (data && data.length > 0) {
-          allWaitingOrders.push(...data);
-          if (data.length < 1000) hasMoreW = false;
-          else pageW++;
-        } else {
-          hasMoreW = false;
-        }
-      }
-
-      let cCount = 0;
-      let cValue = 0;
-      allPeriodOrders.forEach(o => {
-        const st = String(o.status || '').toLowerCase();
-        if (st !== 'waiting' && st !== 'cancelled') {
-          cCount++;
-          cValue += Number(o.total_amount) || 0;
-        }
-      });
-
-      let globalWCount = allWaitingOrders.length;
-      let globalWValue = allWaitingOrders.reduce((sum, o) => sum + (Number(o.total_amount) || 0), 0);
-
-      // Stock Total Items and Value
-      let calcStockValue = 0;
-      let calcTotalItems = 0;
-      allVariants.forEach(v => {
-        calcStockValue += (v.stock_qty * (v.cost_price || 0)) || 0;
-        calcTotalItems += v.stock_qty || 0;
-      });
-
-      // Update State
-      if (statsData && statsData.length > 0) {
-        const s = statsData[0];
-        const prevS = (prevStatsData && prevStatsData.length > 0) ? prevStatsData[0] : null;
-
-        let sChange = 0;
-        let oChange = 0;
-
-        if (prevS) {
-          const prevSales = prevS.total_sales || 0;
-          const currSales = s.total_sales || 0;
-          sChange = prevSales === 0 ? (currSales > 0 ? 100 : 0) : ((currSales - prevSales) / prevSales) * 100;
-
-          const prevOrders = prevS.total_orders || 0;
-          const currOrders = s.total_orders || 0;
-          oChange = prevOrders === 0 ? (currOrders > 0 ? 100 : 0) : ((currOrders - prevOrders) / prevOrders) * 100;
-        }
-
-        setStats({
-          totalSales: s.total_sales || 0,
-          totalOrders: s.total_orders || 0,
-          stockValue: calcStockValue,
-          totalItems: calcTotalItems,
-          lowStockCount: predictedAlerts.length,
-          salesChange: sChange,
-          ordersChange: oChange,
-          waitingCount: globalWCount,
-          waitingValue: globalWValue,
-          confirmedCount: cCount,
-          confirmedValue: cValue
-        });
-      }
-
-      setRecentOrders(recent || []);
-      setTopProducts(topProds || []);
-
-      const formattedChart = (dailyData || []).map((d: any) => ({
-        name: format(new Date(d.day_date), "MMM dd"),
-        sales: d.total_sales,
-        orders: d.order_count
-      }));
-      setChartData(formattedChart);
-
+      alerts.sort((a, b) => b.needToBuy - a.needToBuy);
+      setRestockAlerts(alerts.slice(0, 6));
+      setStock({ value: stockValue, units: stockUnits });
     } catch (error) {
       console.error("Error fetching dashboard data:", error);
-    } finally {
-      setLoading(false);
     }
   }
 
-  if (loading && !fromDate) {
-    return (
-      <div className="flex justify-center items-center h-96">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      </div>
-    );
+  if (!fromDate) {
+    return <div className="flex h-96 items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
   }
 
-  const maxSoldInTop = topProducts.length > 0 ? Math.max(...topProducts.map((p: any) => Number(p.total_sold ?? p.total_units ?? p.quantity ?? 1))) : 1;
+  // How the period reads: "today", one day, or a range.
+  const fmt = (d: string) => new Intl.DateTimeFormat(ar ? "ar-EG-u-nu-latn" : "en-GB", { day: "numeric", month: "long" }).format(new Date(`${d}T12:00:00`));
+  const to = toDate || fromDate;
+  const isToday = fromDate === todayStr && to === todayStr;
+  const periodTitle = isToday ? c("النهارده", "Today") : fromDate === to ? fmt(fromDate) : c(`من ${fmt(fromDate)} لـ ${fmt(to)}`, `${fmt(fromDate)} to ${fmt(to)}`);
+  const periodPhrase = isToday ? c("النهارده", "today") : c("في الفترة دي", "in this period");
+  const maxSold = Math.max(1, ...topProducts.map(unitsOf));
+  const waitingCount = overview?.platform.waiting ?? 0;
 
+  const overviewNotice = overviewError && (
+    <div className="rounded-xl border border-dashed p-5 text-sm text-muted-foreground">
+      {overviewError === "missing"
+        ? <>{c("الجزء ده محتاج migration يتشغّل في Supabase:", "This part needs a migration run in Supabase:")} <code className="rounded bg-muted px-1" dir="ltr">{MIGRATION}</code></>
+        : c("مش قادر أحمّل الأرقام دي دلوقتي. حدّث الصفحة.", "These figures could not be loaded. Refresh the page.")}
+    </div>
+  );
 
   return (
-    <div className="flex flex-col space-y-6 pb-12 font-sans">
-      <GettingStarted compact />
-      
-      {/* Real-Time Pending Order Notification Banner */}
-      {pendingOrderAlert && (
-        <div className="relative overflow-hidden p-4 rounded-xl border border-emerald-500/30 bg-gradient-to-r from-emerald-500/10 via-emerald-500/5 to-transparent backdrop-blur-md shadow-lg transition-all animate-in fade-in slide-in-from-top duration-300">
-          <div className="flex items-center justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-full bg-emerald-500/20 text-emerald-600 dark:text-emerald-400">
-                <Bell className="h-5 w-5" />
-              </div>
-              <div>
-                <h4 className="font-bold text-sm text-foreground flex items-center gap-2">
-                  {t("New Order Moved to Pending!")}
-                  <Badge variant="outline" className="bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border-emerald-500/30 text-[10px]">
-                    LIVE
-                  </Badge>
-                </h4>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  {t("Customer")}: <span className="font-medium text-foreground">{pendingOrderAlert.name}</span> — {formatCurrency(pendingOrderAlert.total)}
-                </p>
-              </div>
+    <div className={cn(plex.className, "flex flex-col gap-10 pb-16")} dir={ar ? "rtl" : "ltr"}>
+      <div className="flex flex-col gap-4">
+        <GettingStarted compact />
+
+        {pendingOrderAlert && (
+          <div className="flex items-center justify-between gap-4 rounded-xl border border-emerald-600/30 bg-emerald-50 p-3 dark:bg-emerald-950/30">
+            <div className="flex items-center gap-3 text-sm">
+              <Bell className="h-4 w-4 shrink-0 text-emerald-700 dark:text-emerald-400" />
+              <span>
+                {c("أوردر اتنقل لـ Pending:", "An order moved to Pending:")} <span className="font-medium">{pendingOrderAlert.name}</span>{" "}
+                <span dir="ltr">{formatCurrency(pendingOrderAlert.total)}</span>
+              </span>
             </div>
-            <div className="flex items-center gap-2">
-              <Link href={`/orders/${pendingOrderAlert.id}`}>
-                <Button size="sm" className="h-8 text-xs bg-emerald-600 hover:bg-emerald-700 text-white">
-                  {t("View Order")}
-                </Button>
-              </Link>
-              <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground" onClick={() => setPendingOrderAlert(null)}>
-                <X className="h-4 w-4" />
-              </Button>
+            <div className="flex items-center gap-1">
+              <Button asChild size="sm" variant="outline" className="h-8"><Link href={`/orders/${pendingOrderAlert.id}`}>{c("افتح الأوردر", "Open order")}</Link></Button>
+              <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => setPendingOrderAlert(null)} aria-label={c("إخفاء", "Dismiss")}><X className="h-4 w-4" /></Button>
             </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* Spotlight Universal Search */}
-      <div className="w-full">
         <AdvancedSearch />
-      </div>
 
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b pb-4">
-        <div>
-          <h2 className="text-3xl font-extrabold tracking-tight flex items-center gap-2">
-            {t("Dashboard")}
-            <Layers className="h-6 w-6 text-primary" />
-          </h2>
-          <p className="text-xs text-muted-foreground mt-1">
-            {t("Welcome to your live analytics & management dashboard.")}
-          </p>
+        {/* Header: what period, and the four things people start from here. */}
+        <div className="flex flex-col gap-4 border-b pb-5 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight">{t("Dashboard")}</h1>
+            <p className="mt-1 text-muted-foreground">{periodTitle}</p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button asChild variant="outline" size="sm" className="gap-1.5"><Link href="/orders/new"><Plus className="h-4 w-4" />{c("أوردر جديد", "New order")}</Link></Button>
+            <Button asChild variant="outline" size="sm" className="gap-1.5">
+              <Link href="/platform-orders">
+                <Globe className="h-4 w-4" />{c("طلبات المنصات", "Store orders")}
+                {waitingCount > 0 && <span className="rounded-full bg-amber-100 px-1.5 text-xs font-semibold tabular-nums text-amber-800 dark:bg-amber-900/50 dark:text-amber-200">{waitingCount}</span>}
+              </Link>
+            </Button>
+            <Button asChild variant="outline" size="sm" className="gap-1.5"><Link href="/inventory/damages"><AlertTriangle className="h-4 w-4" />{c("تسجيل تالف", "Record damage")}</Link></Button>
+            <Button asChild variant="outline" size="sm" className="gap-1.5"><Link href="/accounting"><DollarSign className="h-4 w-4" />{c("مصروف أو حركة", "Expense or transaction")}</Link></Button>
+            <div id="date-range-picker" dir="ltr"><DateRangePicker /></div>
+          </div>
         </div>
-        <div id="date-range-picker" className="flex items-center space-x-2">
-          <DateRangePicker />
-        </div>
       </div>
 
-      {/* Quick Action Buttons Bar - Expanded Full Width */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <Link href="/orders/new">
-          <Button variant="outline" className="w-full h-14 justify-start gap-3 text-xs font-semibold bg-gradient-to-br from-primary/10 via-primary/5 to-transparent hover:bg-primary/20 border-primary/20 transition-all shadow-sm">
-            <Plus className="h-4 w-4 text-primary shrink-0" />
-            <div className="text-left">
-              <div>{t("New Order")}</div>
-              <div className="text-[10px] text-muted-foreground font-normal">{t("Create Local Order")}</div>
-            </div>
-          </Button>
-        </Link>
+      {/* 1 — How the period went */}
+      <Section id="dash-performance" title={c("أداء الفترة", "How the period went")}
+               description={c("مقارنة بنفس عدد الأيام اللي قبلها.", "Against the same number of days before.")}>
+        {overviewNotice || (overview
+          ? <PerformanceStrip o={overview} ar={ar} />
+          : <div className="h-[118px] animate-pulse rounded-xl border bg-muted/30 motion-reduce:animate-none" />)}
+      </Section>
 
-        <Link href="/platform-orders">
-          <Button variant="outline" className="w-full h-14 justify-start gap-3 text-xs font-semibold bg-gradient-to-br from-amber-500/10 via-amber-500/5 to-transparent hover:bg-amber-500/20 border-amber-500/20 transition-all shadow-sm relative">
-            <Globe className="h-4 w-4 text-amber-600 shrink-0" />
-            <div className="text-left">
-              <div>{t("Review Platform Orders")}</div>
-              <div className="text-[10px] text-muted-foreground font-normal">{stats.waitingCount} {t("Pending Review")}</div>
-            </div>
-            {stats.waitingCount > 0 && (
-              <span className="absolute top-2 right-2 h-2 w-2 rounded-full bg-amber-500" />
-            )}
-          </Button>
-        </Link>
+      {/* 2 — The moderators' work */}
+      <Section id="dash-work" title={c("شغل المودريتورز", "The moderators' work")}
+               description={c("اللي مستني دلوقتي، واللي عمله كل مودريتور.", "What is waiting now, and what each moderator did.")}>
+        {overviewNotice || (overview ? (
+          <div className="grid gap-4 lg:grid-cols-2">
+            <PlatformQueue o={overview} ar={ar} periodLabel={periodPhrase} />
+            <ShippingQueue o={overview} ar={ar} periodLabel={periodPhrase} />
+          </div>
+        ) : <div className="h-72 animate-pulse rounded-xl border bg-muted/30 motion-reduce:animate-none" />)}
+        <div className="mt-4"><CommissionBoard /></div>
+        <Disclosure storageKey="ecx:dash:league" label={c("تفاصيل المودريتورز: الترتيب والرسوم والأهداف", "Moderator details: ranking, charts and targets")}>
+          <ModeratorsLeague />
+        </Disclosure>
+      </Section>
 
-        <Link href="/inventory/damages">
-          <Button variant="outline" className="w-full h-14 justify-start gap-3 text-xs font-semibold bg-gradient-to-br from-red-500/10 via-red-500/5 to-transparent hover:bg-red-500/20 border-red-500/20 transition-all shadow-sm">
-            <AlertTriangle className="h-4 w-4 text-red-500 shrink-0" />
-            <div className="text-left">
-              <div>{t("Record Damage")}</div>
-              <div className="text-[10px] text-muted-foreground font-normal">{t("Record Losses")}</div>
-            </div>
-          </Button>
-        </Link>
-
-        <Link href="/accounting">
-          <Button variant="outline" className="w-full h-14 justify-start gap-3 text-xs font-semibold bg-gradient-to-br from-emerald-500/10 via-emerald-500/5 to-transparent hover:bg-emerald-500/20 border-emerald-500/20 transition-all shadow-sm">
-            <DollarSign className="h-4 w-4 text-emerald-600 shrink-0" />
-            <div className="text-left">
-              <div>{t("Add Expense / Transaction")}</div>
-              <div className="text-[10px] text-muted-foreground font-normal">{t("Financial Treasury")}</div>
-            </div>
-          </Button>
-        </Link>
-      </div>
-
-      {/* KPI Cards */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Card id="kpi-total-sales" className="bg-gradient-to-br from-emerald-500/10 via-emerald-500/5 to-transparent dark:from-emerald-950/30 dark:to-transparent border-emerald-500/20 shadow-sm hover:shadow-md transition-all">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-xs font-bold text-emerald-800 dark:text-emerald-300 uppercase tracking-wider">{t("Total Sales & Orders")}</CardTitle>
-            <div className="p-2 rounded-full bg-emerald-500/20 text-emerald-600">
-              <DollarSign className="h-4 w-4" />
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-black text-emerald-900 dark:text-emerald-100">{formatCurrency(stats.totalSales)}</div>
-            <div className="flex items-baseline gap-2 mt-1">
-               <span className="text-2xl font-black text-emerald-600 dark:text-emerald-400">{stats.totalOrders}</span>
-               <span className="text-xs font-medium text-emerald-700/80 dark:text-emerald-400/80">{t("Orders")}</span>
-            </div>
-            <p className="text-[11px] text-muted-foreground mt-2 flex items-center gap-1">
-              <span className={stats.salesChange >= 0 ? "text-emerald-600 font-bold" : "text-red-500 font-bold"}>
-                {stats.salesChange > 0 ? "+" : ""}{stats.salesChange.toFixed(1)}%
-              </span>
-              {t("sales from prev period")}
-            </p>
-          </CardContent>
-        </Card>
-        
-        <Card id="kpi-confirmed" className="bg-gradient-to-br from-blue-500/10 via-blue-500/5 to-transparent dark:from-blue-950/30 dark:to-transparent border-blue-500/20 shadow-sm hover:shadow-md transition-all">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-xs font-bold text-blue-800 dark:text-blue-300 uppercase tracking-wider">{t("Confirmed Orders")}</CardTitle>
-            <div className="p-2 rounded-full bg-blue-500/20 text-blue-600">
-              <CheckCircle2 className="h-4 w-4" />
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-black text-blue-900 dark:text-blue-100">{formatCurrency(stats.confirmedValue)}</div>
-            <div className="flex items-baseline gap-2 mt-1">
-               <span className="text-2xl font-black text-blue-600 dark:text-blue-400">{stats.confirmedCount}</span>
-               <span className="text-xs font-medium text-blue-700/80 dark:text-blue-400/80">{t("Orders")}</span>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card id="kpi-waiting" className="bg-gradient-to-br from-amber-500/10 via-amber-500/5 to-transparent dark:from-amber-950/30 dark:to-transparent border-amber-500/20 shadow-sm hover:shadow-md transition-all">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-xs font-bold text-amber-800 dark:text-amber-300 uppercase tracking-wider">{t("Waiting Orders")}</CardTitle>
-            <div className="p-2 rounded-full bg-amber-500/20 text-amber-600">
-              <Clock className="h-4 w-4" />
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-black text-amber-900 dark:text-amber-100">{formatCurrency(stats.waitingValue)}</div>
-            <div className="flex items-baseline gap-2 mt-1">
-               <span className="text-2xl font-black text-amber-600 dark:text-amber-400">{stats.waitingCount}</span>
-               <span className="text-xs font-medium text-amber-700/80 dark:text-amber-400/80">{t("Orders")}</span>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card id="kpi-stock-value" className="bg-gradient-to-br from-purple-500/10 via-purple-500/5 to-transparent dark:from-purple-950/30 dark:to-transparent border-purple-500/20 shadow-sm hover:shadow-md transition-all">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-xs font-bold text-purple-800 dark:text-purple-300 uppercase tracking-wider">{t("Stock Value")}</CardTitle>
-            <div className="p-2 rounded-full bg-purple-500/20 text-purple-600">
-              <Package className="h-4 w-4" />
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-black text-purple-900 dark:text-purple-100">{formatCurrency(stats.stockValue)}</div>
-            <div className="flex items-baseline gap-2 mt-1">
-               <span className="text-2xl font-black text-purple-600 dark:text-purple-400">{stats.totalItems}</span>
-               <span className="text-xs font-medium text-purple-700/80 dark:text-purple-400/80">{t("Total Units")}</span>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Moderators League — directly under the KPIs rather than at the foot of
-          the page. It is a scoreboard, and a scoreboard nobody scrolls to is
-          not one. */}
-      {/* Commission next to the league it pays out on. Shows nothing until
-          commission is set up in Settings. */}
-      <CommissionBoard />
-
-      <ModeratorsLeague />
-
-      {/* Everything the tiles above cannot say: the same period broken out by
-          day, by governorate and by product. */}
-      <AdvancedAnalytics from={fromDate} to={toDate} />
-
-      {/* Main Content Grid */}
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-7">
-
-        {/* Main Interactive Chart */}
-        <Card className="col-span-4 shadow-sm border border-border/60">
-          <CardHeader className="flex flex-row items-center justify-between border-b pb-4">
-            <div>
-              <CardTitle className="text-base font-bold flex items-center gap-2">
-                <TrendingUp className="h-5 w-5 text-emerald-600" />
-                {t("Revenue & Orders Overview")}
-              </CardTitle>
-            </div>
-          </CardHeader>
-          <CardContent className="pt-6">
-            <ResponsiveContainer width="100%" height={320}>
-              <BarChart data={chartData}>
-                <XAxis dataKey="name" stroke="#888888" fontSize={11} tickLine={false} axisLine={false} />
-                <YAxis yAxisId="left" orientation="left" stroke="#10b981" fontSize={11} tickLine={false} axisLine={false} />
-                <YAxis yAxisId="right" orientation="right" stroke="#3b82f6" fontSize={11} tickLine={false} axisLine={false} />
-                <Tooltip formatter={(value: any, name: any) => name === "Revenue" ? formatCurrency(value) : value} contentStyle={{ borderRadius: '12px', border: '1px solid rgba(0,0,0,0.1)' }} />
-                <Legend />
-                <Bar yAxisId="left" dataKey="sales" name="Revenue" fill="#10b981" radius={[6, 6, 0, 0]} />
-                <Bar yAxisId="right" dataKey="orders" name="Order Count" fill="#3b82f6" radius={[6, 6, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
-
-        {/* Recent Sales */}
-        <Card className="col-span-3 shadow-sm border border-border/60">
-          <CardHeader className="border-b pb-4">
-            <CardTitle className="text-base font-bold">{t("Recent Sales")}</CardTitle>
-            <CardDescription className="text-xs">{t("Latest transactions from this period")}</CardDescription>
-          </CardHeader>
-          <CardContent className="pt-4">
-            <RecentSales orders={recentOrders} />
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Secondary Grid (Top Products & Restock Predictor Alerts) */}
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-7">
-
-        {/* Redesigned Top Selling Products */}
-        <Card className="col-span-4 shadow-sm border border-border/60">
-          <CardHeader className="border-b pb-4 flex flex-row items-center justify-between">
-            <div>
-              <CardTitle className="text-base font-bold flex items-center gap-2">
-                <Award className="h-5 w-5 text-amber-500" />
-                {t("Top Selling Products")}
-              </CardTitle>
-              <CardDescription className="text-xs">{t("Best performing variants by units sold")}</CardDescription>
-            </div>
-          </CardHeader>
-          <CardContent className="pt-4 space-y-4">
-            {topProducts.length === 0 ? (
-              <div className="text-xs text-muted-foreground py-8 text-center">{t("No sales recorded in this period.")}</div>
+      {/* 3 — Sales in detail */}
+      <Section id="dash-sales" title={c("المبيعات بالتفصيل", "Sales in detail")}>
+        <div className="grid gap-4 lg:grid-cols-5">
+          <div className="rounded-xl border bg-card p-4 lg:col-span-3">
+            <h3 className="mb-3 font-semibold">{c("يوم بيوم", "Day by day")}</h3>
+            {chartData.length === 0 ? (
+              <p className="py-16 text-center text-sm text-muted-foreground">{c("مفيش مبيعات في الفترة دي.", "No sales in this period.")}</p>
             ) : (
-              topProducts.map((p: any, idx: number) => {
-                const unitsCount = Number(p.total_sold ?? p.total_units ?? p.quantity ?? 0);
-                const percent = Math.min(100, Math.round((unitsCount / maxSoldInTop) * 100));
-                return (
-                  <div key={idx} className="p-3 rounded-xl border bg-muted/20 space-y-2">
-                    <div className="flex items-center justify-between gap-3 text-xs">
-                      <div className="flex items-center gap-2">
-                        <Badge variant="outline" className="h-6 px-2 bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/20 font-bold shrink-0">
-                          #{idx + 1}
-                        </Badge>
-                        <span className="font-bold text-foreground text-xs">{p.product_name || p.name}</span>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <Badge variant="secondary" className="font-bold text-xs bg-primary/10 text-primary">
-                          {unitsCount} {t("units")}
-                        </Badge>
-                        <span className="font-bold text-xs text-foreground">{formatCurrency(p.total_revenue || 0)}</span>
-                      </div>
-                    </div>
-                    <Progress value={percent} className="h-2 bg-muted/60" />
-                  </div>
-                );
-              })
+              <div dir="ltr">
+                <ResponsiveContainer width="100%" height={280}>
+                  <BarChart data={chartData} margin={{ left: -10, right: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} className="stroke-border" />
+                    <XAxis dataKey="name" fontSize={11} tickLine={false} axisLine={false} />
+                    <YAxis yAxisId="left" fontSize={11} tickLine={false} axisLine={false} />
+                    <YAxis yAxisId="right" orientation="right" fontSize={11} tickLine={false} axisLine={false} allowDecimals={false} />
+                    <Tooltip formatter={(value, name) => (name === c("المبيعات", "Sales") ? formatCurrency(Number(value)) : value)} contentStyle={{ borderRadius: 10 }} />
+                    <Legend wrapperStyle={{ fontSize: 12 }} />
+                    <Bar yAxisId="left" dataKey="sales" name={c("المبيعات", "Sales")} fill="var(--primary)" radius={[4, 4, 0, 0]} />
+                    <Bar yAxisId="right" dataKey="orders" name={c("الأوردرات", "Orders")} fill="#94a3b8" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
             )}
+          </div>
 
-          </CardContent>
-        </Card>
-
-        {/* Restock Predictor Inventory Alerts */}
-        <Card className="col-span-3 shadow-sm border border-border/60">
-          <CardHeader className="border-b pb-4 flex flex-row items-center justify-between">
-            <div>
-              <CardTitle className="text-base font-bold flex items-center gap-2">
-                <AlertTriangle className="h-4 w-4 text-amber-500" />
-                {t("Restock Predictor Alerts")}
-              </CardTitle>
-              <CardDescription className="text-xs">{t("Items predicted to run out based on sales velocity")}</CardDescription>
+          <div className="rounded-xl border bg-card lg:col-span-2">
+            <div className="flex items-center justify-between border-b px-4 py-3">
+              <h3 className="font-semibold">{c("آخر الأوردرات", "Latest orders")}</h3>
+              <Link href="/orders" className="text-sm text-primary underline-offset-4 hover:underline">{c("كل الأوردرات", "All orders")}</Link>
             </div>
-            <Link href="/purchases">
-              <Button variant="ghost" size="sm" className="h-7 text-[11px] text-primary gap-1">
-                {t("View All")} <ArrowUpRight className="h-3 w-3" />
-              </Button>
-            </Link>
-          </CardHeader>
-          <CardContent className="pt-4">
-            <div className="space-y-3">
-              {restockAlerts.length === 0 ? (
-                <div className="p-6 text-center text-xs text-muted-foreground">
-                  <CheckCircle2 className="h-8 w-8 text-emerald-500 mx-auto mb-2 opacity-80" />
-                  {t("No inventory restock needed")}
-                </div>
-              ) : (
-                restockAlerts.map(v => (
-                  <div key={v.variantId} className="p-3 rounded-lg border bg-muted/20 flex items-center justify-between gap-2 text-xs">
-                    <div className="space-y-0.5">
-                      <p className="font-semibold text-foreground">{v.productName} ({v.variantTitle})</p>
-                      <p className="text-[11px] text-muted-foreground font-mono">SKU: {v.sku} — {t("Current Stock")}: {v.currentStock}</p>
+            {recentOrders.length === 0 ? (
+              <p className="p-6 text-center text-sm text-muted-foreground">{c("مفيش أوردرات في الفترة دي.", "No orders in this period.")}</p>
+            ) : (
+              <ul className="divide-y">
+                {recentOrders.map(o => (
+                  <li key={o.id}>
+                    <Link href={`/orders/${o.id}`} className="flex items-center justify-between gap-3 px-4 py-2.5 hover:bg-muted/40 focus-visible:bg-muted/40 focus-visible:outline-none">
+                      <div className="min-w-0">
+                        <div className="truncate text-sm font-medium">{o.customer_info?.name || c("عميل", "Customer")}</div>
+                        <div className="text-xs text-muted-foreground"><span dir="ltr">#{String(o.id).slice(0, 8)}</span> {o.channel ? `${c("من", "via")} ${o.channel}` : ""}</div>
+                      </div>
+                      <div className="shrink-0 text-end">
+                        <div className="text-sm font-semibold tabular-nums" dir="ltr">{formatCurrency(o.total_amount)}</div>
+                        <div className="text-[11px] text-muted-foreground">{o.status}</div>
+                      </div>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+        <Disclosure storageKey="ecx:dash:advanced" label={c("تحليلات متقدمة: كل يوم، المحافظات، المنتجات", "Advanced analytics: every day, governorates, products")}>
+          <AdvancedAnalytics from={fromDate} to={toDate} />
+        </Disclosure>
+      </Section>
+
+      {/* 4 — Products and stock */}
+      <Section id="dash-stock" title={c("المنتجات والمخزون", "Products and stock")}
+               aside={<div className="text-sm text-muted-foreground">{c("قيمة المخزون", "Stock value")} <span className="font-semibold text-foreground" dir="ltr">{formatCurrency(stock.value)}</span> {c(`في ${stock.units.toLocaleString("en")} قطعة`, `across ${stock.units.toLocaleString("en")} units`)}</div>}>
+        <div className="grid gap-4 lg:grid-cols-5">
+          <div className="rounded-xl border bg-card lg:col-span-3">
+            <div className="border-b px-4 py-3"><h3 className="font-semibold">{c("الأكتر مبيعًا", "Best sellers")}</h3></div>
+            {topProducts.length === 0 ? (
+              <p className="p-6 text-center text-sm text-muted-foreground">{c("مفيش مبيعات في الفترة دي.", "No sales in this period.")}</p>
+            ) : (
+              <ol className="divide-y">
+                {topProducts.map((p, i) => {
+                  const units = unitsOf(p);
+                  return (
+                    <li key={i} className="flex items-center gap-3 px-4 py-2.5">
+                      <span className="w-5 shrink-0 text-center text-sm font-semibold tabular-nums text-muted-foreground">{i + 1}</span>
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-sm font-medium" dir="auto">{p.product_name || p.name}</div>
+                        <div className="mt-1 h-1.5 rounded-full bg-muted"><div className="h-1.5 rounded-full bg-primary/70" style={{ width: `${Math.max(4, (units / maxSold) * 100)}%` }} /></div>
+                      </div>
+                      <div className="shrink-0 text-end">
+                        <div className="text-sm font-semibold tabular-nums">{units} {c("قطعة", "units")}</div>
+                        <div className="text-xs text-muted-foreground" dir="ltr">{formatCurrency(p.total_revenue || 0)}</div>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ol>
+            )}
+          </div>
+
+          <div className="rounded-xl border bg-card lg:col-span-2">
+            <div className="flex items-center justify-between border-b px-4 py-3">
+              <h3 className="font-semibold">{c("محتاج يتطلب", "Needs restocking")}</h3>
+              <Link href="/purchases" className="text-sm text-primary underline-offset-4 hover:underline">{c("المشتريات", "Purchases")}</Link>
+            </div>
+            {restockAlerts.length === 0 ? (
+              <div className="flex flex-col items-center gap-2 p-6 text-center text-sm text-muted-foreground">
+                <CheckCircle2 className="h-6 w-6 text-emerald-600" />{c("مفيش حاجة هتخلص قريب.", "Nothing is about to run out.")}
+              </div>
+            ) : (
+              <ul className="divide-y">
+                {restockAlerts.map(v => (
+                  <li key={v.variantId} className="flex items-center justify-between gap-3 px-4 py-2.5">
+                    <div className="min-w-0">
+                      <div className="truncate text-sm font-medium" dir="auto">{v.productName}{v.variantTitle && v.variantTitle !== "Default" ? ` (${v.variantTitle})` : ""}</div>
+                      <div className="text-xs text-muted-foreground">{c(`فاضل ${v.currentStock}`, `${v.currentStock} left`)}</div>
                     </div>
-                    <Badge variant="destructive" className="shrink-0 font-semibold px-2 py-1 bg-red-500/10 text-red-600 border-red-500/20">
-                      {t("Need to buy")}: {v.needToBuy} {t("units")}
+                    <Badge variant="outline" className="shrink-0 border-red-300 text-red-700 dark:border-red-900 dark:text-red-300">
+                      {c(`اطلب ${v.needToBuy}`, `Order ${v.needToBuy}`)}
                     </Badge>
-                  </div>
-                ))
-              )}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+      </Section>
     </div>
   );
 }
 
 export default function DashboardPage() {
   return (
-    <Suspense fallback={<div className="flex justify-center items-center h-screen"><Loader2 className="h-10 w-10 animate-spin text-primary" /></div>}>
+    <Suspense fallback={<div className="flex h-screen items-center justify-center"><Loader2 className="h-10 w-10 animate-spin text-primary" /></div>}>
       <DashboardContent />
     </Suspense>
   );
