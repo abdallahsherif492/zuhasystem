@@ -12,21 +12,20 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 interface BoardRow {
     email: string;
     is_me: boolean;
-    confirmed_orders: number;
     eligible_orders: number;
-    eligible_sales: number;
-    eligible_units: number;
+    eligible_sales: number;   // without shipping
+    eligible_total: number;   // with shipping
     aov: number | null;
     below_min: number;
     awaiting_orders: number;
     returned: number;
     cancelled: number;
-    min_units: number;
+    min_total: number;
     rate: number | null;
     commission: number | null;
     awaiting_commission: number | null;
 }
-interface Board { configured: boolean; basis: "delivered" | "confirmed"; is_manager: boolean; rows: BoardRow[] }
+interface Board { configured: boolean; is_manager: boolean; rows: BoardRow[] }
 
 const ymd = (d: Date) => format(d, "yyyy-MM-dd");
 const PERIODS = [
@@ -62,8 +61,8 @@ export function CommissionBoard() {
                 ...b,
                 rows: (b.rows || []).map(r => ({
                     ...r,
-                    confirmed_orders: n(r.confirmed_orders), eligible_orders: n(r.eligible_orders), eligible_sales: n(r.eligible_sales),
-                    eligible_units: n(r.eligible_units), below_min: n(r.below_min), awaiting_orders: n(r.awaiting_orders),
+                    eligible_orders: n(r.eligible_orders), eligible_sales: n(r.eligible_sales), eligible_total: n(r.eligible_total),
+                    below_min: n(r.below_min), awaiting_orders: n(r.awaiting_orders), min_total: n(r.min_total),
                     aov: r.aov === null ? null : n(r.aov),
                     commission: r.commission === null ? null : n(r.commission),
                     awaiting_commission: r.awaiting_commission === null ? null : n(r.awaiting_commission),
@@ -102,7 +101,7 @@ export function CommissionBoard() {
                 <div>
                     <CardTitle className="flex items-center gap-2 text-lg"><BadgePercent className="h-5 w-5 text-primary" />كوميشن المودريتورز</CardTitle>
                     <CardDescription>
-                        {board.basis === "delivered" ? "على الأوردرات اللي اتسلمت" : "على كل أوردر اتأكد"} · الترتيب بعدد الأوردرات اللي ليها كوميشن
+                        على الأوردرات اللي اتسلمت للعميل · المبيعات والكوميشن من غير الشحن · الترتيب بعدد الأوردرات
                     </CardDescription>
                 </div>
                 <div className="inline-flex rounded-lg border bg-muted p-1">
@@ -117,7 +116,7 @@ export function CommissionBoard() {
             <CardContent className="space-y-4">
                 <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
                     <Stat label="أوردرات ليها كوميشن" value={totalOrders.toLocaleString("en")} />
-                    <Stat label="إجمالي المبيعات" value={formatCurrency(totalSales)} />
+                    <Stat label="المبيعات (من غير شحن)" value={formatCurrency(totalSales)} />
                     <Stat label="متوسط الأوردر" value={totalOrders ? formatCurrency(totalSales / totalOrders) : "—"} />
                     {commissionTotal !== null && (
                         <Stat
@@ -140,7 +139,7 @@ export function CommissionBoard() {
                                         {r.is_me && <span className="rounded-full bg-primary/10 px-1.5 text-[10px] font-medium text-primary">إنت</span>}
                                     </div>
                                     <div className="text-[11px] text-muted-foreground">
-                                        {r.rate !== null ? `${r.rate}% · ` : ""}من {r.min_units} قطع
+                                        {r.rate !== null ? `${r.rate}% · ` : ""}من {r.min_total.toLocaleString("en")} ج
                                     </div>
                                 </div>
                             </div>
@@ -154,7 +153,7 @@ export function CommissionBoard() {
                                 </div>
                                 <div className="mt-1 flex flex-wrap gap-x-3 text-[11px] text-muted-foreground">
                                     {r.awaiting_orders > 0 && <span className="inline-flex items-center gap-1"><Clock className="h-3 w-3" />{r.awaiting_orders} مستني التسليم</span>}
-                                    {r.below_min > 0 && <span>{r.below_min} أقل من {r.min_units} قطع</span>}
+                                    {r.below_min > 0 && <span>{r.below_min} اتسلموا بس أقل من {r.min_total.toLocaleString("en")} ج</span>}
                                     {r.returned > 0 && <span>{r.returned} مرتجع</span>}
                                 </div>
                             </div>

@@ -12,23 +12,23 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 
-type Basis = "delivered" | "confirmed";
-interface Row { email: string; role: string; enabled: boolean; rate: string; min_units: string; saved: boolean }
+interface Row { email: string; role: string; enabled: boolean; rate: string; min_total: string; saved: boolean }
 
 const MIGRATION = "supabase/migrations/20261008_moderator_commission.sql";
-const EXAMPLE_TOTAL = 500;
+const EXAMPLE_TOTAL = 1600;
+const EXAMPLE_SHIPPING = 70;
 
 /**
- * Commission settings: who earns it, at what rate of the order total, from
- * how many pieces an order counts, and whether it is paid on delivered orders
- * or on every confirmed one. See 20261008_moderator_commission.sql.
+ * Commission settings: who earns it, at what rate, and from what order total.
+ * Commission is paid only on orders delivered to the customer, on the total
+ * without shipping; an order counts when its total with shipping reaches the
+ * moderator's minimum. See 20261008_moderator_commission.sql.
  */
 export function CommissionSettings() {
     const { activeBusiness, currentUser } = useBusiness();
     const [rows, setRows] = useState<Row[]>([]);
-    const [basis, setBasis] = useState<Basis>("delivered");
     const [defRate, setDefRate] = useState("2");
-    const [defMin, setDefMin] = useState("1");
+    const [defMin, setDefMin] = useState("1500");
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [missing, setMissing] = useState(false);
@@ -39,7 +39,7 @@ export function CommissionSettings() {
         (async () => {
             const [members, settings] = await Promise.all([
                 supabase.from("business_users").select("user_email, role").eq("business_id", activeBusiness.id),
-                supabase.from("commission_settings").select("user_email, enabled, rate, min_units, basis").eq("business_id", activeBusiness.id),
+                supabase.from("commission_settings").select("user_email, enabled, rate, min_total").eq("business_id", activeBusiness.id),
             ]);
             if (cancelled) return;
             if (settings.error) {
@@ -50,9 +50,8 @@ export function CommissionSettings() {
             const byEmail = new Map((settings.data || []).map(s => [s.user_email.toLowerCase(), s]));
             const def = byEmail.get("*");
             if (def) {
-                setBasis(def.basis as Basis);
                 setDefRate(String(Number(def.rate)));
-                setDefMin(String(def.min_units));
+                setDefMin(String(Number(def.min_total)));
             }
             setRows((members.data || [])
                 .map(m => {
@@ -62,7 +61,7 @@ export function CommissionSettings() {
                         role: m.role,
                         enabled: !!s?.enabled,
                         rate: s ? String(Number(s.rate)) : def ? String(Number(def.rate)) : "2",
-                        min_units: s ? String(s.min_units) : def ? String(def.min_units) : "1",
+                        min_total: s ? String(Number(s.min_total)) : def ? String(Number(def.min_total)) : "1500",
                         saved: !!s,
                     };
                 })
@@ -73,23 +72,23 @@ export function CommissionSettings() {
     }, [activeBusiness]);
 
     const update = (email: string, patch: Partial<Row>) => setRows(rs => rs.map(r => (r.email === email ? { ...r, ...patch } : r)));
-    const applyDefaults = () => setRows(rs => rs.map(r => (r.enabled ? { ...r, rate: defRate, min_units: defMin } : r)));
+    const applyDefaults = () => setRows(rs => rs.map(r => (r.enabled ? { ...r, rate: defRate, min_total: defMin } : r)));
     const enabledCount = rows.filter(r => r.enabled).length;
 
-    const invalid = useMemo(() => rows.some(r => r.enabled && (!(Number(r.rate) >= 0 && Number(r.rate) <= 100) || r.rate === "" || !(Number(r.min_units) >= 0) || r.min_units === "")), [rows]);
+    const invalid = useMemo(() => rows.some(r => r.enabled && (!(Number(r.rate) >= 0 && Number(r.rate) <= 100) || r.rate === "" || !(Number(r.min_total) >= 0) || r.min_total === "")), [rows]);
 
     const save = async () => {
         if (!activeBusiness) return;
-        if (invalid) { toast.error("النسبة لازم تكون من 0 لـ 100، والحد الأدنى للقطع رقم صحيح."); return; }
+        if (invalid) { toast.error("النسبة لازم تكون من 0 لـ 100، والحد الأدنى رقم."); return; }
         setSaving(true);
         const now = new Date().toISOString();
         const by = currentUser?.email ?? null;
         const payload = [
-            { business_id: activeBusiness.id, user_email: "*", enabled: true, rate: Number(defRate) || 0, min_units: Math.max(0, Math.round(Number(defMin) || 0)), basis, updated_by: by, updated_at: now },
+            { business_id: activeBusiness.id, user_email: "*", enabled: true, rate: Number(defRate) || 0, min_total: Math.max(0, Number(defMin) || 0), updated_by: by, updated_at: now },
             // Everyone switched on, and anyone switched off who had a row before.
             ...rows.filter(r => r.enabled || r.saved).map(r => ({
                 business_id: activeBusiness.id, user_email: r.email.toLowerCase(), enabled: r.enabled,
-                rate: Number(r.rate) || 0, min_units: Math.max(0, Math.round(Number(r.min_units) || 0)), basis, updated_by: by, updated_at: now,
+                rate: Number(r.rate) || 0, min_total: Math.max(0, Number(r.min_total) || 0), updated_by: by, updated_at: now,
             })),
         ];
         const { error } = await supabase.from("commission_settings").upsert(payload, { onConflict: "business_id,user_email" });
@@ -119,25 +118,16 @@ export function CommissionSettings() {
             <CardHeader>
                 <CardTitle className="flex items-center gap-2"><BadgePercent className="h-5 w-5" />كوميشن المودريتورز</CardTitle>
                 <CardDescription>
-                    نسبة من إجمالي الأوردر لكل مودريتور على الأوردرات اللي أكّدها، بشرط إن الأوردر فيه عدد قطع أقل حاجة. بتظهر في الصفحة الرئيسية: كل مودريتور بيشوف الكوميشن بتاعه بس، والإدارة بتشوف الكل.
+                    نسبة لكل مودريتور على الأوردرات اللي أكّدها. بتظهر في الصفحة الرئيسية: كل مودريتور بيشوف الكوميشن بتاعه بس، والإدارة بتشوف الكل.
                 </CardDescription>
             </CardHeader>
             <CardContent className="space-y-5">
-                {/* Which orders */}
-                <div className="space-y-2">
-                    <Label>الكوميشن بيتحسب على</Label>
-                    <div className="grid gap-2 sm:grid-cols-2">
-                        {([
-                            { key: "delivered", title: "الأوردرات اللي اتسلمت بس", sub: "المرتجع والملغي مالهمش كوميشن. اللي لسه في الشحن بيظهر \"مستني التسليم\"." },
-                            { key: "confirmed", title: "كل أوردر اتأكد", sub: "من أول ما المودريتور يأكده، حتى لو رجع بعد كده. الملغي بس اللي مالوش." },
-                        ] as const).map(o => (
-                            <button key={o.key} type="button" onClick={() => setBasis(o.key)}
-                                    className={cn("rounded-lg border p-3 text-start transition-colors", basis === o.key ? "border-primary bg-primary/5 ring-1 ring-primary" : "hover:bg-muted/60")}>
-                                <div className="text-sm font-medium">{o.title}</div>
-                                <div className="mt-0.5 text-xs text-muted-foreground">{o.sub}</div>
-                            </button>
-                        ))}
-                    </div>
+                {/* The rules, fixed */}
+                <div className="space-y-1 rounded-lg border bg-muted/30 p-3 text-sm">
+                    <div className="font-medium">الأوردر بياخد كوميشن لما:</div>
+                    <div>✓ يكون <b>اتسلم للعميل</b> (Delivered / Collected) — الملغي والمرتجع واللي لسه في الشحن مالهمش.</div>
+                    <div>✓ إجمالي الأوردر <b>بالشحن</b> يكون الحد الأدنى أو أكتر.</div>
+                    <div>والكوميشن بيتحسب على إجمالي الأوردر <b>من غير الشحن</b>.</div>
                 </div>
 
                 {/* Defaults */}
@@ -147,8 +137,8 @@ export function CommissionSettings() {
                         <Input type="number" inputMode="decimal" min={0} max={100} step="0.5" value={defRate} onChange={e => setDefRate(e.target.value)} className="h-9 w-24" />
                     </div>
                     <div className="space-y-1">
-                        <Label className="text-xs">أقل عدد قطع في الأوردر</Label>
-                        <Input type="number" inputMode="numeric" min={0} step="1" value={defMin} onChange={e => setDefMin(e.target.value)} className="h-9 w-24" />
+                        <Label className="text-xs">أقل إجمالي للأوردر بالشحن (ج)</Label>
+                        <Input type="number" inputMode="decimal" min={0} step="50" value={defMin} onChange={e => setDefMin(e.target.value)} className="h-9 w-28" />
                     </div>
                     <Button variant="outline" size="sm" className="h-9" onClick={applyDefaults} disabled={!enabledCount}>
                         طبّقها على المفعّلين ({enabledCount})
@@ -160,7 +150,7 @@ export function CommissionSettings() {
                     <table className="w-full text-sm">
                         <thead className="bg-muted/40 text-xs text-muted-foreground">
                             <tr className="[&>th]:px-3 [&>th]:py-2 [&>th]:text-start [&>th]:font-medium">
-                                <th>المودريتور</th><th>كوميشن</th><th>النسبة %</th><th>أقل عدد قطع</th><th>مثال</th>
+                                <th>المودريتور</th><th>كوميشن</th><th>النسبة %</th><th>أقل إجمالي بالشحن</th><th>مثال</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y">
@@ -175,10 +165,12 @@ export function CommissionSettings() {
                                         <td><Switch checked={r.enabled} onCheckedChange={v => update(r.email, { enabled: v })} /></td>
                                         <td><Input type="number" inputMode="decimal" min={0} max={100} step="0.5" value={r.rate} disabled={!r.enabled}
                                                    onChange={e => update(r.email, { rate: e.target.value })} className="h-8 w-20" /></td>
-                                        <td><Input type="number" inputMode="numeric" min={0} step="1" value={r.min_units} disabled={!r.enabled}
-                                                   onChange={e => update(r.email, { min_units: e.target.value })} className="h-8 w-20" /></td>
+                                        <td><Input type="number" inputMode="decimal" min={0} step="50" value={r.min_total} disabled={!r.enabled}
+                                                   onChange={e => update(r.email, { min_total: e.target.value })} className="h-8 w-24" /></td>
                                         <td className="whitespace-nowrap text-xs">
-                                            {r.enabled ? <>أوردر <span dir="ltr">{formatCurrency(EXAMPLE_TOTAL)}</span> فيه {Math.max(1, Number(r.min_units) || 1)} قطع ← <b dir="ltr">{formatCurrency(EXAMPLE_TOTAL * rate / 100)}</b></> : "—"}
+                                            {!r.enabled ? "—" : EXAMPLE_TOTAL >= (Number(r.min_total) || 0)
+                                                ? <>أوردر <span dir="ltr">{formatCurrency(EXAMPLE_TOTAL)}</span> منهم شحن <span dir="ltr">{formatCurrency(EXAMPLE_SHIPPING)}</span> ← <b dir="ltr">{formatCurrency((EXAMPLE_TOTAL - EXAMPLE_SHIPPING) * rate / 100)}</b></>
+                                                : <>أوردر <span dir="ltr">{formatCurrency(EXAMPLE_TOTAL)}</span> ← مالوش (أقل من الحد)</>}
                                         </td>
                                     </tr>
                                 );
