@@ -10,6 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Loader2, DollarSign, ArrowDownToLine, PackageCheck, ListOrdered } from "lucide-react";
 import { DateRangePicker } from "@/components/date-range-picker";
+import { DuplicateCollections } from "@/components/revenues/duplicate-collections";
 import {
     BarChart,
     Bar,
@@ -78,6 +79,9 @@ function RevenuesContent() {
     const [dupesMissing, setDupesMissing] = useState(false);
     const [showDupes, setShowDupes] = useState(false);
     const [openDupe, setOpenDupe] = useState<string | null>(null);
+    // Order collections that name the same order number in their description.
+    const [collDupes, setCollDupes] = useState<any[]>([]);
+    const [collDupesMissing, setCollDupesMissing] = useState(false);
 
     const fromDate = searchParams.get('from');
     const toDate = searchParams.get('to');
@@ -145,6 +149,10 @@ function RevenuesContent() {
                 const dupRes = await supabase.rpc("get_duplicate_deposits", args);
                 if (dupRes.error) { setDupesMissing(true); setDupes([]); }
                 else { setDupesMissing(false); setDupes((dupRes.data as any[]) || []); }
+
+                const collDupRes = await supabase.rpc("get_duplicate_collections", args);
+                if (collDupRes.error) { setCollDupesMissing(true); setCollDupes([]); }
+                else { setCollDupesMissing(false); setCollDupes((collDupRes.data as any[]) || []); }
 
                 const matchRes = await supabase.rpc("get_courier_collection_match", args);
                 if (matchRes.error) { setCollMissing(true); setCollMatch([]); }
@@ -1097,6 +1105,8 @@ function RevenuesContent() {
                     })()}
                 </CardContent>
             </Card>
+
+            <DuplicateCollections rows={collDupes} missing={collDupesMissing} />
 
             {/* Collection status of the orders placed in this period.
                 The cards above count money that arrived; this counts what was
