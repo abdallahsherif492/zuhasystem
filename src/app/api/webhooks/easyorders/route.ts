@@ -49,6 +49,7 @@ export async function POST(request: Request) {
     let rawBody = "";
     let requestHeaders: Record<string, string> = {};
     let businessIdForCatch: string | null = null;
+    const startedAt = Date.now();
     let businessFound = false;
     
     try {
@@ -104,6 +105,14 @@ export async function POST(request: Request) {
             await log("error", "rejected, the URL has no business or token");
             return NextResponse.json({ success: false, error: 'Missing business or token query parameters in the URL' }, { status: 200 });
         }
+
+        // Written the moment a request arrives, before anything that could
+        // fail or run out of time: if a request reaches us and then dies, this
+        // line is the proof it arrived. (If the business id is wrong the
+        // insert is refused, and the rejection below says so in the logs.)
+        await logIntegrationActivity(businessId, "EasyOrders", "info",
+            `Webhook: request arrived${received.easyorders_id ? ` for order ${received.easyorders_id}` : ""}${received.event_type ? ` (${received.event_type})` : ""}`,
+            { ...received, host: requestHeaders['host'] ?? null });
 
         // 2. Verify token
         const { data: business, error: businessError } = await supabase
@@ -400,7 +409,7 @@ export async function POST(request: Request) {
         }
 
         await log("success", `new order #${String(newOrder.id).slice(0, 8)} from EasyOrders (${totalAmount} EGP, ${processedItems.length} item${processedItems.length === 1 ? "" : "s"})`,
-            { order_id: newOrder.id });
+            { order_id: newOrder.id, took_ms: Date.now() - startedAt });
         return NextResponse.json({ success: true, order_id: newOrder.id }, { status: 200 });
 
     } catch (error: any) {
