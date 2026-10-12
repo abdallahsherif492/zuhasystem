@@ -48,6 +48,8 @@ const GOVERNORATE_MAPPING: Record<string, string> = {
 export async function POST(request: Request) {
     let rawBody = "";
     let requestHeaders: Record<string, string> = {};
+    let businessIdForCatch: string | null = null;
+    let businessFound = false;
     
     try {
         const { searchParams } = new URL(request.url);
@@ -69,20 +71,37 @@ export async function POST(request: Request) {
         // Try reading body early
         rawBody = await request.text();
 
-        // 1. Log incoming request to database (best effort)
-        let parsedPayloadForLog = null;
-        try {
-            parsedPayloadForLog = rawBody ? JSON.parse(rawBody) : null;
-        } catch(e) {
-            parsedPayloadForLog = { raw: rawBody };
-        }
-
-        await supabase.from('webhook_logs').insert({
-            headers: requestHeaders,
-            payload: parsedPayloadForLog
-        });
+        // 1. Every request that reaches us is written to the integration log
+        // (Settings → Integrations), with what came of it. This used to go to
+        // a `webhook_logs` table that was never created, so nothing was kept:
+        // when EasyOrders stopped sending — its store was suspended for an
+        // unpaid subscription — there was no way to tell "nothing arrived"
+        // from "something arrived and we refused it".
+        let parsedForLog: Record<string, unknown> | null = null;
+        try { parsedForLog = rawBody ? JSON.parse(rawBody) : null; } catch { parsedForLog = null; }
+        const lines = parsedForLog?.cart_items ?? parsedForLog?.items;
+        const received = {
+            event_type: parsedForLog?.event_type ?? null,
+            easyorders_id: parsedForLog?.id ?? parsedForLog?.order_id ?? null,
+            status: parsedForLog?.status ?? null,
+            total: parsedForLog?.total_cost ?? parsedForLog?.total ?? null,
+            items: Array.isArray(lines) ? lines.length : null,
+            body_bytes: rawBody.length,
+            user_agent: requestHeaders['user-agent'] ?? null,
+            from_ip: requestHeaders['x-forwarded-for']?.split(',')[0]?.trim() ?? null,
+        };
+        // Only a business that exists can own a log line.
+        const log = async (status: "success" | "error" | "info", message: string, extra?: Record<string, unknown>) => {
+            if (!businessId || !businessFound) {
+                console.error(`[EasyOrders webhook] ${status}: ${message}`, received);
+                return;
+            }
+            await logIntegrationActivity(businessId, "EasyOrders", status, `Webhook: ${message}`, { ...received, ...extra });
+        };
+        businessIdForCatch = businessId;
 
         if (!businessId || !token) {
+            await log("error", "rejected, the URL has no business or token");
             return NextResponse.json({ success: false, error: 'Missing business or token query parameters in the URL' }, { status: 200 });
         }
 
@@ -94,10 +113,14 @@ export async function POST(request: Request) {
             .single();
 
         if (businessError || !business) {
+            await log("error", "rejected, no business with the id in the URL");
             return NextResponse.json({ success: false, error: 'Business not found. Check if the business ID in URL is correct.' }, { status: 200 });
         }
 
+        businessFound = true;
+
         if (business.theme_config?.easyorders_token !== token) {
+            await log("error", "rejected, wrong token. Copy the webhook URL from Settings into EasyOrders again.");
             return NextResponse.json({ success: false, error: 'Invalid token. Please regenerate your Webhook URL in settings and update EasyOrders.' }, { status: 200 });
         }
 
@@ -106,17 +129,20 @@ export async function POST(request: Request) {
         try {
             payload = JSON.parse(rawBody);
         } catch (e) {
+            await log("error", "rejected, the body is not JSON", { body_preview: rawBody.slice(0, 300) });
             return NextResponse.json({ success: false, error: 'Invalid JSON payload structure received' }, { status: 200 });
         }
         
         // Ignore status update events for now
         if (payload.event_type === 'order-status-update') {
+            await log("info", `status update received${received.status ? ` (${received.status})` : ""}, not applied`);
             return NextResponse.json({ success: true, message: 'Status update ignored' }, { status: 200 });
         }
         
         // Basic check to prevent duplicate webhooks if easyorders provides an ID
         const easyOrderId = payload.id?.toString() || payload.order_id?.toString() || null;
         if (!easyOrderId) {
+            await log("error", "rejected, the order has no id", { payload_keys: Object.keys(payload || {}).slice(0, 40) });
             return NextResponse.json({ error: 'Missing order ID' }, { status: 400 });
         }
 
@@ -128,6 +154,7 @@ export async function POST(request: Request) {
             .maybeSingle();
 
         if (existingOrder) {
+            await log("info", `order ${easyOrderId} received again, already in the system as #${String(existingOrder.id).slice(0, 8)}`);
             return NextResponse.json({ message: 'Order already processed' }, { status: 200 });
         }
 
@@ -344,6 +371,7 @@ export async function POST(request: Request) {
 
         if (orderError) {
             console.error("Order Insert Error:", orderError);
+            await log("error", `order ${easyOrderId} could not be saved: ${orderError.message}`);
             return NextResponse.json({ success: false, error: 'Failed to create order in database', details: orderError.message }, { status: 200 });
         }
 
@@ -366,15 +394,21 @@ export async function POST(request: Request) {
 
             if (itemsError) {
                 console.error("Order Items Insert Error:", itemsError);
-                logIntegrationActivity(businessId, "EasyOrders", "error",
+                await logIntegrationActivity(businessId, "EasyOrders", "error",
                     `Order ${newOrder.id} saved but its items failed to insert: ${itemsError.message}`);
             }
         }
 
+        await log("success", `new order #${String(newOrder.id).slice(0, 8)} from EasyOrders (${totalAmount} EGP, ${processedItems.length} item${processedItems.length === 1 ? "" : "s"})`,
+            { order_id: newOrder.id });
         return NextResponse.json({ success: true, order_id: newOrder.id }, { status: 200 });
 
     } catch (error: any) {
         console.error("Webhook Error:", error);
+        if (businessFound && businessIdForCatch) {
+            await logIntegrationActivity(businessIdForCatch, "EasyOrders", "error",
+                `Webhook: failed with an exception: ${error?.message || String(error)}`);
+        }
         return NextResponse.json({ success: false, error: 'Internal Server Error', details: error?.message || String(error) }, { status: 200 });
     }
 }
