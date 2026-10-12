@@ -91,13 +91,12 @@ export async function POST(request: Request) {
             user_agent: requestHeaders['user-agent'] ?? null,
             from_ip: requestHeaders['x-forwarded-for']?.split(',')[0]?.trim() ?? null,
         };
-        // Only a business that exists can own a log line.
+        // Only a business that exists can own a log line; a request naming
+        // any other is logged with no business, and the id it gave.
         const log = async (status: "success" | "error" | "info", message: string, extra?: Record<string, unknown>) => {
-            if (!businessId || !businessFound) {
-                console.error(`[EasyOrders webhook] ${status}: ${message}`, received);
-                return;
-            }
-            await logIntegrationActivity(businessId, "EasyOrders", status, `Webhook: ${message}`, { ...received, ...extra });
+            const owner = businessId && businessFound ? businessId : null;
+            await logIntegrationActivity(owner, "EasyOrders", status, `Webhook: ${message}`,
+                { ...received, ...(owner ? {} : { business_in_url: businessId ?? null }), ...extra });
         };
         businessIdForCatch = businessId;
 

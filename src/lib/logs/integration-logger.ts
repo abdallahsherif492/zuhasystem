@@ -18,7 +18,9 @@ function capDetails(details: unknown): unknown {
 }
 
 export async function logIntegrationActivity(
-    businessId: string,
+    // null for a request that names no business we know — a webhook sent with
+    // a wrong or missing business id still leaves a trace.
+    businessId: string | null,
     integrationName: "Telegraph" | "Bosta" | "VROBO" | "EasyOrders" | "Shopify" | "Auto-Sync",
     status: "success" | "error" | "info",
     message: string,
