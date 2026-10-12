@@ -10,88 +10,21 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import {
-    Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
-} from "@/components/ui/dialog";
 import {
     Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import {
     Loader2, LifeBuoy, Phone, MessageCircle, Search, RefreshCw,
-    ChevronDown, ChevronRight, AlertTriangle, Clock, Download, Truck,
+    ChevronDown, Clock, Download, Truck, PhoneCall,
 } from "lucide-react";
 import * as XLSX from "xlsx";
 import { toast } from "sonner";
 import { format } from "date-fns";
-import { logBusinessAction } from "@/lib/logs/actions-logger";
-import { ago, minutesSince } from "@/components/orders/confirmation-attempts";
-
-interface Issue {
-    order_id: string;
-    reference: string;
-    status: string;
-    bucket: "returning" | "hold" | "stale";
-    customer_name: string | null;
-    customer_phone: string | null;
-    governorate: string | null;
-    total_amount: number;
-    courier: string | null;
-    closed_by: string | null;
-    days_stuck: number;
-    followup_count: number;
-    last_followup: string | null;
-    last_outcome: string | null;
-    next_action_at: string | null;
-}
-
-interface Followup {
-    id: string;
-    outcome: string;
-    note: string | null;
-    next_action_at: string | null;
-    created_by: string | null;
-    created_at: string;
-}
-
-/**
- * The outcomes a call can end in. "reached" means the call got somewhere —
- * the customer answered, or the courier did — and the order now waits on the
- * delivery; "failed" means it did not, and someone has to try again. A failed
- * call has to say why, so whoever calls next knows what happened.
- */
-type OutcomeKind = "reached" | "failed";
-const OUTCOMES: { value: string; label: string; kind: OutcomeKind; needsNote?: boolean; needsDate?: boolean; hint?: string }[] = [
-    { value: "reached_rescheduled", label: "رد واتفقنا على ميعاد تسليم", kind: "reached", needsDate: true },
-    { value: "reached_confirmed", label: "رد ومتمسك بالأوردر", kind: "reached" },
-    { value: "courier_contacted", label: "كلمت شركة الشحن", kind: "reached", hint: "اكتب قالولك إيه" },
-    { value: "no_answer", label: "مابيردش", kind: "failed" },
-    { value: "phone_off", label: "الموبايل مقفول", kind: "failed" },
-    { value: "wrong_number", label: "الرقم غلط", kind: "failed" },
-    { value: "call_later", label: "طلب نكلمه وقت تاني", kind: "failed", hint: "اكتب الميعاد اللي قال عليه" },
-    { value: "whatsapp_pending", label: "بعتناله واتساب ومستنيين رده", kind: "failed" },
-    { value: "customer_away", label: "مسافر / مش موجود دلوقتي", kind: "failed" },
-    { value: "address_issue", label: "العنوان غلط أو ناقص", kind: "failed", hint: "اكتب العنوان الصح" },
-    { value: "customer_refused", label: "رفض الاستلام", kind: "failed", hint: "قال ليه؟" },
-    { value: "other", label: "سبب تاني", kind: "failed", needsNote: true, hint: "لازم تكتب السبب" },
-];
-const outcomeLabel = (v: string | null) => OUTCOMES.find(o => o.value === v)?.label || v || "—";
-const isFailed = (v: string | null) => OUTCOMES.find(o => o.value === v)?.kind === "failed";
-
-/**
- * How far following an order up has got — separate from its shipping status.
- *   new      nobody has called about it yet
- *   retry    the last call did not reach anyone: call again
- *   reached  the customer (or courier) was reached; waiting on the delivery
- */
-type Stage = "new" | "retry" | "reached";
-const stageOf = (r: { followup_count: number; last_outcome: string | null }): Stage =>
-    Number(r.followup_count) === 0 ? "new" : isFailed(r.last_outcome) ? "retry" : "reached";
-
-/** An hour after a failed call, the order is due to be tried again. */
-const RETRY_AFTER_MIN = 60;
-/** From this many follow-ups that ended in a failed call, a final return is suggested. */
-const SUGGEST_RETURN_AT = 3;
+import { minutesSince } from "@/components/orders/confirmation-attempts";
+import {
+    FollowupRecorder, RETRY_AFTER_MIN, STEP_DOTS, STEP_TONES, dayLabel, isFailed, nextStep, outcomeLabel,
+    phoneNumbers, stageOf, todayStr, waLink, type Followup, type Issue, type Stage,
+} from "@/components/logistics/shipping-followup";
 
 const BUCKETS = [
     { key: "all", label: "الكل" },
@@ -99,8 +32,6 @@ const BUCKETS = [
     { key: "hold", label: "مؤجل للتسليم" },
     { key: "stale", label: "شحن متأخر" },
 ];
-
-const todayStr = () => format(new Date(), "yyyy-MM-dd");
 
 /** Filter key for orders with no courier attached. */
 const NO_COURIER = "__none__";
@@ -135,9 +66,8 @@ export default function ShippingIssuesPage() {
     const [expanded, setExpanded] = useState<string | null>(null);
     const [history, setHistory] = useState<Record<string, Followup[]>>({});
 
-    const [dialog, setDialog] = useState<Issue | null>(null);
-    const [form, setForm] = useState({ outcome: "", note: "", next: "", newStatus: "" });
-    const [saving, setSaving] = useState(false);
+    // The order the follow-up panel is open on.
+    const [recording, setRecording] = useState<Issue | null>(null);
 
     // `quiet`: the automatic refresh — no spinner, and a failed refresh
     // leaves the list as it was instead of replacing it with an error.
@@ -313,88 +243,36 @@ export default function ShippingIssuesPage() {
         }
     }
 
-    // The cards sum up every stuck order the filters show, whichever tab is open.
-    const totals = useMemo(() => {
-        const val = base.reduce((s, r) => s + Number(r.total_amount || 0), 0);
-        const overdue = base.filter(r => r.next_action_at && r.next_action_at < todayStr()).length;
-        const untouched = base.filter(r => Number(r.followup_count) === 0).length;
-        return { count: base.length, val, overdue, untouched };
-    }, [base]);
+    // One sentence over the list instead of four cards: the tabs already
+    // count the untouched and the due ones.
+    const totals = useMemo(() => ({
+        count: base.length,
+        val: base.reduce((s, r) => s + Number(r.total_amount || 0), 0),
+    }), [base]);
 
-    function openDialog(r: Issue) {
-        setForm({ outcome: "", note: "", next: "", newStatus: "" });
-        setDialog(r);
+    function openRecorder(r: Issue) {
+        setRecording(r);
+        loadHistory(r.order_id);
     }
 
-    async function saveFollowup() {
-        if (!activeBusiness || !dialog) return;
-        if (!form.outcome) return toast.error(t("اختار نتيجة المكالمة"));
-        const chosen = OUTCOMES.find(o => o.value === form.outcome);
-        if (chosen?.needsNote && !form.note.trim()) return toast.error("اكتب السبب");
-        if (chosen?.needsDate && !form.next) return toast.error("اختار ميعاد التسليم اللي اتفقتوا عليه");
-        setSaving(true);
-        try {
-            const { error } = await supabase.from("shipping_followups").insert({
-                business_id: activeBusiness.id,
-                order_id: dialog.order_id,
-                outcome: form.outcome,
-                note: form.note.trim() || null,
-                next_action_at: form.next || null,
-                created_by: currentUser?.email || "Staff",
-            }).select("id");
-            if (error) throw error;
+    /** The order after this one in the list as it is on screen. */
+    const nextAfter = (r: Issue | null) => {
+        if (!r) return null;
+        const i = filtered.findIndex(x => x.order_id === r.order_id);
+        return filtered.slice(i + 1).find(x => x.order_id !== r.order_id) ?? null;
+    };
 
-            // Changing the status is optional — most follow-ups are just a note
-            // that the customer was reached and a new date agreed.
-            if (form.newStatus && form.newStatus !== dialog.status) {
-                const { data, error: sErr } = await supabase
-                    .from("orders")
-                    .update({ status: form.newStatus })
-                    .eq("id", dialog.order_id)
-                    .eq("business_id", activeBusiness.id)
-                    .select("id");
-                if (sErr) throw sErr;
-                if (!data || data.length === 0) {
-                    throw new Error("لم يتم حفظ تغيير الحالة. حدّث الصفحة وجرّب تاني.");
-                }
-                logBusinessAction({
-                    businessId: activeBusiness.id,
-                    userEmail: currentUser?.email || "Staff",
-                    actionType: "update_status",
-                    entityType: "order",
-                    entityId: dialog.order_id,
-                    entityName: `Order #${dialog.reference} (${dialog.customer_name || "Customer"})`,
-                    changes: [{ field: "Status", old_value: dialog.status, new_value: form.newStatus }],
-                    metadata: { source: "shipping_issues", outcome: form.outcome },
-                });
-            }
-
-            toast.success(t("تم تسجيل المتابعة"));
-            setDialog(null);
-            setHistory(prev => { const n = { ...prev }; delete n[dialog.order_id]; return n; });
-            load();
-        } catch (e: any) {
-            const newReason = /outcome_check/.test(e?.message || "");
-            toast.error(newReason
-                ? "السبب ده محتاج migration 20261007_shipping_followup_reasons.sql يتشغّل الأول."
-                : e.message || t("فشل حفظ المتابعة"));
-        } finally {
-            setSaving(false);
-        }
+    // Saved: forget the cached history, reload quietly, and either close the
+    // panel or carry straight on to the next order — a moderator working
+    // through the list should not have to find their place again.
+    function afterSave(openNext: boolean) {
+        const done = recording;
+        const following = openNext ? nextAfter(done) : null;
+        if (done) setHistory(prev => { const n = { ...prev }; delete n[done.order_id]; return n; });
+        load(true);
+        if (following) openRecorder(following);
+        else setRecording(null);
     }
-
-    /**
-     * A customer's phone field sometimes holds more than one number —
-     * "0882232065 | 01159244278", a landline and a mobile. Stripping
-     * non-digits from the whole field would produce one impossible number and
-     * a dead call button, so split it and treat each number separately.
-     */
-    const phoneNumbers = (p: string | null): string[] =>
-        (p || "").split(/[^0-9]+/).map(x => x.trim()).filter(x => x.length >= 7);
-
-    // WhatsApp only makes sense for an Egyptian mobile, not a landline.
-    const waLink = (num: string) =>
-        /^01\d{9}$/.test(num) ? `https://wa.me/2${num}` : null;
 
     if (unavailable) {
         return (
@@ -410,15 +288,20 @@ export default function ShippingIssuesPage() {
     }
 
     return (
-        <div className="space-y-6">
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div className="space-y-5" dir="rtl">
+            <div className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
                 <div>
-                    <h1 className="text-3xl font-bold tracking-tight flex items-center gap-2">
+                    <h1 className="flex items-center gap-2 text-3xl font-bold tracking-tight">
                         <LifeBuoy className="h-7 w-7 text-primary" />
                         {t("مشاكل الشحن")}
                     </h1>
-                    <p className="text-sm text-muted-foreground mt-1">
-                        أوردرات عالقة عند شركة الشحن ولسه ممكن تتنقذ. الأقدم أولاً — ده اللي على وشك يضيع.
+                    <p className="mt-1 text-sm text-muted-foreground">
+                        {loading ? "أوردرات عالقة عند شركات الشحن ولسه ممكن تتنقذ."
+                            : totals.count === 0 ? "مفيش أوردرات عالقة في الفلتر ده."
+                            : <>{totals.count} أوردر عالق عند شركات الشحن بقيمة <span dir="ltr" className="font-semibold text-foreground">{formatCurrency(totals.val)}</span>، ولسه ممكن يتنقذوا.</>}
+                    </p>
+                    <p className="mt-0.5 text-sm text-muted-foreground">
+                        اقرا السطر الملوّن فوق كل أوردر، اتصل، وبعد المكالمة دوس «سجّل متابعة» واختار اللي حصل.
                     </p>
                 </div>
                 <div className="flex flex-wrap gap-2">
@@ -439,28 +322,9 @@ export default function ShippingIssuesPage() {
                 </div>
             </div>
 
-            <div className="grid gap-4 md:grid-cols-4">
-                <Card>
-                    <CardHeader className="pb-2"><CardTitle className="text-xs font-bold uppercase tracking-wider text-muted-foreground">أوردرات عالقة</CardTitle></CardHeader>
-                    <CardContent><div className="text-2xl font-bold">{totals.count}</div></CardContent>
-                </Card>
-                <Card className="border-red-500/20 bg-gradient-to-br from-red-500/10 to-transparent">
-                    <CardHeader className="pb-2"><CardTitle className="text-xs font-bold uppercase tracking-wider text-red-700 dark:text-red-300">قيمتها</CardTitle></CardHeader>
-                    <CardContent><div className="text-2xl font-black text-red-700 dark:text-red-300">{formatCurrency(totals.val)}</div></CardContent>
-                </Card>
-                <Card>
-                    <CardHeader className="pb-2"><CardTitle className="text-xs font-bold uppercase tracking-wider text-muted-foreground">محدش لمسها</CardTitle></CardHeader>
-                    <CardContent><div className="text-2xl font-bold text-amber-600">{totals.untouched}</div></CardContent>
-                </Card>
-                <Card>
-                    <CardHeader className="pb-2"><CardTitle className="text-xs font-bold uppercase tracking-wider text-muted-foreground">فات ميعاد متابعتها</CardTitle></CardHeader>
-                    <CardContent><div className="text-2xl font-bold text-red-600">{totals.overdue}</div></CardContent>
-                </Card>
-            </div>
-
             <FollowupTabs value={stage} onChange={setStage} counts={stageCounts} />
 
-            <div className="flex flex-wrap items-center gap-2 bg-muted/30 p-3 rounded-xl border">
+            <div className="flex flex-wrap items-center gap-2 rounded-xl border bg-muted/30 p-3">
                 {BUCKETS.map(b => {
                     const c = b.key === "all" ? rows.length : rows.filter(r => r.bucket === b.key).length;
                     return (
@@ -485,13 +349,13 @@ export default function ShippingIssuesPage() {
                         ))}
                     </SelectContent>
                 </Select>
-                <div className="relative flex-1 min-w-[180px] max-w-sm ms-auto">
+                <div className="relative ms-auto min-w-[180px] max-w-sm flex-1">
                     <Search className="absolute start-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                     <Input placeholder="رقم الأوردر أو العميل أو التليفون..." value={query}
-                           onChange={e => setQuery(e.target.value)} className="ps-8 h-9 bg-background" />
+                           onChange={e => setQuery(e.target.value)} className="h-9 bg-background ps-8" />
                 </div>
                 <div className="flex items-center gap-1.5">
-                    <Label className="text-xs text-muted-foreground whitespace-nowrap">شحن متأخر بعد</Label>
+                    <Label className="whitespace-nowrap text-xs text-muted-foreground">شحن متأخر بعد</Label>
                     <Input type="number" min={1} max={60} value={staleDays}
                            onChange={e => setStaleDays(Math.max(1, Number(e.target.value) || 5))}
                            className="h-9 w-16 bg-background" />
@@ -503,270 +367,137 @@ export default function ShippingIssuesPage() {
                 <div className="flex justify-center p-16"><Loader2 className="h-7 w-7 animate-spin text-muted-foreground" /></div>
             ) : filtered.length === 0 ? (
                 <Card><CardContent className="p-16 text-center text-sm text-muted-foreground">
-                    {stage === "new" ? "مفيش أوردرات محدش تابعها 👌"
-                        : stage === "retry" ? "مفيش أوردرات محتاجة إعادة محاولة 👌"
-                        : stage === "reached" ? "مفيش أوردرات اتوصلنا فيها لحد."
-                        : "مفيش أوردرات عالقة في الفلتر ده — شغل كويس."}
+                    {stage === "new" ? "كل الأوردرات العالقة اتكلّمت مرة على الأقل."
+                        : stage === "retry" ? "مفيش أوردرات مستنية مكالمة تانية."
+                        : stage === "reached" ? "لسه مااتوصلناش لحد في الأوردرات دي."
+                        : "مفيش أوردرات عالقة في الفلتر ده."}
                     {stage === "new" && stageCounts.retry > 0 && (
                         <button className="mt-2 block w-full text-primary underline" onClick={() => setStage("retry")}>
-                            فيه {stageCounts.retry} في إعادة المحاولة
+                            روح لإعادة المحاولة ({stageCounts.retry})
                         </button>
                     )}
                 </CardContent></Card>
             ) : (
-                <div className="space-y-4">
+                <div className="space-y-3">
                     {filtered.map(r => {
                         const open = expanded === r.order_id;
-                        const overdue = r.next_action_at && r.next_action_at < todayStr();
+                        const step = nextStep(r);
+                        const phones = phoneNumbers(r.customer_phone);
                         return (
-                            <Card key={r.order_id} className={cn(
-                                "overflow-hidden border-2",
-                                r.bucket === "returning" ? "border-red-500/30"
-                                    : r.bucket === "hold" ? "border-amber-500/30" : "border-blue-500/25"
-                            )}>
-                                <CardHeader className="bg-muted/30 pb-4">
-                                    <div className="flex flex-wrap items-start justify-between gap-4">
-                                        <div className="min-w-0">
-                                            {/* The reference people actually use: the same 8 characters
-                                                printed on the waybill barcode and shown in the orders
-                                                list, so the number on the parcel matches the screen. */}
-                                            <div className="font-mono text-3xl font-black tracking-wider leading-none">
-                                                #{r.reference}
-                                            </div>
-                                            <div className="text-lg font-semibold mt-2 truncate">
-                                                {r.customer_name || "—"}
-                                            </div>
-                                            <div className="text-sm text-muted-foreground mt-0.5">
-                                                {r.governorate || "—"}{r.courier ? ` · ${r.courier}` : ""}
-                                            </div>
-                                        </div>
+                            <article key={r.order_id} className="overflow-hidden rounded-xl border bg-card shadow-sm">
+                                {/* What to do about this order now — read before anything else. */}
+                                <div className={cn("flex flex-wrap items-center gap-x-3 gap-y-2 border-b px-4 py-2.5", STEP_TONES[step.tone])}>
+                                    <span className={cn("h-2.5 w-2.5 shrink-0 rounded-full", STEP_DOTS[step.tone])} aria-hidden />
+                                    <span className="min-w-[12rem] flex-1 text-sm font-semibold">{step.text}</span>
+                                    <Button size="sm" className="h-8 gap-1.5" onClick={() => openRecorder(r)}>
+                                        <PhoneCall className="h-4 w-4" /> سجّل متابعة
+                                    </Button>
+                                </div>
 
-                                        <div className="flex flex-col items-end gap-2 shrink-0">
-                                            <Badge variant="outline" className={cn("text-sm px-3 py-1",
-                                                r.bucket === "returning" && "bg-red-500/10 text-red-600 border-red-500/25",
-                                                r.bucket === "hold" && "bg-amber-500/10 text-amber-600 border-amber-500/25",
-                                                r.bucket === "stale" && "bg-blue-500/10 text-blue-600 border-blue-500/25",
-                                            )}>
-                                                {r.status}
-                                            </Badge>
-                                            <StageChip r={r} />
-                                            <div className={cn("text-sm font-bold",
-                                                r.days_stuck >= 14 ? "text-red-600"
-                                                    : r.days_stuck >= 7 ? "text-amber-600" : "text-muted-foreground")}>
-                                                عالق من {r.days_stuck} يوم
-                                            </div>
-                                            <div className="text-xl font-bold tabular-nums">
-                                                {formatCurrency(Number(r.total_amount))}
-                                            </div>
+                                <div className="flex flex-wrap items-start justify-between gap-3 px-4 pt-3">
+                                    <div className="min-w-0">
+                                        {/* The same 8 characters printed on the waybill, so the
+                                            number on the parcel matches the screen. */}
+                                        <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                                            <span className="font-mono text-xl font-black tracking-wider" dir="ltr">#{r.reference}</span>
+                                            <span className="truncate text-base font-semibold">{r.customer_name || "—"}</span>
+                                        </div>
+                                        <div className="mt-0.5 text-sm text-muted-foreground">
+                                            {[r.governorate, r.courier, r.closed_by ? `أكده ${r.closed_by.split("@")[0]}` : null].filter(Boolean).join("، ") || "—"}
                                         </div>
                                     </div>
-                                </CardHeader>
+                                    <div className="flex flex-wrap items-center gap-2">
+                                        <Badge variant="outline" className={cn("px-2.5",
+                                            r.bucket === "returning" && "border-red-500/25 bg-red-500/10 text-red-600",
+                                            r.bucket === "hold" && "border-amber-500/25 bg-amber-500/10 text-amber-600",
+                                            r.bucket === "stale" && "border-blue-500/25 bg-blue-500/10 text-blue-600",
+                                        )}>
+                                            {r.status}
+                                        </Badge>
+                                        <span className={cn("text-sm font-semibold",
+                                            r.days_stuck >= 14 ? "text-red-600" : r.days_stuck >= 7 ? "text-amber-600" : "text-muted-foreground")}>
+                                            عالق من {r.days_stuck} يوم
+                                        </span>
+                                        <span className="text-lg font-bold tabular-nums" dir="ltr">{formatCurrency(Number(r.total_amount))}</span>
+                                    </div>
+                                </div>
 
-                                <CardContent className="pt-5 space-y-4">
-                                    <div className="flex flex-wrap items-center gap-x-4 gap-y-3">
-                                        {phoneNumbers(r.customer_phone).length === 0 ? (
-                                            <span className="text-lg text-muted-foreground">مفيش رقم مسجل</span>
-                                        ) : phoneNumbers(r.customer_phone).map(num => (
-                                            <div key={num} className="flex items-center gap-2">
-                                                {/* Big and tappable — this screen exists to get someone on the phone. */}
-                                                <a href={`tel:${num}`}
-                                                   className="font-mono text-2xl font-bold tracking-wide hover:underline">
-                                                    {num}
-                                                </a>
-                                                <Button asChild size="sm" variant="outline" className="gap-1.5 h-9">
-                                                    <a href={`tel:${num}`}><Phone className="h-4 w-4" /> اتصل</a>
+                                <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 pb-3 pt-2">
+                                    {phones.length === 0 ? (
+                                        <span className="text-sm text-muted-foreground">مفيش رقم مسجل</span>
+                                    ) : phones.map(num => (
+                                        <div key={num} className="flex items-center gap-1.5">
+                                            {/* Big and tappable — this screen exists to get someone on the phone. */}
+                                            <a href={`tel:${num}`} className="font-mono text-xl font-bold tracking-wide hover:underline">{num}</a>
+                                            <Button asChild size="icon" variant="outline" className="h-8 w-8" aria-label={`اتصل ${num}`}>
+                                                <a href={`tel:${num}`}><Phone className="h-4 w-4" /></a>
+                                            </Button>
+                                            {waLink(num) && (
+                                                <Button asChild size="icon" variant="outline" className="h-8 w-8 text-emerald-700 dark:text-emerald-400" aria-label={`واتساب ${num}`}>
+                                                    <a href={waLink(num)!} target="_blank" rel="noopener noreferrer"><MessageCircle className="h-4 w-4" /></a>
                                                 </Button>
-                                                {waLink(num) && (
-                                                    <Button asChild size="sm" variant="outline"
-                                                            className="gap-1.5 h-9 text-emerald-700 border-emerald-500/30 hover:bg-emerald-500/10">
-                                                        <a href={waLink(num)!} target="_blank" rel="noopener noreferrer">
-                                                            <MessageCircle className="h-4 w-4" /> واتساب
-                                                        </a>
-                                                    </Button>
-                                                )}
-                                            </div>
-                                        ))}
-                                        <Button size="sm" className="h-9 ms-auto" onClick={() => openDialog(r)}>
-                                            سجّل متابعة
-                                        </Button>
-                                    </div>
-
-                                    <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 text-sm border-t pt-3">
-                                        {Number(r.followup_count) === 0 ? (
-                                            <span className="text-amber-600 font-semibold">لسه محدش تابع الأوردر ده</span>
-                                        ) : (
-                                            <>
-                                                <span>
-                                                    <span className="text-muted-foreground">آخر متابعة: </span>
-                                                    <span className={cn("font-medium", isFailed(r.last_outcome) ? "text-orange-700 dark:text-orange-300" : "text-emerald-700 dark:text-emerald-400")}>{outcomeLabel(r.last_outcome)}</span>
-                                                    {r.last_followup && <span className="text-muted-foreground"> · {ago(r.last_followup)}</span>}
-                                                </span>
-                                                <span className="text-muted-foreground">{r.followup_count} متابعة</span>
-                                                {overdue && (
-                                                    <span className="text-red-600 font-semibold">
-                                                        فات ميعاد المتابعة ({r.next_action_at})
-                                                    </span>
-                                                )}
-                                                {!overdue && r.next_action_at && (
-                                                    <span className="text-muted-foreground">المتابعة الجاية {r.next_action_at}</span>
-                                                )}
-                                            </>
-                                        )}
-                                        {r.closed_by && (
-                                            <span className="text-muted-foreground">أكده {r.closed_by}</span>
-                                        )}
-                                        {r.last_outcome === "customer_refused" && (
-                                            <span className="basis-full text-xs font-medium text-red-700 dark:text-red-300">
-                                                العميل رفض الاستلام — لو اتأكدت، غيّر الحالة لـ &quot;مرتجع نهائي&quot; من سجّل متابعة.
-                                            </span>
-                                        )}
-                                        {stageOf(r) === "retry" && r.last_outcome !== "customer_refused" && Number(r.followup_count) >= SUGGEST_RETURN_AT && (
-                                            <span className="basis-full text-xs font-medium text-red-700 dark:text-red-300">
-                                                {r.followup_count} متابعات من غير ما نوصل للعميل — اتكلم مع شركة الشحن أو فكّر ترجّعه.
-                                            </span>
-                                        )}
-                                        <Button variant="ghost" size="sm" className="h-8 gap-1 ms-auto text-xs"
-                                                onClick={() => { setExpanded(open ? null : r.order_id); if (!open) loadHistory(r.order_id); }}>
-                                            {open ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
-                                            {open ? "اخفي السجل" : "شوف السجل"}
-                                        </Button>
-                                    </div>
-
-                                    {open && (
-                                        <div className="border-t pt-3">
-                                            {!history[r.order_id] ? (
-                                                <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-                                            ) : history[r.order_id].length === 0 ? (
-                                                <p className="text-sm text-muted-foreground">
-                                                    لسه محدش تابع الأوردر ده. دي هتبقى أول مكالمة.
-                                                </p>
-                                            ) : (
-                                                <div className="rounded-lg border bg-muted/20 divide-y">
-                                                    {history[r.order_id].map(f => (
-                                                        <div key={f.id} className="p-3 text-sm">
-                                                            <div className="flex flex-wrap items-center gap-2">
-                                                                <span className="font-semibold">{outcomeLabel(f.outcome)}</span>
-                                                                <span className="text-xs text-muted-foreground">
-                                                                    {format(new Date(f.created_at), "dd/MM/yyyy hh:mm a")}
-                                                                </span>
-                                                                <span className="text-xs text-muted-foreground">· {f.created_by || "—"}</span>
-                                                                {f.next_action_at && (
-                                                                    <Badge variant="outline" className="text-[11px] gap-1">
-                                                                        <Clock className="h-3 w-3" /> متابعة {f.next_action_at}
-                                                                    </Badge>
-                                                                )}
-                                                            </div>
-                                                            {f.note && <p className="text-muted-foreground mt-1">{f.note}</p>}
-                                                        </div>
-                                                    ))}
-                                                </div>
                                             )}
                                         </div>
+                                    ))}
+                                    {Number(r.followup_count) > 0 && (
+                                        <button type="button"
+                                                className="ms-auto inline-flex items-center gap-1 rounded text-xs text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                                onClick={() => { setExpanded(open ? null : r.order_id); if (!open) loadHistory(r.order_id); }}
+                                                aria-expanded={open}>
+                                            <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", open && "rotate-180")} />
+                                            {open ? "اخفي المتابعات" : `${r.followup_count} ${Number(r.followup_count) === 1 ? "متابعة" : "متابعات"} قبل كده`}
+                                        </button>
                                     )}
-                                </CardContent>
-                            </Card>
+                                </div>
+
+                                {open && (
+                                    <div className="border-t bg-muted/20 px-4 py-3">
+                                        {!history[r.order_id] ? (
+                                            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                                        ) : (
+                                            <ol className="space-y-2.5">
+                                                {history[r.order_id].map(f => (
+                                                    <li key={f.id} className="flex gap-2.5 text-sm">
+                                                        <span className={cn("mt-1.5 h-2 w-2 shrink-0 rounded-full", isFailed(f.outcome) ? "bg-orange-500" : "bg-emerald-500")} aria-hidden />
+                                                        <div className="min-w-0">
+                                                            <div className="flex flex-wrap items-center gap-x-2">
+                                                                <span className="font-semibold">{outcomeLabel(f.outcome)}</span>
+                                                                <span className="text-xs text-muted-foreground">
+                                                                    {(f.created_by || "—").split("@")[0]}، {format(new Date(f.created_at), "dd/MM hh:mm a")}
+                                                                </span>
+                                                                {f.next_action_at && (
+                                                                    <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                                                                        <Clock className="h-3 w-3" /> ميعاد {dayLabel(f.next_action_at)}
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                            {f.note && <p className="mt-0.5 text-muted-foreground">{f.note}</p>}
+                                                        </div>
+                                                    </li>
+                                                ))}
+                                            </ol>
+                                        )}
+                                    </div>
+                                )}
+                            </article>
                         );
                     })}
                 </div>
             )}
 
-            <Dialog open={!!dialog} onOpenChange={o => !o && setDialog(null)}>
-                <DialogContent>
-                    <DialogHeader>
-                        <DialogTitle>متابعة أوردر #{dialog?.reference}</DialogTitle>
-                        <DialogDescription>
-                            {dialog?.customer_name} · {dialog?.governorate} · عالق من {dialog?.days_stuck} يوم
-                        </DialogDescription>
-                    </DialogHeader>
-
-                    <div className="space-y-4 py-2">
-                        {(["reached", "failed"] as const).map(kind => (
-                            <div key={kind} className="space-y-1.5">
-                                <Label className={kind === "reached" ? "text-emerald-700 dark:text-emerald-400" : "text-orange-700 dark:text-orange-300"}>
-                                    {kind === "reached" ? "✓ اتوصلنا" : "✗ ماوصلناش — اختار السبب"}
-                                </Label>
-                                <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
-                                    {OUTCOMES.filter(o => o.kind === kind).map(o => (
-                                        <button key={o.value} type="button"
-                                                onClick={() => setForm({ ...form, outcome: o.value })}
-                                                className={cn("rounded-lg border p-2 text-start text-sm transition-colors",
-                                                    form.outcome === o.value
-                                                        ? kind === "reached" ? "border-emerald-500 bg-emerald-500/10 ring-1 ring-emerald-500" : "border-orange-500 bg-orange-500/10 ring-1 ring-orange-500"
-                                                        : "hover:bg-muted/60")}>
-                                            {o.label}
-                                        </button>
-                                    ))}
-                                </div>
-                            </div>
-                        ))}
-
-                        <div className="space-y-2">
-                            <Label>ملاحظات{OUTCOMES.find(o => o.value === form.outcome)?.needsNote ? " (لازم)" : ""}</Label>
-                            <Textarea rows={2} value={form.note}
-                                      onChange={e => setForm({ ...form, note: e.target.value })}
-                                      placeholder={OUTCOMES.find(o => o.value === form.outcome)?.hint ?? "العميل قال إيه بالظبط، وإيه اللي اتفقتوا عليه"} />
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-4">
-                            <div className="space-y-2">
-                                <Label>{OUTCOMES.find(o => o.value === form.outcome)?.needsDate ? "ميعاد التسليم (لازم)" : "متابعة تاني يوم"}</Label>
-                                <Input type="date" value={form.next}
-                                       onChange={e => setForm({ ...form, next: e.target.value })} />
-                            </div>
-                            <div className="space-y-2">
-                                <Label>غيّر الحالة (اختياري)</Label>
-                                <Select value={form.newStatus} onValueChange={v => setForm({ ...form, newStatus: v })}>
-                                    <SelectTrigger className="w-full"><SelectValue placeholder="سيبها زي ما هي" /></SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="Shipped">رجّعها للشحن</SelectItem>
-                                        <SelectItem value="Hold To redeliver">مؤجل للتسليم</SelectItem>
-                                        <SelectItem value="Collected">اتسلمت</SelectItem>
-                                        <SelectItem value="Returned">مرتجع نهائي</SelectItem>
-                                    </SelectContent>
-                                </Select>
-                            </div>
-                        </div>
-
-                        {form.newStatus === "Returned" && (
-                            <div className="flex gap-2 rounded-lg border border-red-500/30 bg-red-500/5 p-3">
-                                <AlertTriangle className="h-4 w-4 text-red-600 shrink-0 mt-0.5" />
-                                <p className="text-xs text-red-700 dark:text-red-400">
-                                    ده هيحسب مرتجع في نسبة التسليم. متعملهاش غير لما تتأكد إن العميل رفض
-                                    فعلاً — الأوردر اللي لسه عند شركة الشحن مش مرتجع.
-                                </p>
-                            </div>
-                        )}
-                    </div>
-
-                    <DialogFooter>
-                        <Button variant="outline" onClick={() => setDialog(null)}>إلغاء</Button>
-                        <Button onClick={saveFollowup} disabled={saving || !form.outcome
-                            || (!!OUTCOMES.find(o => o.value === form.outcome)?.needsNote && !form.note.trim())
-                            || (!!OUTCOMES.find(o => o.value === form.outcome)?.needsDate && !form.next)}>
-                            {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                            سجّل المتابعة
-                        </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
+            {activeBusiness && (
+                <FollowupRecorder
+                    issue={recording}
+                    history={recording ? history[recording.order_id] : undefined}
+                    businessId={activeBusiness.id}
+                    userEmail={currentUser?.email ?? null}
+                    hasNext={!!nextAfter(recording)}
+                    onClose={() => setRecording(null)}
+                    onSaved={afterSave}
+                />
+            )}
         </div>
     );
-}
-
-/** Where following an order up has got, under its shipping status. */
-function StageChip({ r }: { r: Issue }) {
-    const st = stageOf(r);
-    if (st === "new") return <span dir="rtl" className="rounded-full border border-yellow-200 bg-yellow-50 px-2.5 py-0.5 text-xs font-medium text-yellow-800 dark:border-yellow-900 dark:bg-yellow-950/40 dark:text-yellow-300">محدش تابعه لسه</span>;
-    if (st === "retry") {
-        const due = (minutesSince(r.last_followup) ?? 0) >= RETRY_AFTER_MIN;
-        return <span dir="rtl" className="rounded-full border border-orange-200 bg-orange-50 px-2.5 py-0.5 text-xs font-medium text-orange-800 dark:border-orange-900 dark:bg-orange-950/40 dark:text-orange-300">ماوصلناش{due ? " · جاهز تتصل تاني" : ""}</span>;
-    }
-    const overdue = r.next_action_at && r.next_action_at <= todayStr();
-    return <span dir="rtl" className={cn("rounded-full border px-2.5 py-0.5 text-xs font-medium",
-        overdue ? "border-red-200 bg-red-50 text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300"
-            : "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-300")}>
-        {overdue ? "النهارده ميعاد متابعته" : "اتوصلنا"}
-    </span>;
 }
 
 /** Tabs over the list: by how far following each order up has got. */
