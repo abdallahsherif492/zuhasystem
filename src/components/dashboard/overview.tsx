@@ -15,6 +15,9 @@ import { ago } from "@/components/orders/confirmation-attempts";
 export interface Figures {
     orders?: number; waiting?: number; cancelled?: number; confirmed?: number;
     delivered?: number; returned?: number; sales?: number;
+    /** What each count is worth (20261014_dashboard_order_values.sql); absent until it is run. */
+    orders_value?: number; waiting_value?: number; cancelled_value?: number;
+    delivered_value?: number; returned_value?: number;
 }
 export interface Overview {
     period: Figures;
@@ -123,61 +126,130 @@ function Delta({ now, before, kind, ar }: { now: number | null; before: number |
     );
 }
 
-export function PerformanceStrip({ o, ar }: { o: Overview; ar: boolean }) {
+/**
+ * The first thing on the dashboard: how many orders came in, how many were
+ * confirmed, and what each is worth — large enough to read across the room.
+ * Confirmed sales is the figure the business runs on, so it gets the one
+ * solid colour on the page; everything else stays quiet around it.
+ */
+export function Scoreboard({ o, ar, compareLabel }: { o: Overview; ar: boolean; compareLabel: string }) {
     const t = (a: string, e: string) => (ar ? a : e);
     const p = o.period, q = o.previous;
+    const has = (v: number | undefined) => v !== undefined;
     const decided = n(p.confirmed) + n(p.cancelled), decidedBefore = n(q.confirmed) + n(q.cancelled);
     const closed = n(p.delivered) + n(p.returned), closedBefore = n(q.delivered) + n(q.returned);
     const confirmRate = rate(n(p.confirmed), decided), confirmBefore = rate(n(q.confirmed), decidedBefore);
     const deliveryRate = rate(n(p.delivered), closed), deliveryBefore = rate(n(q.delivered), closedBefore);
     const aov = n(p.confirmed) ? n(p.sales) / n(p.confirmed) : null;
     const aovBefore = n(q.confirmed) ? n(q.sales) / n(q.confirmed) : null;
+    const total = n(p.orders);
 
-    const cells: { label: string; value: string; delta: React.ReactNode; note: string }[] = [
-        {
-            label: t("المبيعات المؤكدة", "Confirmed sales"),
-            value: money(n(p.sales)),
-            delta: <Delta now={n(p.sales)} before={n(q.sales)} kind="percent" ar={ar} />,
-            note: t(`${int(n(p.confirmed))} أوردر اتأكد`, `${int(n(p.confirmed))} orders confirmed`),
-        },
-        {
-            label: t("الأوردرات", "Orders"),
-            value: int(n(p.orders)),
-            delta: <Delta now={n(p.orders)} before={n(q.orders)} kind="percent" ar={ar} />,
-            note: n(p.waiting) ? t(`${int(n(p.waiting))} لسه مستني تأكيد`, `${int(n(p.waiting))} still waiting`) : t("كلهم اتراجعوا", "All reviewed"),
-        },
-        {
-            label: t("نسبة التأكيد", "Confirmation rate"),
-            value: confirmRate === null ? "—" : `${confirmRate.toFixed(0)}%`,
-            delta: <Delta now={confirmRate} before={confirmBefore} kind="points" ar={ar} />,
-            note: decided ? t(`اتلغى ${int(n(p.cancelled))} من ${int(decided)}`, `${int(n(p.cancelled))} of ${int(decided)} cancelled`) : t("لسه مفيش قرارات", "Nothing decided yet"),
-        },
-        {
-            label: t("نسبة التسليم", "Delivery rate"),
-            value: deliveryRate === null ? "—" : `${deliveryRate.toFixed(0)}%`,
-            delta: <Delta now={deliveryRate} before={deliveryBefore} kind="points" ar={ar} />,
-            note: closed ? t(`${int(n(p.delivered))} اتسلم و${int(n(p.returned))} مرتجع`, `${int(n(p.delivered))} delivered, ${int(n(p.returned))} returned`) : t("لسه محدش وصله أوردر", "None delivered yet"),
-        },
-        {
-            label: t("متوسط الأوردر", "Average order"),
-            value: aov === null ? "—" : money(aov),
-            delta: <Delta now={aov} before={aovBefore} kind="percent" ar={ar} />,
-            note: t("المبيعات المؤكدة ÷ عدد الأوردرات المؤكدة", "Confirmed sales ÷ confirmed orders"),
-        },
+    const split = [
+        { key: "confirmed", label: t("اتأكد", "Confirmed"), count: n(p.confirmed), value: n(p.sales), bar: "bg-emerald-500", text: "text-emerald-700 dark:text-emerald-400" },
+        { key: "waiting", label: t("مستني تأكيد", "Waiting"), count: n(p.waiting), value: has(p.waiting_value) ? n(p.waiting_value) : null, bar: "bg-amber-400", text: "text-amber-700 dark:text-amber-400" },
+        { key: "cancelled", label: t("اتلغى", "Cancelled"), count: n(p.cancelled), value: has(p.cancelled_value) ? n(p.cancelled_value) : null, bar: "bg-red-400", text: "text-red-700 dark:text-red-400" },
     ];
 
     return (
-        <div className="grid grid-cols-2 overflow-hidden rounded-xl border bg-card md:grid-cols-5">
-            {cells.map((c, i) => (
-                <div key={c.label} className={cn("min-w-0 p-4 sm:p-5", i > 0 && "border-s", i === 2 && "max-md:border-s-0", i >= 2 && "max-md:border-t", i === 4 && "col-span-2 md:col-span-1 max-md:border-s-0")}>
-                    <div className="text-sm text-muted-foreground">{c.label}</div>
-                    <div className="mt-1.5 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-                        <span className="text-2xl font-semibold tabular-nums tracking-tight sm:text-[1.7rem]" dir="ltr">{c.value}</span>
-                        {c.delta}
+        <div className="space-y-3">
+            <div className="grid gap-3 md:grid-cols-2">
+                {/* All orders */}
+                <div className="rounded-2xl border-2 bg-card p-5 sm:p-6">
+                    <div className="flex items-center justify-between gap-3">
+                        <span className="text-base font-semibold text-muted-foreground">{t("كل الأوردرات", "All orders")}</span>
+                        <DeltaPill now={total} before={n(q.orders)} label={compareLabel} />
                     </div>
-                    <div className="mt-1 truncate text-xs text-muted-foreground" title={c.note}>{c.note}</div>
+                    <div className="mt-2 flex flex-wrap items-baseline gap-x-3">
+                        <span className="text-6xl font-bold tabular-nums leading-none tracking-tight" dir="ltr">{int(total)}</span>
+                        <span className="text-lg text-muted-foreground">{t("أوردر", "orders")}</span>
+                    </div>
+                    {has(p.orders_value) && (
+                        <div className="mt-3 text-3xl font-semibold tabular-nums sm:text-4xl"><span dir="ltr">{money(n(p.orders_value))}</span></div>
+                    )}
                 </div>
-            ))}
+
+                {/* Confirmed orders and what they are worth */}
+                <div className="rounded-2xl bg-emerald-600 p-5 text-white shadow-sm sm:p-6 dark:bg-emerald-700">
+                    <div className="flex items-center justify-between gap-3">
+                        <span className="text-base font-semibold text-emerald-50">{t("الأوردرات المتأكدة", "Confirmed orders")}</span>
+                        <DeltaPill now={n(p.sales)} before={n(q.sales)} label={compareLabel} onColour />
+                    </div>
+                    <div className="mt-2 flex flex-wrap items-baseline gap-x-3">
+                        <span className="text-6xl font-bold tabular-nums leading-none tracking-tight" dir="ltr">{int(n(p.confirmed))}</span>
+                        <span className="text-lg text-emerald-50">{t("أوردر", "orders")}</span>
+                        {confirmRate !== null && (
+                            <span className="rounded-full bg-white/20 px-2.5 py-0.5 text-sm font-semibold tabular-nums">
+                                {t(`${confirmRate.toFixed(0)}% اتأكد`, `${confirmRate.toFixed(0)}% confirmed`)}
+                            </span>
+                        )}
+                    </div>
+                    <div className="mt-3 text-3xl font-bold tabular-nums sm:text-4xl"><span dir="ltr">{money(n(p.sales))}</span></div>
+                </div>
+            </div>
+
+            {/* Where every order of the period stands */}
+            <div className="rounded-2xl border bg-card p-4 sm:p-5">
+                {total > 0 && (
+                    <div className="mb-4 flex h-3 overflow-hidden rounded-full bg-muted" role="img"
+                         aria-label={split.map(x => `${x.label} ${x.count}`).join("، ")}>
+                        {split.filter(x => x.count > 0).map(x => (
+                            <div key={x.key} className={x.bar} style={{ width: `${(x.count / total) * 100}%` }} />
+                        ))}
+                    </div>
+                )}
+                <div className="grid grid-cols-3 gap-3 border-b pb-4">
+                    {split.map(x => (
+                        <div key={x.key} className="min-w-0">
+                            <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                                <span className={cn("h-2.5 w-2.5 shrink-0 rounded-full", x.bar)} aria-hidden />{x.label}
+                            </div>
+                            <div className={cn("mt-1 text-3xl font-bold tabular-nums leading-tight", x.text)}>{int(x.count)}</div>
+                            {x.value !== null && <div className="truncate text-base font-semibold tabular-nums text-foreground/80"><span dir="ltr">{money(x.value)}</span></div>}
+                        </div>
+                    ))}
+                </div>
+                <div className="grid grid-cols-3 gap-3 pt-4">
+                    <SmallFigure label={t("متوسط الأوردر", "Average order")} value={aov === null ? "—" : money(aov)}
+                                 delta={<Delta now={aov} before={aovBefore} kind="percent" ar={ar} />} />
+                    <SmallFigure label={t("نسبة التسليم", "Delivery rate")} value={deliveryRate === null ? "—" : `${deliveryRate.toFixed(0)}%`}
+                                 delta={<Delta now={deliveryRate} before={deliveryBefore} kind="points" ar={ar} />}
+                                 note={closed ? t(`${int(n(p.delivered))} اتسلم، ${int(n(p.returned))} مرتجع`, `${int(n(p.delivered))} delivered, ${int(n(p.returned))} returned`) : undefined} />
+                    <SmallFigure label={t("نسبة التأكيد", "Confirmation rate")} value={confirmRate === null ? "—" : `${confirmRate.toFixed(0)}%`}
+                                 delta={<Delta now={confirmRate} before={confirmBefore} kind="points" ar={ar} />} />
+                </div>
+            </div>
+        </div>
+    );
+}
+
+/** The change against the period before, as a pill beside a headline figure. */
+function DeltaPill({ now, before, label, onColour }: { now: number; before: number; label: string; onColour?: boolean }) {
+    if (!before) return null;
+    const diff = ((now - before) / Math.abs(before)) * 100;
+    if (!isFinite(diff)) return null;
+    const flat = Math.abs(diff) < 0.5, up = diff > 0;
+    return (
+        <span title={label} className={cn("inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-sm font-semibold tabular-nums",
+            onColour ? "bg-white/20 text-white"
+                : flat ? "bg-muted text-muted-foreground"
+                : up ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300"
+                : "bg-red-100 text-red-800 dark:bg-red-950/60 dark:text-red-300")}>
+            <span aria-hidden>{flat ? "=" : up ? "▲" : "▼"}</span>
+            <span dir="ltr">{flat ? "0" : Math.abs(diff).toFixed(0)}%</span>
+            <span className="font-normal opacity-80">{label}</span>
+        </span>
+    );
+}
+
+function SmallFigure({ label, value, delta, note }: { label: string; value: string; delta?: React.ReactNode; note?: string }) {
+    return (
+        <div className="min-w-0">
+            <div className="truncate text-sm text-muted-foreground">{label}</div>
+            <div className="mt-1 flex flex-wrap items-baseline gap-x-2">
+                <span className="text-xl font-semibold tabular-nums" dir="ltr">{value}</span>
+                {delta}
+            </div>
+            {note && <div className="truncate text-xs text-muted-foreground" title={note}>{note}</div>}
         </div>
     );
 }

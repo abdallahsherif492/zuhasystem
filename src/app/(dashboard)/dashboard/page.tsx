@@ -20,7 +20,7 @@ import { ModeratorsLeague } from "@/components/dashboard/moderators-league";
 import { CommissionBoard } from "@/components/dashboard/commission-board";
 import { AdvancedAnalytics } from "@/components/dashboard/advanced-analytics";
 import {
-  AttentionList, Disclosure, FulfilmentStrip, MoneyPanel, PerformanceStrip, PlatformQueue, Section, ShippingQueue,
+  AttentionList, Disclosure, FulfilmentStrip, MoneyPanel, PlatformQueue, Scoreboard, Section, ShippingQueue,
   moneyAttention, normalizeMoney, normalizeOverview, overviewAttention, type AttentionItem, type Money, type Overview,
 } from "@/components/dashboard/overview";
 
@@ -255,6 +255,8 @@ function DashboardContent() {
   const isToday = fromDate === todayStr && to === todayStr;
   const periodTitle = isToday ? c("النهارده", "Today") : fromDate === to ? fmt(fromDate) : c(`من ${fmt(fromDate)} لـ ${fmt(to)}`, `${fmt(fromDate)} to ${fmt(to)}`);
   const periodPhrase = isToday ? c("النهارده", "today") : c("في الفترة دي", "in this period");
+  // What the change beside each headline figure is measured against.
+  const compareLabel = fromDate === to ? c(isToday ? "عن امبارح" : "عن اليوم اللي قبله", isToday ? "vs yesterday" : "vs the day before") : c("عن الفترة اللي قبلها", "vs the period before");
   const maxSold = Math.max(1, ...topProducts.map(unitsOf));
   const waitingCount = overview?.platform.waiting ?? 0;
 
@@ -322,18 +324,17 @@ function DashboardContent() {
         </div>
       </div>
 
+      {/* The numbers first: orders, confirmed orders, and what they are worth */}
+      <section id="dash-performance" aria-label={c("أرقام الفترة", "The period in numbers")} className="-mt-4 scroll-mt-20">
+        {overviewNotice || (overview
+          ? <Scoreboard o={overview} ar={ar} compareLabel={compareLabel} />
+          : <div className="h-[360px] animate-pulse rounded-2xl border bg-muted/30 motion-reduce:animate-none" />)}
+      </section>
+
       {/* 0 — What needs someone right now */}
       <Section id="dash-attention" title={c("محتاج انتباهك", "Needs your attention")}
                description={c("كل اللي مستني حد يتحرك، الأهم الأول.", "Everything waiting on someone, most urgent first.")}>
         {overviewError === "missing" ? overviewNotice : <AttentionList items={attention} ar={ar} loading={!overview && !overviewError} />}
-      </Section>
-
-      {/* 1 — How the period went */}
-      <Section id="dash-performance" title={c("أداء الفترة", "How the period went")}
-               description={c("مقارنة بنفس عدد الأيام اللي قبلها.", "Against the same number of days before.")}>
-        {overviewNotice || (overview
-          ? <PerformanceStrip o={overview} ar={ar} />
-          : <div className="h-[118px] animate-pulse rounded-xl border bg-muted/30 motion-reduce:animate-none" />)}
       </Section>
 
       {/* 2 — The money: managers only */}
