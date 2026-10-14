@@ -20,6 +20,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Plus, Loader2, MoreHorizontal, Download, Search, Printer, FilterX, ChevronLeft, ChevronRight, Upload, Repeat, FileSpreadsheet } from "lucide-react";
 import * as XLSX from "xlsx";
+import { SLIMFIT_BUSINESS_ID, exportSlimfitCourierSheet } from "@/lib/exports/slimfit-courier";
 import { orderNetProfit, overheadRateFor, type OverheadRow, type CourierFees } from "@/lib/orders/net-profit";
 import { useRepeatOrders } from "@/hooks/use-repeat-orders";
 import { RepeatOrdersBadge } from "@/components/orders/repeat-orders";
@@ -275,6 +276,62 @@ function OrdersContent() {
         }
     }
 
+    /**
+     * Every order matching the filters on screen, not just this page — the
+     * set "Export All" writes, and the SlimFit courier sheet too.
+     */
+    async function fetchFilteredForExport(): Promise<any[]> {
+        if (!activeBusiness) return [];
+        const hasNewFilters = shippingCompanyFilter !== "all" || uploadedOrderFilters.length > 0;
+        
+        const { data, error } = await supabase.rpc('get_orders_paginated', {
+            p_business_id: activeBusiness.id,
+            p_page_number: 1,
+            p_page_size: 10, // ignored when p_export_all is true
+            p_search: debouncedSearch || null,
+            p_status: statusFilter.length > 0 ? statusFilter : null,
+            p_channel: channelFilter.length > 0 ? channelFilter : null,
+            p_gov: govFilter.length > 0 ? govFilter : null,
+            p_payment_status: paymentFilter.length > 0 ? paymentFilter : null,
+            p_products: productFilter.length > 0 ? productFilter : null,
+            p_from_date: fromDate || null,
+            p_to_date: toDate ? new Date(new Date(toDate).setHours(23, 59, 59, 999)).toISOString() : null,
+            p_export_all: true
+        });
+        
+        if (error) throw error;
+        
+        let resultData = data || [];
+        
+        if (hasNewFilters && resultData.length > 0) {
+            const { data: mappingData } = await supabase.from('orders')
+                .select('id, shipping_company_id, easyorders_id, customer_info')
+                .in('id', resultData.map((r: any) => r.id));
+
+            if (mappingData) {
+                const map = new Map(mappingData.map(m => [m.id, m]));
+                if (shippingCompanyFilter !== "all") {
+                    resultData = resultData.filter((r: any) => map.get(r.id)?.shipping_company_id === shippingCompanyFilter);
+                }
+                if (uploadedOrderFilters.length > 0) {
+                    resultData = resultData.filter((r: any) => {
+                        const m = map.get(r.id);
+                        if (!m) return false;
+                        const phone1 = String(m.customer_info?.phone || '').trim();
+                        const phone2 = String(m.customer_info?.phone2 || '').trim();
+                        const shortId = m.id.slice(0,8);
+                        const easyId = String(m.easyorders_id || '');
+                        return uploadedOrderFilters.some(f => {
+                            const clean = String(f).trim();
+                            return clean === phone1 || clean === phone2 || clean === shortId || clean === easyId || shortId.includes(clean);
+                        });
+                    });
+                }
+            }
+        }
+        return resultData;
+    }
+
     // Export Logic
     async function handleExport() {
         try {
@@ -299,53 +356,7 @@ function OrdersContent() {
             } else {
                 // Export ALL matching current filters using RPC
                 toast.loading("Fetching all filtered orders for export...");
-                const hasNewFilters = shippingCompanyFilter !== "all" || uploadedOrderFilters.length > 0;
-                
-                const { data, error } = await supabase.rpc('get_orders_paginated', {
-                    p_business_id: activeBusiness.id,
-                    p_page_number: 1,
-                    p_page_size: 10, // ignored when p_export_all is true
-                    p_search: debouncedSearch || null,
-                    p_status: statusFilter.length > 0 ? statusFilter : null,
-                    p_channel: channelFilter.length > 0 ? channelFilter : null,
-                    p_gov: govFilter.length > 0 ? govFilter : null,
-                    p_payment_status: paymentFilter.length > 0 ? paymentFilter : null,
-                    p_products: productFilter.length > 0 ? productFilter : null,
-                    p_from_date: fromDate || null,
-                    p_to_date: toDate ? new Date(new Date(toDate).setHours(23, 59, 59, 999)).toISOString() : null,
-                    p_export_all: true
-                });
-                
-                if (error) throw error;
-                
-                let resultData = data || [];
-                
-                if (hasNewFilters && resultData.length > 0) {
-                    const { data: mappingData } = await supabase.from('orders')
-                        .select('id, shipping_company_id, easyorders_id, customer_info')
-                        .in('id', resultData.map((r: any) => r.id));
-
-                    if (mappingData) {
-                        const map = new Map(mappingData.map(m => [m.id, m]));
-                        if (shippingCompanyFilter !== "all") {
-                            resultData = resultData.filter((r: any) => map.get(r.id)?.shipping_company_id === shippingCompanyFilter);
-                        }
-                        if (uploadedOrderFilters.length > 0) {
-                            resultData = resultData.filter((r: any) => {
-                                const m = map.get(r.id);
-                                if (!m) return false;
-                                const phone1 = String(m.customer_info?.phone || '').trim();
-                                const phone2 = String(m.customer_info?.phone2 || '').trim();
-                                const shortId = m.id.slice(0,8);
-                                const easyId = String(m.easyorders_id || '');
-                                return uploadedOrderFilters.some(f => {
-                                    const clean = String(f).trim();
-                                    return clean === phone1 || clean === phone2 || clean === shortId || clean === easyId || shortId.includes(clean);
-                                });
-                            });
-                        }
-                    }
-                }
+                const resultData = await fetchFilteredForExport();
 
                 if (!resultData || resultData.length === 0) {
                     toast.dismiss();
@@ -358,6 +369,34 @@ function OrdersContent() {
             console.error("Export failed:", error);
             toast.dismiss();
             toast.error("Export failed");
+        }
+    }
+
+    /**
+     * SlimFit's courier sheet: the selected orders, or every order matching the
+     * filters when none is selected — the same set "Export" writes.
+     */
+    async function handleSlimfitCourierExport() {
+        if (!activeBusiness) return;
+        const toastId = toast.loading("بيجهّز شيت الشحن...");
+        try {
+            const ids = selectedOrders.size > 0
+                ? Array.from(selectedOrders)
+                : (await fetchFilteredForExport()).map((r: any) => r.id);
+            if (ids.length === 0) {
+                toast.error("مفيش أوردرات في الفلتر ده", { id: toastId });
+                return;
+            }
+            const res = await exportSlimfitCourierSheet(activeBusiness.id, ids);
+            const notes = [
+                res.adjusted ? `${res.adjusted} أوردر مدفوع منه جزء، اتخصم من الشحن أو السعر` : "",
+                res.cancelled ? `${res.cancelled} أوردر ملغي في الشيت` : "",
+                res.overflow ? `${res.overflow} أوردر فيه أكتر من 6 منتجات، الزيادة مش في الشيت` : "",
+            ].filter(Boolean);
+            toast.success(`اتصدّر ${res.count} أوردر في شيت الشحن`, { id: toastId, description: notes.join("، ") || undefined });
+        } catch (error) {
+            console.error("SlimFit courier export failed:", error);
+            toast.error("الشيت ماتصدّرش، جرّب تاني", { id: toastId });
         }
     }
 
@@ -688,6 +727,17 @@ function OrdersContent() {
                                 <Download className="mr-2 h-4 w-4 shrink-0" />
                                 {selectedOrders.size > 0 ? t("Export Selected") : t("Export All")}
                             </Button>
+                            {activeBusiness?.id === SLIMFIT_BUSINESS_ID && (
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={handleSlimfitCourierExport}
+                                    className="rounded-lg shadow-sm h-9 font-medium border-emerald-500/40 text-emerald-700 hover:bg-emerald-500/10 dark:text-emerald-400"
+                                >
+                                    <FileSpreadsheet className="mr-2 h-4 w-4 shrink-0" />
+                                    شيت الشحن {selectedOrders.size > 0 ? `(${selectedOrders.size})` : ""}
+                                </Button>
+                            )}
 
                         </div>
                     </div>
