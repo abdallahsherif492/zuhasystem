@@ -16,7 +16,6 @@ import {
     CardContent,
     CardHeader,
     CardTitle,
-    CardDescription,
 } from "@/components/ui/card";
 import {
     Table,
@@ -26,17 +25,12 @@ import {
     TableHeader,
     TableRow,
 } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
-import { Loader2, ArrowRight, TrendingUp, TrendingDown, Package, CheckCircle, AlertCircle, Search } from "lucide-react";
+import { Loader2, Package, AlertCircle, Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { DateRangePicker } from "@/components/date-range-picker";
-import { startOfDay, endOfDay, subDays, format } from "date-fns";
-import {
-    PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend,
-    BarChart, Bar, XAxis, YAxis, CartesianGrid
-} from 'recharts';
+import { subDays, format } from "date-fns";
 
-import { ChevronsUpDown, FilterX, Truck, Upload, X, ScanLine, Check } from "lucide-react";
+import { FilterX, Upload, X, ScanLine, Check } from "lucide-react";
 import Papa from "papaparse";
 import { Checkbox } from "@/components/ui/checkbox";
 import { MultiSelect, Option } from "@/components/ui/multi-select";
@@ -81,10 +75,14 @@ const STATUSES = [
     "Returned",
 ];
 
-const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d', '#ffc658', '#d0ed57'];
 
 import { Suspense } from "react";
+import { IBM_Plex_Sans_Arabic } from "next/font/google";
 import { ShippingSyncModal } from "@/components/shipping-sync-modal";
+import { CourierPerformance, DailyOutcomes, GovernoratePerformance, LogisticsScoreboard, TransitAging } from "@/components/logistics/logistics-analytics";
+
+// The same typeface as the dashboard: Arabic and Latin drawn to match.
+const plex = IBM_Plex_Sans_Arabic({ subsets: ["arabic", "latin"], weight: ["400", "500", "600", "700"], display: "swap" });
 
 export default function LogisticsPage() {
     return (
@@ -107,7 +105,9 @@ import { useActionFeedback } from "@/contexts/ActionFeedbackContext";
 function LogisticsContent() {
     const { activeBusiness, currentUser } = useBusiness();
 
-    const { t } = useLanguage();
+    const { t, language } = useLanguage();
+    const ar = language !== "en";
+    const c = (a: string, e: string) => (ar ? a : e);
     const { startAction, completeAction, failAction } = useActionFeedback();
     const searchParams = useSearchParams();
     const router = useRouter();
@@ -193,7 +193,7 @@ function LogisticsContent() {
                     // Only the columns this page reads — was "*", about a
                     // third more data on every load and every refresh.
                     .select(`
-                        id, created_at, status, customer_info, easyorders_id, shipping_company_id,
+                        id, created_at, status, status_changed_at, customer_info, easyorders_id, shipping_company_id,
                         restock_on_return, shipping_cost, total_amount, paid_amount, payment_status,
                         tags, notes, channel, order_type,
                         items:order_items (
@@ -657,73 +657,13 @@ function LogisticsContent() {
         return Math.max(0, (order.total_amount || 0) - (order.shipping_cost || 0) - 10);
     };
 
-    // 3. Metrics Breakdown (use filteredOrders)
-    const metrics = STATUSES.map(status => {
-        const statusOrders = filteredOrders.filter(o => o.status === status);
-        const count = statusOrders.length;
-        // Summing the Net Value instead of Gross Total
-        const netValue = statusOrders.reduce((acc, o) => acc + calculateNetValue(o), 0);
-        return { status, count, netValue };
-    });
+    const filtersOn = !!searchQuery || govFilter.length > 0 || statusFilter.length > 0 || productFilter.length > 0
+        || companyFilter.length > 0 || !!phoneFilter?.length;
 
-    // 4. Grouped Stats
-    const wonStatuses = ['Delivered', 'Collected'];
-    const lostStatuses = ['Cancelled', 'Unavailable', 'Returned'];
-    const remainingStatuses = ['Pending', 'Prepared', 'Shipped'];
 
-    const getGroupStats = (statuses: string[]) => {
-        const groupOrders = filteredOrders.filter(o => statuses.includes(o.status));
-        return {
-            count: groupOrders.length,
-            value: groupOrders.reduce((acc, o) => acc + calculateNetValue(o), 0)
-        };
-    };
-
-    const wonStats = getGroupStats(wonStatuses);
-    const lostStats = getGroupStats(lostStatuses);
-    const remainingStats = getGroupStats(remainingStatuses);
-
-    // Overall Stats
-    const totalOrders = filteredOrders.length;
-    // Won Rate (Delivered + Collected) / Total
-    const wonRate = totalOrders > 0 ? (wonStats.count / totalOrders) * 100 : 0;
-    const returnRate = totalOrders > 0 ? (lostStats.count / totalOrders) * 100 : 0; // Assuming lostStats includes returned
-
-    // 4. Chart Data: Status Distribution (Pie)
-    const pieData = metrics.filter(m => m.count > 0).map(m => ({
-        name: m.status,
-        value: m.count
-    }));
-
-    // 5. Chart Data: Daily Trends (Bar)
-    const dailyDataMap = new Map();
-    filteredOrders.forEach(order => {
-        const date = format(new Date(order.created_at), 'MM/dd');
-        if (!dailyDataMap.has(date)) {
-            dailyDataMap.set(date, { date, orders: 0, delivered: 0, collected: 0, lost: 0 });
-        }
-        const data = dailyDataMap.get(date);
-        data.orders += 1;
-
-        if (order.status === 'Delivered') data.delivered += 1;
-        if (order.status === 'Collected') data.collected += 1;
-        if (lostStatuses.includes(order.status)) data.lost += 1;
-    });
-    // Sort by date
-    const barData = Array.from(dailyDataMap.values()).reverse();
-
-    // 6. Top Governorates (Keep as is)
-    const govMap = new Map();
-    filteredOrders.forEach(order => {
-        const gov = order.customer_info?.governorate || 'Unknown';
-        if (!govMap.has(gov)) govMap.set(gov, 0);
-        govMap.set(gov, govMap.get(gov) + 1);
-    });
-    const topGovs = Array.from(govMap.entries())
-        .map(([name, count]) => ({ name, count }))
-        .sort((a, b) => b.count - a.count)
-        .slice(0, 5);
-
+    // How the period reads above the numbers.
+    const fmtDay = (d: string) => new Intl.DateTimeFormat(ar ? "ar-EG-u-nu-latn" : "en-GB", { day: "numeric", month: "long" }).format(new Date(`${d}T12:00:00`));
+    const periodTitle = fromDate && toDate ? (fromDate === toDate ? fmtDay(fromDate) : c(`من ${fmtDay(fromDate)} لـ ${fmtDay(toDate)}`, `${fmtDay(fromDate)} to ${fmtDay(toDate)}`)) : "";
 
     if (loading) {
         return <div className="flex justify-center p-20"><Loader2 className="h-8 w-8 animate-spin" /></div>;
@@ -811,6 +751,25 @@ function LogisticsContent() {
                     </div>
                 </div>
             )}
+
+            {/* Logistics in numbers. Arabic and right to left like the dashboard;
+                the scanner, filters and table below are the warehouse's working
+                tools and stay exactly as they were. */}
+            <div className={cn(plex.className, "space-y-4")} dir={ar ? "rtl" : "ltr"}>
+                <p className="text-sm text-muted-foreground">
+                    {periodTitle}
+                    {filtersOn && <span className="ms-2 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">{c("الأرقام حسب الفلتر", "Figures follow the filters")}</span>}
+                </p>
+                <LogisticsScoreboard orders={filteredOrders} ar={ar} />
+                <div className="grid grid-cols-1 gap-4 lg:grid-cols-5">
+                    <div className="min-w-0 lg:col-span-3"><CourierPerformance orders={filteredOrders} companies={shippingCompanies} ar={ar} /></div>
+                    <div className="min-w-0 lg:col-span-2"><TransitAging orders={filteredOrders} ar={ar} /></div>
+                </div>
+                <div className="grid grid-cols-1 gap-4 lg:grid-cols-5">
+                    <div className="min-w-0 lg:col-span-3"><DailyOutcomes orders={filteredOrders} ar={ar} /></div>
+                    <div className="min-w-0 lg:col-span-2"><GovernoratePerformance orders={filteredOrders} ar={ar} /></div>
+                </div>
+            </div>
 
             {/* Filters Bar */}
             <div id="logistics-filters" className="bg-muted/40 p-4 rounded-lg space-y-4">
@@ -909,162 +868,6 @@ function LogisticsContent() {
                         </Button>
                     )}
                 </div>
-            </div>
-
-            {/* Top KPIs */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">{t("Total Orders")}</CardTitle>
-                        <Package className="h-4 w-4 text-muted-foreground" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold">{totalOrders}</div>
-                    </CardContent>
-                </Card>
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">{t("Won Value (Rate)")}</CardTitle>
-                        <CheckCircle className="h-4 w-4 text-green-500" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold text-green-600">{formatCurrency(wonStats.value)}</div>
-                        <p className="text-xs text-muted-foreground">
-                            {wonStats.count} {t("Orders")} ({wonRate.toFixed(1)}%)
-                        </p>
-                    </CardContent>
-                </Card>
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">{t("Lost Value")}</CardTitle>
-                        <AlertCircle className="h-4 w-4 text-red-500" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold text-red-600">{formatCurrency(lostStats.value)}</div>
-                        <p className="text-xs text-muted-foreground">{lostStats.count} {t("Orders")}</p>
-                    </CardContent>
-                </Card>
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">{t("Remaining")}</CardTitle>
-                        <TrendingUp className="h-4 w-4 text-primary" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold text-primary">{formatCurrency(remainingStats.value)}</div>
-                        <p className="text-xs text-muted-foreground">{remainingStats.count} {t("Orders")} ({t("Pending/Ship")})</p>
-                    </CardContent>
-                </Card>
-            </div>
-
-            {/* Charts Section */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-
-                {/* Status Distribution */}
-                <Card>
-                    <CardHeader>
-                        <CardTitle>{t("Order Status Distribution")}</CardTitle>
-                    </CardHeader>
-                    <CardContent className="h-[300px]">
-                        <ResponsiveContainer width="100%" height="100%">
-                            <PieChart>
-                                <Pie
-                                    data={pieData}
-                                    cx="50%"
-                                    cy="50%"
-                                    innerRadius={60}
-                                    outerRadius={80}
-                                    paddingAngle={5}
-                                    dataKey="value"
-                                >
-                                    {pieData.map((entry, index) => (
-                                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                                    ))}
-                                </Pie>
-                                <Tooltip formatter={(val: any) => [val, 'Orders']} />
-                                <Legend verticalAlign="bottom" height={36} />
-                            </PieChart>
-                        </ResponsiveContainer>
-                    </CardContent>
-                </Card>
-
-                {/* Performance Trend */}
-                <Card>
-                    <CardHeader>
-                        <CardTitle>{t("Daily Status Breakdown")}</CardTitle>
-                    </CardHeader>
-                    <CardContent className="h-[300px]">
-                        <ResponsiveContainer width="100%" height="100%">
-                            <BarChart data={barData}>
-                                <CartesianGrid strokeDasharray="3 3" />
-                                <XAxis dataKey="date" fontSize={12} tickLine={false} axisLine={false} />
-                                <YAxis fontSize={12} tickLine={false} axisLine={false} />
-                                <Tooltip />
-                                <Legend />
-                                <Bar dataKey="delivered" name="Delivered" stackId="a" fill="#10b981" radius={[0, 0, 4, 4]} />
-                                <Bar dataKey="collected" name="Collected" stackId="a" fill="#3b82f6" radius={[0, 0, 0, 0]} />
-                                <Bar dataKey="lost" name="Lost" stackId="a" fill="#ef4444" radius={[4, 4, 0, 0]} />
-                            </BarChart>
-                        </ResponsiveContainer>
-                    </CardContent>
-                </Card>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-
-                {/* Top Governorates */}
-                <Card>
-                    <CardHeader>
-                        <CardTitle>{t("Top Regions")}</CardTitle>
-                        <CardDescription>{t("Highest volume governorates")}</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="space-y-4">
-                            {topGovs.map((gov, i) => (
-                                <div key={gov.name} className="flex items-center justify-between">
-                                    <div className="flex items-center gap-2">
-                                        <div className="flex items-center justify-center w-6 h-6 rounded-full bg-muted text-xs font-medium">
-                                            {i + 1}
-                                        </div>
-                                        <span className="text-sm font-medium">{gov.name}</span>
-                                    </div>
-                                    <Badge variant="secondary">{gov.count}</Badge>
-                                </div>
-                            ))}
-                        </div>
-                    </CardContent>
-                </Card>
-
-                {/* Status Breakdown List */}
-                <Card className="md:col-span-2">
-                    <CardHeader>
-                        <CardTitle>{t("Status Breakdown")}</CardTitle>
-                        <CardDescription>{t("Net value excludes shipping & fees")}</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead>{t("Status")}</TableHead>
-                                    <TableHead>{t("Count")}</TableHead>
-                                    <TableHead className="text-right">{t("Net Value")}</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {metrics.map((m) => (
-                                    <TableRow key={m.status}>
-                                        <TableCell>
-                                            <Badge variant="outline">{m.status}</Badge>
-                                        </TableCell>
-                                        <TableCell>{m.count}</TableCell>
-                                        <TableCell className="text-right font-medium">
-                                            {formatCurrency(m.netValue)}
-                                        </TableCell>
-                                    </TableRow>
-                                ))}
-                            </TableBody>
-                        </Table>
-                    </CardContent>
-                </Card>
             </div>
 
             {/* Complete Orders Table */}
