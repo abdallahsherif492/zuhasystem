@@ -47,6 +47,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { StatusOverview } from "@/components/logistics/status-overview";
 import { toast } from "sonner";
 
 const GOVERNORATES = [
@@ -108,6 +110,7 @@ function LogisticsContent() {
     const { t, language } = useLanguage();
     const ar = language !== "en";
     const c = (a: string, e: string) => (ar ? a : e);
+    const [tab, setTab] = useState<"orders" | "analytics">("orders");
     const { startAction, completeAction, failAction } = useActionFeedback();
     const searchParams = useSearchParams();
     const router = useRouter();
@@ -516,7 +519,9 @@ function LogisticsContent() {
     // --- Calculations & Filters ---
 
     // 1. Filter Logic
-    const filteredOrders = orders.filter(order => {
+    // Every filter, or every filter but the status one: the status tiles count
+    // from the latter, so picking a status does not zero the others.
+    const passesFilters = (order: any, withStatus: boolean) => {
         // Search
         // Search
         if (searchQuery) {
@@ -544,7 +549,7 @@ function LogisticsContent() {
         }
 
         // Status Filter
-        if (statusFilter.length > 0 && !statusFilter.includes(order.status)) return false;
+        if (withStatus && statusFilter.length > 0 && !statusFilter.includes(order.status)) return false;
 
         // Company Filter
         if (companyFilter.length > 0) {
@@ -569,7 +574,9 @@ function LogisticsContent() {
         }
 
         return true;
-    });
+    };
+    const filteredOrders = orders.filter(o => passesFilters(o, true));
+    const ordersAnyStatus = orders.filter(o => passesFilters(o, false));
 
     // Selection Handlers
     const handleSelectAll = (checked: boolean) => {
@@ -682,6 +689,8 @@ function LogisticsContent() {
                             const next = !scannerOn;
                             setScannerOn(next);
                             if (next) {
+                                // Scanning ticks rows in the orders table.
+                                setTab("orders");
                                 // The scanner types wherever the caret is, so a
                                 // focused search box would swallow the barcode.
                                 (document.activeElement as HTMLElement)?.blur?.();
@@ -752,25 +761,16 @@ function LogisticsContent() {
                 </div>
             )}
 
-            {/* Logistics in numbers. Arabic and right to left like the dashboard;
-                the scanner, filters and table below are the warehouse's working
-                tools and stay exactly as they were. */}
-            <div className={cn(plex.className, "space-y-4")} dir={ar ? "rtl" : "ltr"}>
-                <p className="text-sm text-muted-foreground">
-                    {periodTitle}
-                    {filtersOn && <span className="ms-2 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">{c("الأرقام حسب الفلتر", "Figures follow the filters")}</span>}
-                </p>
-                <LogisticsScoreboard orders={filteredOrders} ar={ar} />
-                <div className="grid grid-cols-1 gap-4 lg:grid-cols-5">
-                    <div className="min-w-0 lg:col-span-3"><CourierPerformance orders={filteredOrders} companies={shippingCompanies} ar={ar} /></div>
-                    <div className="min-w-0 lg:col-span-2"><TransitAging orders={filteredOrders} ar={ar} /></div>
-                </div>
-                <div className="grid grid-cols-1 gap-4 lg:grid-cols-5">
-                    <div className="min-w-0 lg:col-span-3"><DailyOutcomes orders={filteredOrders} ar={ar} /></div>
-                    <div className="min-w-0 lg:col-span-2"><GovernoratePerformance orders={filteredOrders} ar={ar} /></div>
-                </div>
-            </div>
+            {/* Two tabs: the orders the warehouse works through, as the page
+                always was, and the analytics, Arabic and right to left like the
+                dashboard. Both read the same filtered orders. */}
+            <Tabs value={tab} onValueChange={v => setTab(v as "orders" | "analytics")} className="space-y-6">
+                <TabsList className="h-11">
+                    <TabsTrigger value="orders" className="px-5 text-sm">{c("الأوردرات", "Orders")}</TabsTrigger>
+                    <TabsTrigger value="analytics" className="px-5 text-sm">{c("التحليلات", "Analytics")}</TabsTrigger>
+                </TabsList>
 
+                <TabsContent value="orders" className="mt-0 space-y-6">
             {/* Filters Bar */}
             <div id="logistics-filters" className="bg-muted/40 p-4 rounded-lg space-y-4">
                 {/* Stacks until lg. Squeezing the search box and four filter
@@ -870,6 +870,11 @@ function LogisticsContent() {
                 </div>
             </div>
 
+            {/* Totals and how many orders are in each status */}
+            <StatusOverview orders={filteredOrders} statusOrders={ordersAnyStatus} statuses={STATUSES} netValue={calculateNetValue} t={t}
+                            selected={statusFilter}
+                            onToggle={st => setStatusFilter(prev => (prev.length === 1 && prev[0] === st ? [] : [st]))} />
+
             {/* Complete Orders Table */}
             <Card id="logistics-table">
                 <CardHeader>
@@ -953,6 +958,26 @@ function LogisticsContent() {
                     </Table>
                 </CardContent>
             </Card>
+                </TabsContent>
+
+                <TabsContent value="analytics" className="mt-0">
+                <div className={cn(plex.className, "space-y-4")} dir={ar ? "rtl" : "ltr"}>
+                    <p className="text-sm text-muted-foreground">
+                        {periodTitle}
+                        {filtersOn && <span className="ms-2 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">{c("الأرقام حسب الفلتر", "Figures follow the filters")}</span>}
+                    </p>
+                    <LogisticsScoreboard orders={filteredOrders} ar={ar} />
+                    <div className="grid grid-cols-1 gap-4 lg:grid-cols-5">
+                        <div className="min-w-0 lg:col-span-3"><CourierPerformance orders={filteredOrders} companies={shippingCompanies} ar={ar} /></div>
+                        <div className="min-w-0 lg:col-span-2"><TransitAging orders={filteredOrders} ar={ar} /></div>
+                    </div>
+                    <div className="grid grid-cols-1 gap-4 lg:grid-cols-5">
+                        <div className="min-w-0 lg:col-span-3"><DailyOutcomes orders={filteredOrders} ar={ar} /></div>
+                        <div className="min-w-0 lg:col-span-2"><GovernoratePerformance orders={filteredOrders} ar={ar} /></div>
+                    </div>
+                </div>
+                </TabsContent>
+            </Tabs>
 
             {/* Shipping Assignment Dialog */}
             <Dialog open={shippingDialogOpen} onOpenChange={setShippingDialogOpen}>
