@@ -24,6 +24,7 @@ import {
     FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
     Select,
     SelectContent,
@@ -46,9 +47,14 @@ const transactionSchema = z.object({
     type: z.enum(["investment", "revenue", "expense"]),
     category: z.string().min(1, "Category is required"),
     description: z.string().optional(),
-    account: z.string().min(1, "Account is required"), // 'Mohamed Adel', 'Abdallah Sherif', 'Split'
+    account: z.string().min(1, "Account is required"), // one of the business's accounts, or 'Split'
+    /** With 'Split': the accounts the expense is shared between, equally. */
+    splitAccounts: z.array(z.string()).optional(),
     shippingCompanyId: z.string().optional(),
 }).refine(
+    v => v.account !== SPLIT || (v.splitAccounts?.length ?? 0) >= 2,
+    { message: "Pick at least two accounts to split between", path: ["splitAccounts"] },
+).refine(
     // A collection is money a courier handed over. Recording it without saying
     // which courier is what left 90 transfers worth 67,983 EGP attached to
     // nothing, reconstructable only by reading names out of free text.
@@ -61,7 +67,7 @@ interface AddTransactionDialogProps {
     onSuccess: () => void;
 }
 
-const ACCOUNTS = ["Mohamed Adel", "Abdallah Sherif"];
+const SPLIT = "Split";
 const EXPENSE_CATEGORIES = ["Ads", "Website", "Purchases", "Salaries", "Rent", "Transportation", "Fulfilment", "Returns", "Printing", "Wrapping", "Software/Tools", "Marketing", "Other"];
 const REVENUE_CATEGORIES = ["Orders Collection", "Deposit", "Other"];
 const COLLECTION_CATEGORY = "Orders Collection";
@@ -112,11 +118,15 @@ export function AddTransactionDialog({ type, onSuccess }: AddTransactionDialogPr
             amount: 0,
             description: "",
             category: type === "investment" ? "Investment" : "",
+            splitAccounts: [] as string[],
             shippingCompanyId: "",
         },
     });
 
     const category = form.watch("category");
+    const account = form.watch("account");
+    const splitAccounts = form.watch("splitAccounts") || [];
+    const amount = Number(form.watch("amount")) || 0;
     const isCollection = type === "revenue" && category === COLLECTION_CATEGORY;
 
     async function onSubmit(values: z.infer<typeof transactionSchema>) {
@@ -135,12 +145,22 @@ export function AddTransactionDialog({ type, onSuccess }: AddTransactionDialogPr
                         : null,
             };
 
-            if (values.type === "expense" && values.account === "Split") {
-                const halfAmount = finalAmount / 2;
-                const { error } = await supabase.from("transactions").insert([
-                    { ...payload, amount: halfAmount, account_name: "Mohamed Adel" },
-                    { ...payload, amount: halfAmount, account_name: "Abdallah Sherif" },
-                ]);
+            if (values.type === "expense" && values.account === SPLIT) {
+                // Shared equally between the accounts picked — this business's
+                // own. It used to be two names written into the code, so a
+                // split in any other business put half the expense in an
+                // account that business does not have. In piastres, so the
+                // parts always add up to the amount: any odd piastre goes to
+                // the last account.
+                const names = (values.splitAccounts || []).filter(n => accounts.some(a => a.name === n));
+                if (names.length < 2) throw new Error("Pick at least two accounts to split between");
+                const totalPiastres = Math.round(finalAmount * 100);
+                const share = Math.trunc(totalPiastres / names.length);
+                const { error } = await supabase.from("transactions").insert(names.map((name, i) => ({
+                    ...payload,
+                    amount: (i === names.length - 1 ? totalPiastres - share * (names.length - 1) : share) / 100,
+                    account_name: name,
+                })));
                 if (error) throw error;
             } else {
                 const { error } = await supabase.from("transactions").insert({
@@ -160,7 +180,7 @@ export function AddTransactionDialog({ type, onSuccess }: AddTransactionDialogPr
                 entityName: `${values.type.toUpperCase()}: ${values.amount} EGP (${values.category})`,
                 changes: [
                     { field: "Amount", old_value: null, new_value: `${finalAmount} EGP` },
-                    { field: "Account", old_value: null, new_value: values.account }
+                    { field: "Account", old_value: null, new_value: values.account === SPLIT ? `Split: ${(values.splitAccounts || []).join(", ")}` : values.account }
                 ]
             });
 
@@ -320,7 +340,11 @@ export function AddTransactionDialog({ type, onSuccess }: AddTransactionDialogPr
                             render={({ field }) => (
                                 <FormItem>
                                     <FormLabel>Account</FormLabel>
-                                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                                    <Select defaultValue={field.value} onValueChange={v => {
+                                        field.onChange(v);
+                                        // Split starts with every account ticked.
+                                        if (v === SPLIT) form.setValue("splitAccounts", accounts.map(a => a.name));
+                                    }}>
                                         <FormControl>
                                             <SelectTrigger>
                                                 <SelectValue placeholder="Select Account" />
@@ -330,8 +354,8 @@ export function AddTransactionDialog({ type, onSuccess }: AddTransactionDialogPr
                                             {accounts.map((acc) => (
                                                 <SelectItem key={acc.name} value={acc.name}>{acc.name}</SelectItem>
                                             ))}
-                                            {type === "expense" && (
-                                                <SelectItem value="Split">Split (50/50)</SelectItem>
+                                            {type === "expense" && accounts.length >= 2 && (
+                                                <SelectItem value={SPLIT}>Split equally between accounts</SelectItem>
                                             )}
                                         </SelectContent>
                                     </Select>
@@ -339,6 +363,39 @@ export function AddTransactionDialog({ type, onSuccess }: AddTransactionDialogPr
                                 </FormItem>
                             )}
                         />
+
+                        {/* Which of this business's accounts share a split, and how much each pays. */}
+                        {type === "expense" && account === SPLIT && (
+                            <FormField
+                                control={form.control}
+                                name="splitAccounts"
+                                render={() => (
+                                    <FormItem>
+                                        <FormLabel>Split between</FormLabel>
+                                        <div className="space-y-1.5 rounded-md border p-2">
+                                            {accounts.map(acc => {
+                                                const checked = splitAccounts.includes(acc.name);
+                                                return (
+                                                    <label key={acc.name} className="flex cursor-pointer items-center justify-between gap-3 rounded px-1.5 py-1 text-sm hover:bg-muted/50">
+                                                        <span className="flex items-center gap-2">
+                                                            <Checkbox checked={checked} onCheckedChange={c => form.setValue("splitAccounts",
+                                                                c ? [...splitAccounts, acc.name] : splitAccounts.filter(n => n !== acc.name), { shouldValidate: true })} />
+                                                            {acc.name}
+                                                        </span>
+                                                        {checked && splitAccounts.length >= 2 && amount > 0 && (
+                                                            <span className="tabular-nums text-muted-foreground">
+                                                                {(amount / splitAccounts.length).toLocaleString("en", { maximumFractionDigits: 2 })} EGP
+                                                            </span>
+                                                        )}
+                                                    </label>
+                                                );
+                                            })}
+                                        </div>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+                        )}
 
                         {/* Description */}
                         <FormField

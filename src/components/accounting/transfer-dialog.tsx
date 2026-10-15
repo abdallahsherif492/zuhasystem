@@ -33,7 +33,6 @@ interface TransferDialogProps {
     onSuccess: () => void;
 }
 
-const ACCOUNTS = ["Mohamed Adel", "Abdallah Sherif"];
 
 export function TransferDialog({ onSuccess }: TransferDialogProps) {
     const { activeBusiness } = useBusiness();
