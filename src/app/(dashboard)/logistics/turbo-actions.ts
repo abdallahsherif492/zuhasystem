@@ -16,11 +16,18 @@ import { logBusinessAction } from "@/lib/logs/actions-logger";
  * to its own orders.
  */
 
+// The deployment does not always carry these variables (see lib/supabase.ts),
+// so the same public fallbacks as the rest of the app. The anon key is the
+// point here: the requests run as the signed-in user, under row-level security.
+const FALLBACK_URL = "https://telkkknuygjejmqcvyev.supabase.co";
+const FALLBACK_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRlbGtra251eWdqZWptcWN2eWV2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjY1MTU5NDAsImV4cCI6MjA4MjA5MTk0MH0.7q4Vyfz0CxAHCy49bKU6iy9xay0IxsqtMe4UATcg_cU";
+const envOr = (v: string | undefined, fallback: string) => (v && v !== "undefined" ? v : fallback);
+
 async function memberClient(businessId: string) {
     const cookieStore = await cookies();
     const supabase = createServerClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+        envOr(process.env.NEXT_PUBLIC_SUPABASE_URL, FALLBACK_URL),
+        envOr(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY, FALLBACK_KEY),
         { cookies: { getAll: () => cookieStore.getAll(), setAll: () => {} } },
     );
     const { data: { user } } = await supabase.auth.getUser();
