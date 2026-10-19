@@ -173,11 +173,13 @@ export async function searchTurboShipment(config: TurboConfig, code: string): Pr
  * cancelled one, a name not seen before) leaves it alone and is logged by
  * the sync, so the list can grow from what Turbo actually sends.
  */
-export function mapTurboStatusToZuha(s: Pick<TurboStatus, "status" | "returned_inventory_status">): string | null {
+export function mapTurboStatusToZuha(s: Pick<TurboStatus, "status" | "returned_inventory_status"> & { status_code?: number | null }): string | null {
     const t = normalizeArabic(`${s.status || ""}`);
     // Seen from Turbo so far: 1 "قيد الإنتظار" (waiting for pickup), 3 "قيد
-    // التنفيذ" (accepted, not yet moving) and 4 "مسلمة للمندوب" (handed to the
-    // courier to deliver: on the road, not yet with the customer).
+    // التنفيذ" (accepted, not yet moving), 4 "مسلمة للمندوب" (handed to the
+    // courier to deliver: on the road, not yet with the customer) and
+    // 7 "تم التسليم" (delivered to the customer).
+    if (Number(s.status_code) === 7) return "Delivered";
     if (/قيد الانتظار|قيد التنفيذ/.test(t)) return null;
     if (/مسلمه للمندوب|مسلمه للكابتن/.test(t)) return "Shipped";
     if (s.returned_inventory_status) return "Returned";

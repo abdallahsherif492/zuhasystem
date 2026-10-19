@@ -495,7 +495,9 @@ export async function previewTurboShippingSyncAction(businessId: string): Promis
         // invoice number — that is how the older ones are found.
         const byInvoice = new Map(statuses.filter(s => s.invoice_number).map(s => [String(s.invoice_number).trim().toLowerCase(), s]));
 
-        // Shipments the feed left out (still waiting for pickup), by their code.
+        // Shipments the feed left out, by their code: it lists only those in
+        // progress, so one still waiting for pickup or already delivered is
+        // found only this way.
         const missing = orders.filter(o => o.courier_code && !byCode.has(String(o.courier_code))).slice(0, 50);
         for (const o of missing) {
             const found = await searchTurboShipment(config, String(o.courier_code)).catch(() => null);
