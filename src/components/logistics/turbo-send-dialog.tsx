@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { CheckCircle2, Loader2, Send, XCircle } from "lucide-react";
+import { Check, CheckCircle2, ChevronsUpDown, Loader2, Send, XCircle } from "lucide-react";
 import { toast } from "sonner";
 import { formatCurrency, cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -11,7 +11,9 @@ import {
     turboAreasAction, turboPrepareAction, turboSendAction,
     type TurboPreviewRow, type TurboSendResult,
 } from "@/app/(dashboard)/logistics/turbo-actions";
-import type { TurboPlace } from "@/lib/shipping/turbo";
+import { normalizeArabic, type TurboPlace } from "@/lib/shipping/turbo";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
 /**
  * Sends the selected orders to Turbo. Each order shows what will go: the
@@ -142,12 +144,9 @@ export function TurboSendDialog({ open, onOpenChange, businessId, orderIds, onSe
                                                 <div className="mt-1 text-[11px] text-muted-foreground" dir="ltr">{r.governorate}</div>
                                             </td>
                                             <td>
-                                                <select value={r.areaId ?? ""} disabled={!!done || sending || !r.governmentId}
-                                                        onChange={e => update(r.orderId, { areaId: Number(e.target.value), areaGuessed: false })}
-                                                        className={cn("h-9 w-48 rounded-md border bg-background px-2 text-sm", include.has(r.orderId) && !done && !r.areaId && "border-red-400")}>
-                                                    <option value="" disabled>اختار المنطقة</option>
-                                                    {list.map(a => <option key={a.id} value={a.id} disabled={a.status === "غير مغطاة"}>{a.name}{a.status && a.status !== "مغطاة" ? ` (${a.status})` : ""}</option>)}
-                                                </select>
+                                                <AreaPicker areas={list} value={r.areaId} disabled={!!done || sending || !r.governmentId}
+                                                            invalid={include.has(r.orderId) && !done && !r.areaId}
+                                                            onChange={id => update(r.orderId, { areaId: id, areaGuessed: false })} />
                                                 {r.areaGuessed && <div className="mt-1 text-[11px] text-amber-700">متخمّنة من العنوان، اتأكد</div>}
                                             </td>
                                             <td className="text-end">
@@ -177,5 +176,54 @@ export function TurboSendDialog({ open, onOpenChange, businessId, orderIds, onSe
                 </DialogFooter>
             </DialogContent>
         </Dialog>
+    );
+}
+
+/**
+ * Turbo's areas for one governorate — a few hundred, street by street — as a
+ * searchable list. The search ignores how Arabic happens to be typed (أ/ا,
+ * ة/ه, ى/ي, diacritics), so "حدايق" finds "حدائق". Uncovered areas are shown
+ * but cannot be picked.
+ */
+function AreaPicker({ areas, value, onChange, disabled, invalid }: {
+    areas: TurboPlace[];
+    value: number | null;
+    onChange: (id: number) => void;
+    disabled?: boolean;
+    invalid?: boolean;
+}) {
+    const [open, setOpen] = useState(false);
+    const current = areas.find(a => a.id === value);
+    return (
+        <Popover open={open} onOpenChange={setOpen}>
+            <PopoverTrigger asChild>
+                <Button variant="outline" role="combobox" aria-expanded={open} disabled={disabled}
+                        className={cn("h-9 w-52 justify-between gap-2 px-2 text-sm font-normal", invalid && "border-red-400 text-red-700")}>
+                    <span className="truncate">{current?.name ?? "اختار المنطقة"}</span>
+                    <ChevronsUpDown className="h-3.5 w-3.5 shrink-0 opacity-50" />
+                </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-72 p-0" align="start" dir="rtl">
+                <Command filter={(itemValue, search) => (itemValue.includes(normalizeArabic(search)) ? 1 : 0)}>
+                    <CommandInput placeholder="دوّر على المنطقة…" />
+                    <CommandList>
+                        <CommandEmpty>مفيش منطقة بالاسم ده</CommandEmpty>
+                        <CommandGroup>
+                            {areas.map(a => {
+                                const uncovered = a.status === "غير مغطاة";
+                                return (
+                                    <CommandItem key={a.id} value={`${normalizeArabic(a.name)} ${a.id}`} disabled={uncovered}
+                                                 onSelect={() => { onChange(a.id); setOpen(false); }}>
+                                        <span className="truncate">{a.name}</span>
+                                        {a.status && a.status !== "مغطاة" && <span className="ms-2 shrink-0 text-[11px] text-muted-foreground">{a.status}</span>}
+                                        {value === a.id && <Check className="ms-auto h-4 w-4" />}
+                                    </CommandItem>
+                                );
+                            })}
+                        </CommandGroup>
+                    </CommandList>
+                </Command>
+            </PopoverContent>
+        </Popover>
     );
 }
