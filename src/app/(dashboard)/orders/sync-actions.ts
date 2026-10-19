@@ -7,7 +7,7 @@ import { fetchBostaShipments, mapBostaStatusToZuha } from "@/lib/shipping/bosta"
 import { fetchJTShipments, mapJTStatusToZuha } from "@/lib/shipping/jt";
 import { fetchAramexShipments, mapAramexStatusToZuha } from "@/lib/shipping/aramex";
 import { fetchFiltareeqShipments, mapFiltareeqStatusToZuha } from "@/lib/shipping/filtareeq";
-import { getTurboStatuses, mapTurboStatusToZuha, type TurboConfig } from "@/lib/shipping/turbo";
+import { getTurboStatuses, mapTurboStatusToZuha, searchTurboShipment, type TurboConfig } from "@/lib/shipping/turbo";
 import { syncStatusToEasyOrders } from "@/lib/easyorders";
 import { processOrderForVrobo } from "@/lib/vrobo/api";
 import { logIntegrationActivity } from "@/lib/logs/integration-logger";
@@ -494,6 +494,13 @@ export async function previewTurboShippingSyncAction(businessId: string): Promis
         // Shipments not sent from here carry the order's reference as their
         // invoice number — that is how the older ones are found.
         const byInvoice = new Map(statuses.filter(s => s.invoice_number).map(s => [String(s.invoice_number).trim().toLowerCase(), s]));
+
+        // Shipments the feed left out (still waiting for pickup), by their code.
+        const missing = orders.filter(o => o.courier_code && !byCode.has(String(o.courier_code))).slice(0, 50);
+        for (const o of missing) {
+            const found = await searchTurboShipment(config, String(o.courier_code)).catch(() => null);
+            if (found) byCode.set(String(found.code), found);
+        }
 
         const updates: SyncPreviewItem[] = [];
         const unknown = new Set<string>();

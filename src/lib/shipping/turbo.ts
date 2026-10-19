@@ -150,6 +150,24 @@ export async function getTurboStatuses(config: TurboConfig, from: string, to: st
 }
 
 /**
+ * One shipment by its Turbo code. The date-range feed above leaves out
+ * shipments still waiting for pickup (status 1, "قيد الإنتظار"), so a shipment
+ * sent today is found this way until it shows up there.
+ */
+export async function searchTurboShipment(config: TurboConfig, code: string): Promise<TurboStatus | null> {
+    const res = await fetch(`${TURBO_BASE}/external-api/search-order`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({ authentication_key: config.apiKey, main_client_code: Number(config.accountId) || config.accountId, search_key: code }),
+        cache: "no-store",
+    });
+    const json = await res.json().catch(() => null);
+    if (!json?.success) return null;
+    const list = (Array.isArray(json.result) ? json.result : [json.result]).filter(Boolean) as TurboStatus[];
+    return list.find(s => String(s.code) === String(code)) || list[0] || null;
+}
+
+/**
  * Turbo's status → the order's. Only statuses that clearly say where the
  * parcel is move an order; anything else (a new or accepted request, a
  * cancelled one, a name not seen before) leaves it alone and is logged by
@@ -157,10 +175,10 @@ export async function getTurboStatuses(config: TurboConfig, from: string, to: st
  */
 export function mapTurboStatusToZuha(s: Pick<TurboStatus, "status" | "returned_inventory_status">): string | null {
     const t = normalizeArabic(`${s.status || ""}`);
-    // Seen from Turbo so far: 3 "قيد التنفيذ" (accepted, not yet moving) and
-    // 4 "مسلمة للمندوب" (handed to the courier to deliver: on the road, not yet
-    // with the customer).
-    if (/قيد التنفيذ/.test(t)) return null;
+    // Seen from Turbo so far: 1 "قيد الإنتظار" (waiting for pickup), 3 "قيد
+    // التنفيذ" (accepted, not yet moving) and 4 "مسلمة للمندوب" (handed to the
+    // courier to deliver: on the road, not yet with the customer).
+    if (/قيد الانتظار|قيد التنفيذ/.test(t)) return null;
     if (/مسلمه للمندوب|مسلمه للكابتن/.test(t)) return "Shipped";
     if (s.returned_inventory_status) return "Returned";
     if (/تم التسليم|تم التوصيل|delivered|تم تسليم/.test(t)) return "Delivered";
