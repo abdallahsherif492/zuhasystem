@@ -18,8 +18,8 @@
 -- (SlimFit 9, Zuha 59).
 --
 -- 1. From now on, whenever an order gets a courier or changes courier, its
---    cost becomes that courier's rate for the order's governorate, and the
---    stored profit moves by the same amount. An order edited with an explicit
+--    cost becomes that courier's rate for the order's governorate (profit is
+--    a generated column, so it follows by itself). An order edited with an explicit
 --    cost in the same update keeps that cost; a courier with no rate for the
 --    governorate leaves the order as it is.
 -- 2. Orders that already have a courier with a rate, but no cost, get the
@@ -44,8 +44,7 @@ $$;
 CREATE OR REPLACE FUNCTION public.orders_courier_cost()
 RETURNS TRIGGER LANGUAGE plpgsql AS $$
 DECLARE
-    v_rate  NUMERIC;
-    v_delta NUMERIC;
+    v_rate NUMERIC;
 BEGIN
     IF NEW.shipping_company_id IS NULL THEN
         RETURN NEW;
@@ -71,12 +70,8 @@ BEGIN
         RETURN NEW;
     END IF;
 
-    v_delta := v_rate - COALESCE(NEW.actual_shipping_cost, 0);
+    -- profit is generated from the cost, so it follows by itself.
     NEW.actual_shipping_cost := v_rate;
-    -- profit is stored as total − cost of goods − courier cost.
-    IF NEW.profit IS NOT NULL THEN
-        NEW.profit := NEW.profit - v_delta;
-    END IF;
     RETURN NEW;
 END $$;
 
@@ -91,7 +86,6 @@ CREATE TRIGGER trg_orders_courier_cost
 -- Not Waiting, Cancelled or Unavailable: those never leave, so no fee.
 UPDATE public.orders o
    SET actual_shipping_cost    = r.rate,
-       profit                  = CASE WHEN o.profit IS NULL THEN NULL ELSE o.profit - r.rate END,
        shipping_cost_estimated = true
   FROM (SELECT o2.id, public.courier_rate_by_company(o2.shipping_company_id, o2.customer_info ->> 'governorate') AS rate
           FROM public.orders o2
@@ -106,7 +100,6 @@ UPDATE public.orders o
 -- ===========================================================================
 UPDATE public.orders o
    SET actual_shipping_cost    = r.rate,
-       profit                  = CASE WHEN o.profit IS NULL THEN NULL ELSE o.profit - (r.rate - o.actual_shipping_cost) END,
        shipping_cost_estimated = true
   FROM (SELECT o2.id, public.courier_rate_by_company(o2.shipping_company_id, o2.customer_info ->> 'governorate') AS rate
           FROM public.orders o2
