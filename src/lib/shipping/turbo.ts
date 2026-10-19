@@ -132,6 +132,8 @@ export interface TurboStatus {
     returned_inventory_status: string | null;
     return_reason: string | null;
     delay_reason: string | null;
+    /** What we sent as the invoice number: the order's 8-character reference. */
+    invoice_number?: string | null;
 }
 
 /** Every shipment's current status, for shipments in a date range (YYYY-MM-DD). */
@@ -155,6 +157,11 @@ export async function getTurboStatuses(config: TurboConfig, from: string, to: st
  */
 export function mapTurboStatusToZuha(s: Pick<TurboStatus, "status" | "returned_inventory_status">): string | null {
     const t = normalizeArabic(`${s.status || ""}`);
+    // Seen from Turbo so far: 3 "قيد التنفيذ" (accepted, not yet moving) and
+    // 4 "مسلمة للمندوب" (handed to the courier to deliver: on the road, not yet
+    // with the customer).
+    if (/قيد التنفيذ/.test(t)) return null;
+    if (/مسلمه للمندوب|مسلمه للكابتن/.test(t)) return "Shipped";
     if (s.returned_inventory_status) return "Returned";
     if (/تم التسليم|تم التوصيل|delivered|تم تسليم/.test(t)) return "Delivered";
     if (/تم الارتجاع|مرتجع للمخزن|مرتجع للتاجر|تم رد|returned/.test(t)) return "Returned";

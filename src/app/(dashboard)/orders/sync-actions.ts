@@ -472,25 +472,39 @@ export async function previewTurboShippingSyncAction(businessId: string): Promis
             return { updates: [], error: "turbo integration is not configured or disabled in settings." };
         }
 
-        const { data: orders, error: ordersError } = await supabase
-            .from("orders")
-            .select("id, customer_info, status, courier_code, courier_sent_at, created_at")
-            .eq("business_id", businessId)
-            .not("courier_code", "is", null)
-            .not("status", "in", "(Delivered,Collected,Returned,Cancelled,Unavailable)");
-        if (ordersError) throw new Error(ordersError.message);
-        if (!orders || orders.length === 0) return { updates: [], debugInfo: { message: "No open Turbo shipments" } };
+        // Sent from here (they carry Turbo's code), or handed to Turbo some
+        // other way and recorded on the order as Turbo's.
+        const open = "(Delivered,Collected,Returned,Cancelled,Unavailable)";
+        const sel = "id, customer_info, status, courier_code, courier_sent_at, created_at";
+        const [withCode, onTurbo] = await Promise.all([
+            supabase.from("orders").select(sel).eq("business_id", businessId).not("courier_code", "is", null).not("status", "in", open),
+            config.shippingCompanyId
+                ? supabase.from("orders").select(sel).eq("business_id", businessId).eq("shipping_company_id", config.shippingCompanyId).not("status", "in", open)
+                : Promise.resolve({ data: [] as any[], error: null }),
+        ]);
+        if (withCode.error) throw new Error(withCode.error.message);
+        if (onTurbo.error) throw new Error(onTurbo.error.message);
+        const orders = [...new Map([...(withCode.data || []), ...(onTurbo.data || [])].map(o => [o.id, o])).values()];
+        if (orders.length === 0) return { updates: [], debugInfo: { message: "No open Turbo shipments" } };
 
         const day = (d: Date) => d.toISOString().slice(0, 10);
         const oldest = orders.reduce((m, o) => Math.min(m, new Date(o.courier_sent_at || o.created_at).getTime()), Date.now());
-        const statuses = await getTurboStatuses(config, day(new Date(oldest - 86_400_000)), day(new Date(Date.now() + 86_400_000)));
+        const statuses = await getTurboStatuses(config, day(new Date(oldest - 7 * 86_400_000)), day(new Date(Date.now() + 86_400_000)));
         const byCode = new Map(statuses.map(s => [String(s.code), s]));
+        // Shipments not sent from here carry the order's reference as their
+        // invoice number — that is how the older ones are found.
+        const byInvoice = new Map(statuses.filter(s => s.invoice_number).map(s => [String(s.invoice_number).trim().toLowerCase(), s]));
 
         const updates: SyncPreviewItem[] = [];
         const unknown = new Set<string>();
         for (const order of orders) {
-            const st = byCode.get(String(order.courier_code));
+            const st = (order.courier_code && byCode.get(String(order.courier_code)))
+                || byInvoice.get(order.id.slice(0, 8).toLowerCase());
             if (!st) continue;
+            // Found by its invoice number: keep Turbo's code on the order from now on.
+            if (!order.courier_code) {
+                await supabase.from("orders").update({ courier_code: String(st.code) }).eq("business_id", businessId).eq("id", order.id);
+            }
             const newStatus = mapTurboStatusToZuha(st);
             if (!newStatus) { unknown.add(`${st.status_code ?? ""} ${st.status}`.trim()); continue; }
             if (newStatus !== order.status) {
@@ -504,7 +518,8 @@ export async function previewTurboShippingSyncAction(businessId: string): Promis
                 });
             }
         }
-        const debugInfo = { open: orders.length, fetched: statuses.length, unmappedStatuses: [...unknown] };
+        const matched = orders.filter(o => (o.courier_code && byCode.has(String(o.courier_code))) || byInvoice.has(o.id.slice(0, 8).toLowerCase())).length;
+        const debugInfo = { open: orders.length, fetched: statuses.length, matched, unmappedStatuses: [...unknown] };
         if (unknown.size) {
             await logIntegrationActivity(businessId, "Turbo", "info", `Turbo statuses left unchanged (not recognised yet): ${[...unknown].join("، ")}`, debugInfo);
         }

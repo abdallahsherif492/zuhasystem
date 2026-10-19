@@ -3,7 +3,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import {
-    TURBO_CAIRO_GIZA_OUTSKIRTS, TURBO_GOVERNORATE, addTurboOrder, getTurboAreas, getTurboGovernments, guessTurboArea,
+    TURBO_CAIRO_GIZA_OUTSKIRTS, TURBO_GOVERNORATE, addTurboOrder, getTurboAreas, getTurboGovernments, getTurboStatuses, guessTurboArea,
     type TurboConfig, type TurboPlace,
 } from "@/lib/shipping/turbo";
 import { logIntegrationActivity } from "@/lib/logs/integration-logger";
@@ -48,6 +48,17 @@ interface OrderRow {
     items: { quantity: number; unmapped_name: string | null; variant: { title: string | null; product: { name: string | null } | null } | null }[];
 }
 
+/**
+ * Orders already at Turbo, by their reference: shipments carry it as their
+ * invoice number, including ones entered at Turbo by hand before this
+ * integration — which have no code on the order and must not be sent again.
+ */
+async function alreadyAtTurbo(config: TurboConfig): Promise<Map<string, string>> {
+    const day = (d: Date) => d.toISOString().slice(0, 10);
+    const statuses = await getTurboStatuses(config, day(new Date(Date.now() - 120 * 86_400_000)), day(new Date(Date.now() + 86_400_000)));
+    return new Map(statuses.filter(s => s.invoice_number).map(s => [String(s.invoice_number).trim().toLowerCase(), String(s.code)]));
+}
+
 const ORDER_SELECT = "id, status, customer_info, total_amount, paid_amount, payment_status, notes, courier_code, items:order_items(quantity, unmapped_name, variant:variants(title, product:products(name)))";
 
 /** What the courier collects: the total less any deposit already paid. */
@@ -81,7 +92,8 @@ export async function turboPrepareAction(businessId: string, orderIds: string[])
     rows: TurboPreviewRow[]; governments: TurboPlace[]; areas: Record<number, TurboPlace[]>; error?: string;
 }> {
     try {
-        const { supabase } = await memberClient(businessId);
+        const { supabase, config } = await memberClient(businessId);
+        const atTurbo = await alreadyAtTurbo(config);
         const orders: OrderRow[] = [];
         for (let i = 0; i < orderIds.length; i += 100) {
             const { data, error } = await supabase.from("orders").select(ORDER_SELECT)
@@ -116,7 +128,7 @@ export async function turboPrepareAction(businessId: string, orderIds: string[])
                 address: ci.address || "", governorate: ci.governorate || "",
                 governmentId, areaId: area?.id ?? null, areaGuessed: !!area,
                 total: Number(o.total_amount) || 0, deposit, amount: amountToCollect(o),
-                alreadySent: o.courier_code || null, status: o.status,
+                alreadySent: o.courier_code || atTurbo.get(o.id.slice(0, 8).toLowerCase()) || null, status: o.status,
             });
         }
         const order = new Map(orderIds.map((id, i) => [id, i]));
@@ -136,6 +148,7 @@ export interface TurboSendResult { orderId: string; ok: boolean; code?: string; 
 export async function turboSendAction(businessId: string, items: { orderId: string; governmentId: number; areaId: number }[]): Promise<{ results: TurboSendResult[]; error?: string }> {
     try {
         const { supabase, config, email } = await memberClient(businessId);
+        const atTurbo = await alreadyAtTurbo(config);
         const results: TurboSendResult[] = [];
         for (const item of items) {
             const { data: o, error } = await supabase.from("orders").select(ORDER_SELECT)
@@ -143,7 +156,12 @@ export async function turboSendAction(businessId: string, items: { orderId: stri
             if (error || !o) { results.push({ orderId: item.orderId, ok: false, message: error?.message || "Order not found" }); continue; }
             const order = o as unknown as OrderRow;
             // Never twice: a second send would be a second parcel.
-            if (order.courier_code) { results.push({ orderId: order.id, ok: false, message: `Already sent as ${order.courier_code}` }); continue; }
+            const existing = order.courier_code || atTurbo.get(order.id.slice(0, 8).toLowerCase());
+            if (existing) {
+                if (!order.courier_code) await supabase.from("orders").update({ courier_code: existing }).eq("business_id", businessId).eq("id", order.id);
+                results.push({ orderId: order.id, ok: false, message: `موجود في تربو بالفعل برقم ${existing}` });
+                continue;
+            }
 
             const ci = order.customer_info || {};
             const ref = order.id.slice(0, 8);
