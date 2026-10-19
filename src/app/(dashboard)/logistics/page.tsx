@@ -112,8 +112,11 @@ function LogisticsContent() {
     const ar = language !== "en";
     const c = (a: string, e: string) => (ar ? a : e);
     const [tab, setTab] = useState<"orders" | "analytics">("orders");
-    // Turbo: send the selected orders as shipments (only where it is set up).
-    const turboEnabled = !!activeBusiness?.theme_config?.integrations?.shipping?.turbo?.enabled;
+    // Turbo: send the selected orders as shipments. Only in a business whose
+    // Turbo API is switched on and filled in (Settings → Integrations): the
+    // authentication key and the client code are what every call needs.
+    const turboConfig = activeBusiness?.theme_config?.integrations?.shipping?.turbo;
+    const turboEnabled = !!(turboConfig?.enabled && turboConfig?.apiKey && turboConfig?.accountId);
     const [turboOpen, setTurboOpen] = useState(false);
     const [turboIds, setTurboIds] = useState<string[]>([]);
     const { startAction, completeAction, failAction } = useActionFeedback();
