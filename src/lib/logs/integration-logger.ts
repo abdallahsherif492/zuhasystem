@@ -21,7 +21,7 @@ export async function logIntegrationActivity(
     // null for a request that names no business we know — a webhook sent with
     // a wrong or missing business id still leaves a trace.
     businessId: string | null,
-    integrationName: "Telegraph" | "Bosta" | "VROBO" | "EasyOrders" | "Shopify" | "Auto-Sync",
+    integrationName: "Telegraph" | "Bosta" | "VROBO" | "EasyOrders" | "Shopify" | "Turbo" | "Auto-Sync",
     status: "success" | "error" | "info",
     message: string,
     details?: any

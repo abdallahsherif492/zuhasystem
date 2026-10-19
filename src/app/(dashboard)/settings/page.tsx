@@ -78,7 +78,8 @@ export default function SettingsPage() {
             bosta: { enabled: false, apiKey: "", autoSync: false, autoSyncIntervalMinutes: 15, shippingCompanyId: "" },
             jt: { enabled: false, apiKey: "", eccompanyid: "", apiUrl: "https://api.jet.co.id/api/order/track", autoSync: false, autoSyncIntervalMinutes: 15, shippingCompanyId: "" },
             aramex: { enabled: false, username: "", password: "", accountId: "", accountPin: "", accountEntity: "", accountCountryCode: "", apiUrl: "https://ws.aramex.net/ShippingAPI.V2/Tracking/Service_1_0.svc/json", autoSync: false, autoSyncIntervalMinutes: 15, shippingCompanyId: "" },
-            filtareeq: { enabled: false, apiKey: "", autoSync: false, autoSyncIntervalMinutes: 15, shippingCompanyId: "" }
+            filtareeq: { enabled: false, apiKey: "", autoSync: false, autoSyncIntervalMinutes: 15, shippingCompanyId: "" },
+            turbo: { enabled: false, apiKey: "", accountId: "", followupPhone: "", autoSync: false, autoSyncIntervalMinutes: 15, shippingCompanyId: "" }
         },
         platforms: {
             easyorders: { enabled: false, apiKey: "", webhookToken: "" }
@@ -154,6 +155,16 @@ export default function SettingsPage() {
                         autoSync: savedIntegrations.shipping?.filtareeq?.autoSync || false,
                         autoSyncIntervalMinutes: savedIntegrations.shipping?.filtareeq?.autoSyncIntervalMinutes || 15,
                         shippingCompanyId: savedIntegrations.shipping?.filtareeq?.shippingCompanyId || ""
+                    },
+                    turbo: {
+                        enabled: savedIntegrations.shipping?.turbo?.enabled || false,
+                        apiKey: savedIntegrations.shipping?.turbo?.apiKey || "",
+                        accountId: savedIntegrations.shipping?.turbo?.accountId || "",
+                        followupPhone: savedIntegrations.shipping?.turbo?.followupPhone || "",
+                        autoSync: savedIntegrations.shipping?.turbo?.autoSync || false,
+                        autoSyncIntervalMinutes: savedIntegrations.shipping?.turbo?.autoSyncIntervalMinutes || 15,
+                        shippingCompanyId: savedIntegrations.shipping?.turbo?.shippingCompanyId || "",
+                        lastSyncAt: savedIntegrations.shipping?.turbo?.lastSyncAt,
                     }
                 },
                 platforms: {
@@ -717,6 +728,97 @@ export default function SettingsPage() {
                                             </Select>
                                             <p className="text-xs text-muted-foreground">
                                                 {t("Select the system shipping company ID that will be applied to orders when auto-sync marks them as shipped.")}
+                                            </p>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Turbo: send orders as shipments, and read their statuses back */}
+                            <div className="space-y-4 border rounded-md p-4 bg-muted/20">
+                                <div className="flex items-center justify-between">
+                                    <h3 className="text-lg font-medium flex items-center gap-3">
+                                        <div className="h-8 px-2 bg-orange-500 text-white flex items-center justify-center font-bold rounded">Turbo</div>
+                                        {integrations.shipping.turbo.enabled && (
+                                            <Badge variant="outline" className="ml-3 bg-green-50 text-green-700 border-green-200">Active</Badge>
+                                        )}
+                                    </h3>
+                                    <Switch
+                                        checked={integrations.shipping.turbo.enabled}
+                                        onCheckedChange={(c) => handleIntegrationChange('shipping', 'turbo', 'enabled', c)}
+                                    />
+                                </div>
+                                <p className="text-sm text-muted-foreground">
+                                    ابعت الأوردرات لتربو من صفحة اللوجستيات بدل الشيت، وحالات الشحنات بتتحدّث من تربو. المبلغ اللي بيتحصّل هو الإجمالي ناقص العربون.
+                                </p>
+
+                                {integrations.shipping.turbo.enabled && (
+                                    <div className="space-y-4 pt-4 border-t">
+                                        <div className="grid gap-4 sm:grid-cols-2">
+                                            <div className="space-y-2">
+                                                <Label>Authentication key</Label>
+                                                <Input
+                                                    placeholder="authentication_key من تربو"
+                                                    value={integrations.shipping.turbo.apiKey}
+                                                    onChange={(e) => handleIntegrationChange('shipping', 'turbo', 'apiKey', e.target.value.trim())}
+                                                    type="password"
+                                                />
+                                            </div>
+                                            <div className="space-y-2">
+                                                <Label>Main client code</Label>
+                                                <Input
+                                                    placeholder="main_client_code"
+                                                    value={integrations.shipping.turbo.accountId}
+                                                    onChange={(e) => handleIntegrationChange('shipping', 'turbo', 'accountId', e.target.value.trim())}
+                                                    inputMode="numeric"
+                                                />
+                                            </div>
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Label>رقم المتابعة (اختياري)</Label>
+                                            <Input
+                                                placeholder="الرقم اللي تربو تكلمه لو فيه مشكلة في شحنة"
+                                                value={integrations.shipping.turbo.followupPhone}
+                                                onChange={(e) => handleIntegrationChange('shipping', 'turbo', 'followupPhone', e.target.value.trim())}
+                                                inputMode="tel"
+                                            />
+                                        </div>
+
+                                        <div className="flex items-center space-x-2 pt-2">
+                                            <Switch
+                                                checked={integrations.shipping.turbo.autoSync}
+                                                onCheckedChange={(c) => handleIntegrationChange('shipping', 'turbo', 'autoSync', c)}
+                                            />
+                                            <Label>{t("Enable Auto Sync")}</Label>
+                                        </div>
+                                        {integrations.shipping.turbo.autoSync && (
+                                            <div className="space-y-2">
+                                                <Label>{t("Auto Sync Interval (Minutes)")}</Label>
+                                                <Input
+                                                    type="number" min="1" max="1440"
+                                                    value={integrations.shipping.turbo.autoSyncIntervalMinutes}
+                                                    onChange={(e) => handleIntegrationChange('shipping', 'turbo', 'autoSyncIntervalMinutes', parseInt(e.target.value) || 15)}
+                                                />
+                                            </div>
+                                        )}
+
+                                        <div className="space-y-2">
+                                            <Label>{t("Linked Shipping Company")}</Label>
+                                            <Select
+                                                value={integrations.shipping.turbo.shippingCompanyId}
+                                                onValueChange={(val) => handleIntegrationChange('shipping', 'turbo', 'shippingCompanyId', val)}
+                                            >
+                                                <SelectTrigger>
+                                                    <SelectValue placeholder={t("Select a shipping company")} />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    {shippingCompanies.map(sc => (
+                                                        <SelectItem key={sc.id} value={sc.id}>{sc.name}</SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
+                                            <p className="text-xs text-muted-foreground">
+                                                الأوردر اللي يتبعت لتربو بيتسجل على شركة الشحن دي.
                                             </p>
                                         </div>
                                     </div>

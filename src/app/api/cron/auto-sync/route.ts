@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import { previewShippingSyncAction, previewBostaShippingSyncAction, applyShippingUpdatesAction, previewGenericShippingSyncAction } from '@/app/(dashboard)/orders/sync-actions';
+import { previewShippingSyncAction, previewBostaShippingSyncAction, applyShippingUpdatesAction, previewGenericShippingSyncAction, previewTurboShippingSyncAction } from '@/app/(dashboard)/orders/sync-actions';
 import { processOrderForVrobo } from '@/lib/vrobo/api';
 import { logIntegrationActivity } from '@/lib/logs/integration-logger';
 import { resolveCronCaller } from './cron-auth';
@@ -35,7 +35,7 @@ function stalenessOf(themeConfig: any): number {
         stamps.push(cfg.lastSyncAt ? new Date(cfg.lastSyncAt).getTime() : 0);
     };
 
-    ["telegraph", "bosta", "jt", "aramex", "filtareeq"].forEach((k) => collect(integrations.shipping?.[k]));
+    ["telegraph", "bosta", "jt", "aramex", "filtareeq", "turbo"].forEach((k) => collect(integrations.shipping?.[k]));
     collect(integrations.tools?.vrobo);
 
     // No auto-sync enabled: sort last, there is nothing to do.
@@ -168,6 +168,28 @@ export async function GET(request: Request) {
             await runGenericSync("jt", "J&T");
             await runGenericSync("aramex", "Aramex");
             await runGenericSync("filtareeq", "Filtareeq");
+
+            // Turbo: the shipments sent to it from here, by its shipment code.
+            const turboConfig = integrations.shipping?.turbo;
+            if (turboConfig?.enabled && turboConfig?.autoSync) {
+                const lastSync = turboConfig.lastSyncAt ? new Date(turboConfig.lastSyncAt) : new Date(0);
+                if ((now.getTime() - lastSync.getTime()) / 60000 >= (turboConfig.autoSyncIntervalMinutes || 15)) {
+                    try {
+                        const { updates, error: syncError } = await previewTurboShippingSyncAction(business.id);
+                        if (!syncError && updates && updates.length > 0) {
+                            await applyShippingUpdatesAction(updates, business.id, turboConfig.shippingCompanyId);
+                            logIntegrationActivity(business.id, "Auto-Sync", "info", `Auto-Synced Turbo: Found ${updates.length} updates.`, { results: updates });
+                        }
+                    } catch (e: any) {
+                        console.error(`[Auto-Sync] Error in Turbo sync for ${business.id}:`, e);
+                        logIntegrationActivity(business.id, "Auto-Sync", "error", `Turbo Auto-Sync Error: ${e.message}`);
+                    }
+                    if (!integrations.shipping) integrations.shipping = {};
+                    if (!integrations.shipping.turbo) integrations.shipping.turbo = {};
+                    integrations.shipping.turbo.lastSyncAt = now.toISOString();
+                    configChanged = true;
+                }
+            }
 
 
             // 3. VROBO Auto-Sync (retry logic for problematic orders)

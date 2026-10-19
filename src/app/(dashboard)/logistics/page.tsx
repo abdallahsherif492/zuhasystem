@@ -30,7 +30,7 @@ import { Input } from "@/components/ui/input";
 import { DateRangePicker } from "@/components/date-range-picker";
 import { subDays, format } from "date-fns";
 
-import { FilterX, Upload, X, ScanLine, Check } from "lucide-react";
+import { FilterX, Upload, X, ScanLine, Check, Send } from "lucide-react";
 import Papa from "papaparse";
 import { Checkbox } from "@/components/ui/checkbox";
 import { MultiSelect, Option } from "@/components/ui/multi-select";
@@ -49,6 +49,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { StatusOverview } from "@/components/logistics/status-overview";
+import { TurboSendDialog } from "@/components/logistics/turbo-send-dialog";
 import { toast } from "sonner";
 
 const GOVERNORATES = [
@@ -111,6 +112,10 @@ function LogisticsContent() {
     const ar = language !== "en";
     const c = (a: string, e: string) => (ar ? a : e);
     const [tab, setTab] = useState<"orders" | "analytics">("orders");
+    // Turbo: send the selected orders as shipments (only where it is set up).
+    const turboEnabled = !!activeBusiness?.theme_config?.integrations?.shipping?.turbo?.enabled;
+    const [turboOpen, setTurboOpen] = useState(false);
+    const [turboIds, setTurboIds] = useState<string[]>([]);
     const { startAction, completeAction, failAction } = useActionFeedback();
     const searchParams = useSearchParams();
     const router = useRouter();
@@ -829,6 +834,11 @@ function LogisticsContent() {
                     <div className="flex items-center justify-between bg-primary/10 p-2 rounded px-4">
                         <span className="text-sm font-medium text-primary">{selectedOrders.size} {t("Selected")}</span>
                         <div className="flex items-center gap-2">
+                            {turboEnabled && (
+                                <Button size="sm" className="h-8 gap-1.5 bg-orange-500 hover:bg-orange-600" onClick={() => { setTurboIds(Array.from(selectedOrders)); setTurboOpen(true); }}>
+                                    <Send className="h-3.5 w-3.5" />{c("ابعت لتربو", "Send to Turbo")}
+                                </Button>
+                            )}
                             <Select onValueChange={handleBulkStatusChange}>
                                 <SelectTrigger className="w-[180px] h-8 bg-white">
                                     <SelectValue placeholder={t("Bulk Action")} />
@@ -978,6 +988,11 @@ function LogisticsContent() {
                 </div>
                 </TabsContent>
             </Tabs>
+
+            {turboEnabled && activeBusiness && (
+                <TurboSendDialog open={turboOpen} onOpenChange={setTurboOpen} businessId={activeBusiness.id}
+                                 orderIds={turboIds} onSent={fetchOrders} />
+            )}
 
             {/* Shipping Assignment Dialog */}
             <Dialog open={shippingDialogOpen} onOpenChange={setShippingDialogOpen}>

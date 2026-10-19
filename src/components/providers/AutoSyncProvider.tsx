@@ -22,9 +22,9 @@ export function AutoSyncProvider({ children }: { children: React.ReactNode }) {
 
     useEffect(() => {
         if (!activeBusiness) return;
-        // Same trigger as before: Telegraph or VROBO auto-sync switched on.
+        // Telegraph, Turbo or VROBO auto-sync switched on.
         const integrations = activeBusiness.theme_config?.integrations;
-        if (!integrations?.shipping?.telegraph?.autoSync && !integrations?.tools?.vrobo?.autoSync) return;
+        if (!integrations?.shipping?.telegraph?.autoSync && !integrations?.shipping?.turbo?.autoSync && !integrations?.tools?.vrobo?.autoSync) return;
 
         const maybePing = () => {
             if (document.visibilityState === "hidden") return;

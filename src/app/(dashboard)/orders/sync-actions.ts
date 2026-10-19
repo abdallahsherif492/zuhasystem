@@ -7,6 +7,7 @@ import { fetchBostaShipments, mapBostaStatusToZuha } from "@/lib/shipping/bosta"
 import { fetchJTShipments, mapJTStatusToZuha } from "@/lib/shipping/jt";
 import { fetchAramexShipments, mapAramexStatusToZuha } from "@/lib/shipping/aramex";
 import { fetchFiltareeqShipments, mapFiltareeqStatusToZuha } from "@/lib/shipping/filtareeq";
+import { getTurboStatuses, mapTurboStatusToZuha, type TurboConfig } from "@/lib/shipping/turbo";
 import { syncStatusToEasyOrders } from "@/lib/easyorders";
 import { processOrderForVrobo } from "@/lib/vrobo/api";
 import { logIntegrationActivity } from "@/lib/logs/integration-logger";
@@ -108,12 +109,13 @@ export async function previewTelegraphShippingSyncInternal(businessId: string): 
 
 export async function previewShippingSyncAction(businessId: string): Promise<{ updates: SyncPreviewItem[], debugInfo?: any, error?: string }> {
     try {
-        const [telegraphResult, bostaResult, jtResult, aramexResult, filtareeqResult] = await Promise.all([
+        const [telegraphResult, bostaResult, jtResult, aramexResult, filtareeqResult, turboResult] = await Promise.all([
             previewTelegraphShippingSyncInternal(businessId),
             previewBostaShippingSyncAction(businessId),
             previewGenericShippingSyncAction(businessId, "jt"),
             previewGenericShippingSyncAction(businessId, "aramex"),
             previewGenericShippingSyncAction(businessId, "filtareeq"),
+            previewTurboShippingSyncAction(businessId),
         ]);
 
         const allUpdates: SyncPreviewItem[] = [];
@@ -136,6 +138,7 @@ export async function previewShippingSyncAction(businessId: string): Promise<{ u
         integrateResult(jtResult, "J&T");
         integrateResult(aramexResult, "Aramex");
         integrateResult(filtareeqResult, "Filtareeq");
+        integrateResult(turboResult, "Turbo");
 
         return {
             updates: allUpdates,
@@ -144,7 +147,8 @@ export async function previewShippingSyncAction(businessId: string): Promise<{ u
                 bosta: bostaResult.debugInfo,
                 jt: jtResult.debugInfo,
                 aramex: aramexResult.debugInfo,
-                filtareeq: filtareeqResult.debugInfo
+                filtareeq: filtareeqResult.debugInfo,
+                turbo: turboResult.debugInfo,
             }
         };
     } catch (error: any) {
@@ -249,7 +253,9 @@ export async function applyShippingUpdatesAction(updates: SyncPreviewItem[], bus
 
         for (const update of updates) {
             const updatePayload: any = { status: update.newStatus };
-            if (update.newStatus === "Shipped" && shippingProvider) {
+            // Orders sent to Turbo from here already carry Turbo as their
+            // courier; a sync must not swap it for another company.
+            if (update.newStatus === "Shipped" && shippingProvider && update.provider !== "Turbo") {
                 updatePayload.shipping_company_id = shippingProvider;
             }
             const { error } = await supabase
@@ -441,6 +447,70 @@ export async function previewGenericShippingSyncAction(businessId: string, provi
         return { updates, debugInfo };
     } catch (error: any) {
         console.error(`Preview sync error (${providerKey}):`, error);
+        return { updates: [], error: error.message };
+    }
+}
+
+/**
+ * Turbo: the statuses of the shipments sent from here (orders with a
+ * courier_code), matched by Turbo's shipment code. Turbo's status feed is by
+ * date, so it is asked for the span from the oldest open shipment to today.
+ * Statuses it does not recognise leave the order alone and are logged.
+ */
+export async function previewTurboShippingSyncAction(businessId: string): Promise<{ updates: SyncPreviewItem[], debugInfo?: any, error?: string }> {
+    try {
+        const cookieStore = await cookies();
+        const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://telkkknuygjejmqcvyev.supabase.co";
+        const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
+        const supabase = createServerClient(supabaseUrl, supabaseKey, {
+            cookies: { get(name: string) { return cookieStore.get(name)?.value; }, },
+        });
+
+        const { data: business } = await supabase.from("businesses").select("theme_config").eq("id", businessId).single();
+        const config = business?.theme_config?.integrations?.shipping?.turbo as TurboConfig | undefined;
+        if (!config?.enabled || !config.apiKey || !config.accountId) {
+            return { updates: [], error: "turbo integration is not configured or disabled in settings." };
+        }
+
+        const { data: orders, error: ordersError } = await supabase
+            .from("orders")
+            .select("id, customer_info, status, courier_code, courier_sent_at, created_at")
+            .eq("business_id", businessId)
+            .not("courier_code", "is", null)
+            .not("status", "in", "(Delivered,Collected,Returned,Cancelled,Unavailable)");
+        if (ordersError) throw new Error(ordersError.message);
+        if (!orders || orders.length === 0) return { updates: [], debugInfo: { message: "No open Turbo shipments" } };
+
+        const day = (d: Date) => d.toISOString().slice(0, 10);
+        const oldest = orders.reduce((m, o) => Math.min(m, new Date(o.courier_sent_at || o.created_at).getTime()), Date.now());
+        const statuses = await getTurboStatuses(config, day(new Date(oldest - 86_400_000)), day(new Date(Date.now() + 86_400_000)));
+        const byCode = new Map(statuses.map(s => [String(s.code), s]));
+
+        const updates: SyncPreviewItem[] = [];
+        const unknown = new Set<string>();
+        for (const order of orders) {
+            const st = byCode.get(String(order.courier_code));
+            if (!st) continue;
+            const newStatus = mapTurboStatusToZuha(st);
+            if (!newStatus) { unknown.add(`${st.status_code ?? ""} ${st.status}`.trim()); continue; }
+            if (newStatus !== order.status) {
+                updates.push({
+                    orderId: order.id,
+                    customerName: (order.customer_info as any)?.name || "N/A",
+                    oldStatus: order.status,
+                    newStatus,
+                    accurateStatusName: st.status,
+                    provider: "Turbo",
+                });
+            }
+        }
+        const debugInfo = { open: orders.length, fetched: statuses.length, unmappedStatuses: [...unknown] };
+        if (unknown.size) {
+            await logIntegrationActivity(businessId, "Turbo", "info", `Turbo statuses left unchanged (not recognised yet): ${[...unknown].join("، ")}`, debugInfo);
+        }
+        return { updates, debugInfo };
+    } catch (error: any) {
+        console.error("Preview sync error (Turbo):", error);
         return { updates: [], error: error.message };
     }
 }
