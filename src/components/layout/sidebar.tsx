@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils";
 import { canOpenPage } from "@/lib/navigation-access";
 import { useStarterMode, STARTER_PAGES } from "@/hooks/use-starter-mode";
 import { Button } from "@/components/ui/button";
-import { LayoutDashboard, AlertTriangle, Package, ShoppingCart, Settings, Users, Truck, Banknote, LineChart, ShoppingBag, Megaphone, Box, DollarSign, ShieldCheck, FileText, Ticket, CreditCard, Clock, Inbox, Calendar, LogOut, Globe, ChevronDown, ChevronRight, BarChart3, PieChart, History, BookOpen, Wallet, Upload, LifeBuoy } from "lucide-react";
+import { LayoutDashboard, AlertTriangle, Package, ShoppingCart, Settings, Users, Truck, Banknote, LineChart, ShoppingBag, Megaphone, Box, DollarSign, ShieldCheck, FileText, Ticket, CreditCard, Clock, Inbox, Calendar, LogOut, Globe, ChevronDown, ChevronRight, BarChart3, PieChart, History, BookOpen, Wallet, Upload, LifeBuoy, PhoneMissed } from "lucide-react";
 
 import Image from "next/image";
 import { useState, useEffect } from "react";
@@ -149,7 +149,8 @@ export function SidebarContent({ onLinkClick }: { onLinkClick?: () => void }) {
                     icon: ShoppingCart,
                     exactMatch: true,
                     subItems: [
-                        { title: t("New from stores"), href: "/platform-orders", icon: Globe, badge: "platform-orders" },
+                        { title: t("New from stores"), href: "/platform-orders", icon: Globe, badge: "platform-orders", exactMatch: true },
+                        { title: t("Missed orders"), href: "/platform-orders/missed", icon: PhoneMissed },
                         { title: t("Fulfilment & shipping"), href: "/logistics", icon: Truck },
                         { title: t("Shipping problems"), href: "/logistics/issues", icon: LifeBuoy },
                     ]

@@ -82,7 +82,7 @@ export default function SettingsPage() {
             turbo: { enabled: false, apiKey: "", accountId: "", followupPhone: "", autoSync: false, autoSyncIntervalMinutes: 15, shippingCompanyId: "" }
         },
         platforms: {
-            easyorders: { enabled: false, apiKey: "", webhookToken: "" }
+            easyorders: { enabled: false, apiKey: "", webhookToken: "", leadKey: "" }
         },
         tools: {
             vrobo: { enabled: false, apiKey: "", merchantId: "", reasonId: "2", autoSync: false, autoSyncIntervalMinutes: 60 }
@@ -171,7 +171,8 @@ export default function SettingsPage() {
                     easyorders: {
                         enabled: savedIntegrations.platforms?.easyorders?.enabled || !!legacyWebhook,
                         apiKey: savedIntegrations.platforms?.easyorders?.apiKey || legacyApiKey,
-                        webhookToken: savedIntegrations.platforms?.easyorders?.webhookToken || legacyWebhook
+                        webhookToken: savedIntegrations.platforms?.easyorders?.webhookToken || legacyWebhook,
+                        leadKey: savedIntegrations.platforms?.easyorders?.leadKey || ""
                     },
                     shopify: {
                         enabled: savedIntegrations.platforms?.shopify?.enabled || false,
@@ -323,6 +324,34 @@ export default function SettingsPage() {
             } else {
                 alert("Failed to save settings. Make sure the storage bucket exists.");
             }
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    /**
+     * The key the missed-orders script on the store sends with every lead
+     * (public/leads.js → /api/leads). It is public by nature — it sits in the
+     * store's page — and only lets someone add leads to this business, which
+     * are bot-scored and throttled; a new one stops the old snippet working.
+     */
+    const generateLeadKey = async () => {
+        setSaving(true);
+        try {
+            const key = Array.from(crypto.getRandomValues(new Uint8Array(12))).map(b => b.toString(16).padStart(2, "0")).join("");
+            const easyorders = { ...integrations.platforms.easyorders, leadKey: key };
+            const newThemeConfig = {
+                ...(activeBusiness?.theme_config || {}),
+                integrations: { ...integrations, platforms: { ...integrations.platforms, easyorders } },
+            };
+            const { error, data } = await supabase.from("businesses").update({ theme_config: newThemeConfig }).eq("id", activeBusiness!.id).select("id");
+            if (error) throw error;
+            if (!data || data.length === 0) throw new Error("RLS_BLOCKED");
+            handleIntegrationChange("platforms", "easyorders", "leadKey", key);
+            toast.success("اتعمل كود التتبع. انسخه وحطه في EasyOrders.");
+        } catch (error) {
+            console.error(error);
+            toast.error("ماتعملش، جرّب تاني");
         } finally {
             setSaving(false);
         }
@@ -1189,6 +1218,28 @@ export default function SettingsPage() {
                                             </div>
                                         </div>
                                         
+                                        {/* Missed orders: our own script on the store */}
+                                        <div className="space-y-2 rounded-md border bg-background p-3" dir="rtl">
+                                            <Label>كود تتبع الطلبات الناقصة</Label>
+                                            <p className="text-xs text-muted-foreground">
+                                                حطه في EasyOrders من إدارة المتجر ← «Add Custom Code to the Header». أي حد يكتب رقمه في فورم الطلب ويمشي من غير ما يطلب
+                                                هيظهر في «طلبات ناقصة»، والبوتات بتتفصل لوحدها.
+                                            </p>
+                                            {integrations.platforms.easyorders.leadKey ? (
+                                                <div className="flex gap-2">
+                                                    <Input readOnly dir="ltr" className="bg-muted font-mono text-xs"
+                                                           value={`<script src="${typeof window !== "undefined" ? window.location.origin : ""}/leads.js" data-b="${activeBusiness.id}" data-k="${integrations.platforms.easyorders.leadKey}" async></script>`} />
+                                                    <Button variant="outline" onClick={() => {
+                                                        navigator.clipboard.writeText(`<script src="${window.location.origin}/leads.js" data-b="${activeBusiness?.id}" data-k="${integrations.platforms.easyorders.leadKey}" async></script>`);
+                                                        toast.success("اتنسخ");
+                                                    }}>Copy</Button>
+                                                    <Button variant="secondary" onClick={generateLeadKey} disabled={saving}>كود جديد</Button>
+                                                </div>
+                                            ) : (
+                                                <Button variant="secondary" onClick={generateLeadKey} disabled={saving}>اعمل كود التتبع</Button>
+                                            )}
+                                        </div>
+
                                         <div className="space-y-2">
                                             <Label>{t("EasyOrders API Key (For sending updates)")}</Label>
                                             <Input 

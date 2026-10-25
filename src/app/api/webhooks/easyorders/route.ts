@@ -407,6 +407,13 @@ export async function POST(request: Request) {
             }
         }
 
+        // Whoever was a "missed order" with this phone has now ordered
+        // (20261025_missed_leads.sql; harmless before it is run).
+        if (phone1) {
+            const { error: leadErr } = await supabase.rpc("missed_leads_mark_converted", { p_business_id: businessId, p_phone: phone1, p_order_id: newOrder.id });
+            if (leadErr && !/missed_leads_mark_converted|schema cache/i.test(leadErr.message)) console.error("[EasyOrders] missed lead link failed:", leadErr.message);
+        }
+
         await log("success", `new order #${String(newOrder.id).slice(0, 8)} from EasyOrders (${totalAmount} EGP, ${processedItems.length} item${processedItems.length === 1 ? "" : "s"})`,
             { order_id: newOrder.id, took_ms: Date.now() - startedAt });
         return NextResponse.json({ success: true, order_id: newOrder.id }, { status: 200 });

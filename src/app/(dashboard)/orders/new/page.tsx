@@ -160,6 +160,22 @@ export default function NewOrderPage() {
         if (currentUser?.email) setClosedBy(prev => prev ?? currentUser.email!);
     }, [currentUser]);
 
+    // Arriving from a missed order (/platform-orders/missed): the customer's
+    // details are in the link, and the lead is closed once the order is saved.
+    const [fromLead, setFromLead] = useState<string | null>(null);
+    useEffect(() => {
+        try {
+            const q = new URLSearchParams(window.location.search);
+            if (!q.get("phone")) return;
+            setCustomerName(q.get("name") || "");
+            setCustomerPhone(q.get("phone") || "");
+            setCustomerPhone2(q.get("phone2") || "");
+            setCustomerAddress(q.get("address") || "");
+            if (q.get("gov")) setCustomerGov(q.get("gov")!);
+            setFromLead(q.get("lead"));
+        } catch { /* no prefill */ }
+    }, []);
+
     // Update Shipping when Gov changes
     useEffect(() => {
         if (!customerGov) {
@@ -454,6 +470,13 @@ export default function NewOrderPage() {
                 .single();
 
             if (orderError) throw orderError;
+
+            if (fromLead) {
+                supabase.from("missed_leads").update({
+                    status: "converted", order_id: orderData.id, outcome: "will_order",
+                    handled_by: currentUser?.email ?? null, handled_at: new Date().toISOString(),
+                }).eq("id", fromLead).then(({ error }) => { if (error) console.error("Missed lead not linked:", error.message); });
+            }
 
             logBusinessAction({
                 businessId: activeBusiness!.id,
