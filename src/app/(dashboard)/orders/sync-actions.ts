@@ -7,7 +7,7 @@ import { fetchBostaShipments, mapBostaStatusToZuha } from "@/lib/shipping/bosta"
 import { fetchJTShipments, mapJTStatusToZuha } from "@/lib/shipping/jt";
 import { fetchAramexShipments, mapAramexStatusToZuha } from "@/lib/shipping/aramex";
 import { fetchFiltareeqShipments, mapFiltareeqStatusToZuha } from "@/lib/shipping/filtareeq";
-import { getTurboStatuses, mapTurboStatusToZuha, searchTurboShipment, type TurboConfig } from "@/lib/shipping/turbo";
+import { getTurboStatuses, mapTurboStatusToZuha, searchTurboShipment, turboLeavesAlone, type TurboConfig } from "@/lib/shipping/turbo";
 import { syncStatusToEasyOrders } from "@/lib/easyorders";
 import { processOrderForVrobo } from "@/lib/vrobo/api";
 import { logIntegrationActivity } from "@/lib/logs/integration-logger";
@@ -515,7 +515,7 @@ export async function previewTurboShippingSyncAction(businessId: string): Promis
                 await supabase.from("orders").update({ courier_code: String(st.code) }).eq("business_id", businessId).eq("id", order.id);
             }
             const newStatus = mapTurboStatusToZuha(st);
-            if (!newStatus) { unknown.add(`${st.status_code ?? ""} ${st.status}`.trim()); continue; }
+            if (!newStatus) { if (!turboLeavesAlone(st)) unknown.add(`${st.status_code ?? ""} ${st.status}`.trim()); continue; }
             if (newStatus !== order.status) {
                 updates.push({
                     orderId: order.id,

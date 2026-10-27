@@ -145,8 +145,22 @@ export async function getTurboStatuses(config: TurboConfig, from: string, to: st
         cache: "no-store",
     });
     const json = await res.json().catch(() => null);
+    // With nothing in progress Turbo answers 404 "Shipment not found" rather
+    // than an empty list. That is an empty list, not a failure: treating it as
+    // one stopped every send to Turbo whenever all shipments were waiting for
+    // pickup or delivered.
+    if (res.status === 404 || /shipment not found/i.test(String(json?.message || ""))) return [];
     if (!res.ok || !json?.success) throw new Error(json?.message || `Turbo get-status failed (${res.status})`);
     return (json.data || []) as TurboStatus[];
+}
+
+/**
+ * Statuses that are known and deliberately leave the order as it is
+ * (waiting for pickup, accepted) — so the sync does not report them as
+ * unrecognised on every run.
+ */
+export function turboLeavesAlone(s: Pick<TurboStatus, "status"> & { status_code?: number | null }): boolean {
+    return [1, 3].includes(Number(s.status_code)) || /قيد الانتظار|قيد التنفيذ/.test(normalizeArabic(s.status || ""));
 }
 
 /**
