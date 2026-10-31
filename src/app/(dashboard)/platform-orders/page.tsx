@@ -29,6 +29,9 @@ import {
     AttemptBadge, AttemptHistory, ConfirmTabs, FailedAttemptDialog, LastAttempt, RETRY_AFTER_MIN, minutesSince, stageOf,
     type AttemptSummary, type ConfirmStage,
 } from "@/components/orders/confirmation-attempts";
+import { DeliveryRateAdvice, DeliveryRateBadge } from "@/components/orders/delivery-rate";
+import { deliveryRateOf } from "@/lib/easyorders-delivery-rate";
+import { fetchDeliveryRatesAction } from "./delivery-rate-actions";
 
 const ORDER_SELECT = `
     *,
@@ -225,6 +228,37 @@ function PlatformOrdersContent() {
     // -----------------------------------------------------------------
 
     const loadedRef = useRef(false);
+
+    // EasyOrders' delivery rating for orders that arrived without one (see
+    // delivery-rate-actions.ts). Each order is asked about once per visit; a
+    // batch EasyOrders cut short is picked up again a little later.
+    const rateAsked = useRef(new Set<string>());
+    const [rateRetry, setRateRetry] = useState(0);
+    const unrated = useMemo(
+        () => orders.filter(o => o.easyorders_id && !deliveryRateOf(o.customer_info) && !rateAsked.current.has(o.id)).map(o => o.id),
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        [orders, rateRetry],
+    );
+    useEffect(() => {
+        if (!activeBusiness || !unrated.length) return;
+        const ids = unrated.slice(0, 15);
+        // Marked before asking, so a re-render while this is out does not
+        // send the same orders again.
+        ids.forEach(id => rateAsked.current.add(id));
+        fetchDeliveryRatesAction(activeBusiness.id, ids).then(({ rates, more }) => {
+            if (Object.keys(rates).length) {
+                setOrders(prev => prev.map(o => rates[o.id] ? { ...o, customer_info: { ...o.customer_info, delivery_rate: rates[o.id] } } : o));
+            }
+            if (more) {
+                ids.forEach(id => { if (!rates[id]) rateAsked.current.delete(id); });
+                setTimeout(() => setRateRetry(n => n + 1), 20_000);
+            } else if (unrated.length > ids.length) {
+                setRateRetry(n => n + 1);
+            }
+        }).catch(() => {});
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [activeBusiness?.id, unrated.join(",")]);
+
     // Orders this page has just taken off the screen and is still saving.
     // The sync must not bring them back while their write is in flight.
     const inFlight = useRef(new Set<string>());
@@ -968,6 +1002,7 @@ function PlatformOrdersContent() {
                                             <span className="font-mono text-xs font-normal text-muted-foreground">
                                                 #{order.id.slice(0, 8)}
                                             </span>
+                                            <DeliveryRateBadge rate={deliveryRateOf(order.customer_info)} />
                                         </CardTitle>
                                         <p className="text-xs sm:text-sm text-muted-foreground mt-1">
                                             {format(new Date(order.created_at), "PPP p")}
@@ -987,6 +1022,9 @@ function PlatformOrdersContent() {
                                 )}
                                 {/* What the last person to call was told, before
                                     the next one picks up the phone. */}
+                                {/* Before the call: a customer who rarely takes
+                                    their parcel is asked for a deposit. */}
+                                <DeliveryRateAdvice rate={deliveryRateOf(order.customer_info)} />
                                 <LastAttempt order={order} />
                                 <AttemptHistory orderId={order.id} count={order.confirm_attempts ?? 0} />
                                 {/* Calling is the first thing that happens to one

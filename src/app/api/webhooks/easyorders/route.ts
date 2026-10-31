@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { logIntegrationActivity } from '@/lib/logs/integration-logger';
+import { readDeliveryRate } from '@/lib/easyorders-delivery-rate';
 
 // Dictionary for Governorate mapping (Arabic to English)
 // Values here MUST match the courier rate card keys and the governorate
@@ -156,12 +157,22 @@ export async function POST(request: Request) {
 
         const { data: existingOrder } = await supabase
             .from('orders')
-            .select('id')
+            .select('id, customer_info')
             .eq('easyorders_id', easyOrderId)
             .eq('business_id', businessId)
             .maybeSingle();
 
+        // EasyOrders' rating of how likely this customer is to take the
+        // parcel (lib/easyorders-delivery-rate.ts). Shown to whoever calls to
+        // confirm; still null if EasyOrders had not finished rating them.
+        const deliveryRate = readDeliveryRate(payload.metadata);
+
         if (existingOrder) {
+            if (deliveryRate && !existingOrder.customer_info?.delivery_rate) {
+                await supabase.from('orders')
+                    .update({ customer_info: { ...(existingOrder.customer_info || {}), delivery_rate: deliveryRate } })
+                    .eq('id', existingOrder.id).eq('business_id', businessId);
+            }
             await log("info", `order ${easyOrderId} received again, already in the system as #${String(existingOrder.id).slice(0, 8)}`);
             return NextResponse.json({ message: 'Order already processed' }, { status: 200 });
         }
@@ -180,7 +191,8 @@ export async function POST(request: Request) {
             phone2: phone2,
             address: address,
             governorate: mappedGov,
-            raw_easyorders_gov: rawGov
+            raw_easyorders_gov: rawGov,
+            ...(deliveryRate ? { delivery_rate: deliveryRate } : {}),
         };
 
         // Let's create or find the customer based on phone number and business ID

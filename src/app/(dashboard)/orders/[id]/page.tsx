@@ -379,6 +379,9 @@ export default function OrderDetailsPage() {
                 created_at: new Date(editForm.createdAt).toISOString(),
                 status: editForm.status,
                 customer_info: {
+                    // Keeps what the form does not edit, such as the store's
+                    // delivery rating.
+                    ...(order?.customer_info || {}),
                     name: editForm.customerName,
                     phone: editForm.customerPhone,
                     phone2: editForm.customerPhone2,
