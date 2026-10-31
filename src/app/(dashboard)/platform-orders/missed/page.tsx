@@ -23,7 +23,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
  *
  * A lead shows as missed only after a quiet quarter of an hour, so people who
  * are still finishing their order are not called mid-checkout. Then, unless it
- * is a bot, it becomes a Waiting order on "New from stores", where sales
+ * is a bot or its product is unknown, it becomes a Waiting order on "New from stores", where sales
  * confirm it like any other (20261101_missed_orders_in_queue.sql); this page
  * is the record behind them, and where bots are reviewed.
  */
@@ -158,7 +158,7 @@ export default function MissedOrdersPage() {
                     <h1 className="text-3xl font-bold tracking-tight">طلبات ناقصة</h1>
                     <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
                         ناس كتبوا رقمهم في فورم الطلب في المتجر ومشيوا من غير ما يطلبوا. بعد {QUIET_MINUTES} دقيقة من آخر حركة، اللي مش بوت
-                        بيتنقل لوحده لـ <Link href="/platform-orders" className="font-medium underline">جديدة من المتاجر</Link> كأوردر عليه علامة «طلب ناقص»، والسيلز بيأكدوه من هناك.
+                        ومعروف هو كان بيطلب أنهي منتج بيتنقل لوحده لـ <Link href="/platform-orders" className="font-medium underline">جديدة من المتاجر</Link> كأوردر عليه علامة «طلب ناقص»، والسيلز بيأكدوه من هناك.
                         البوتات بتفضل هنا في تاب لوحدها.
                     </p>
                 </div>

@@ -11,6 +11,11 @@
  * Fields are recognised by their meaning — name, id, placeholder, label — in
  * Arabic or English, so it does not depend on the theme's markup. Password and
  * card fields are never read.
+ *
+ * EasyOrders specifics: the governorate is a dropdown component that keeps
+ * only an id in a hidden input (name="المحافظة"), so its name is read from
+ * the dropdown's displayed value; and the product's code (SKU) is read from
+ * the page's data, so the lead can be matched to the catalogue exactly.
  */
 (function () {
     "use strict";
@@ -44,6 +49,17 @@
         if (/\/products?\//.test(location.pathname)) store("ecx_product", t);
         return store("ecx_product") || t;
     }
+    // The product's code, from the page's own data (Next.js on EasyOrders),
+    // kept for the hop to checkout like the title.
+    function productSku() {
+        try {
+            var nd = document.getElementById("__NEXT_DATA__");
+            var p = nd && JSON.parse(nd.textContent).props.pageProps.product;
+            if (p && p.sku) store("ecx_sku", String(p.sku).slice(0, 60));
+        } catch (e) {}
+        return store("ecx_sku") || "";
+    }
+    productSku();
 
     ["mousemove", "touchstart", "pointerdown", "scroll"].forEach(function (ev) {
         window.addEventListener(ev, function () { if (sig.pointer < 5000) sig.pointer++; }, { passive: true, capture: true });
@@ -82,6 +98,25 @@
         if (el.tagName === "SELECT") { var o = el.options[el.selectedIndex]; return o ? (o.text || o.value) : ""; }
         return el.value || "";
     }
+    // A dropdown component's hidden input holds an id; what the visitor
+    // picked is the text the component shows.
+    function shownValue(el) {
+        for (var n = el.parentElement, i = 0; n && i < 4; n = n.parentElement, i++) {
+            var v = n.querySelector('[class*="single-value"], [class*="singleValue"]');
+            if (v && v.textContent) return v.textContent.trim();
+        }
+        return /^[0-9a-f-]{20,}$/i.test(el.value || "") ? "" : (el.value || "");
+    }
+    function governorate() {
+        var hidden = document.querySelectorAll("input[type=hidden]");
+        for (var i = 0; i < hidden.length; i++) {
+            if (/gov|governorate|محافظ/i.test((hidden[i].name || "") + " " + (hidden[i].id || ""))) {
+                var v = shownValue(hidden[i]);
+                if (v) return v.slice(0, 80);
+            }
+        }
+        return "";
+    }
     function collect() {
         var out = {}, phones = [], els = document.querySelectorAll("input, select, textarea");
         for (var i = 0; i < els.length; i++) {
@@ -93,6 +128,7 @@
             if (!out[k]) out[k] = v.slice(0, 400);
         }
         out.phone = phones[0] || ""; out.phone2 = phones[1] || "";
+        if (!out.governorate) out.governorate = governorate();
         return out;
     }
 
@@ -109,7 +145,7 @@
         sig.lang = navigator.language;
         var payload = {
             b: B, k: K, sid: sid, phone: phone, name: f.name || "", phone2: f.phone2 || "", address: f.address || "",
-            governorate: f.governorate || "", product: productTitle().slice(0, 200), url: location.href.slice(0, 500),
+            governorate: f.governorate || "", product: productTitle().slice(0, 200), sku: productSku(), url: location.href.slice(0, 500),
             ref: (store("ecx_ref") || "").slice(0, 500), utm: (function () { try { return JSON.parse(store("ecx_utm") || "null"); } catch (e) { return null; } })(),
             submitted: submitted, s: sig
         };
@@ -139,6 +175,9 @@
     document.addEventListener("click", function (e) {
         var b = e.target && e.target.closest && e.target.closest("button, [type=submit], a");
         if (b && /اطلب|اشتري|إشتري|تأكيد|أكد|اكد|شراء|order|buy|checkout|submit/i.test(b.textContent || b.value || "")) markSubmit();
+        // Picking from a dropdown component (the governorate) changes no field
+        // the input listener sees.
+        else if (e.target && e.target.closest && e.target.closest('[class*="option"], [class*="select__"]')) later(3000);
     }, true);
     window.addEventListener("pagehide", function () { send(true); });
     document.addEventListener("visibilitychange", function () { if (document.visibilityState === "hidden") send(true); });

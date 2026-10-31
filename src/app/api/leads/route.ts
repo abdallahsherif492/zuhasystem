@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { normalizeEgyptianPhone, scoreLead, type LeadSignals } from "@/lib/leads/bot-score";
+import { normalizeGovernorate } from "@/lib/governorates";
 
 /**
  * Receives what a visitor typed into the store's order form, from
@@ -56,14 +57,17 @@ export async function POST(request: Request) {
         envOr(process.env.SUPABASE_SERVICE_ROLE_KEY, envOr(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY, FALLBACK_KEY)),
         { auth: { persistSession: false } },
     );
-    const { data, error } = await supabase.rpc("capture_missed_lead", {
+    const governorate = clip(body.governorate, 80);
+    const args = {
         p_business_id: businessId,
         p_key: key,
         p_phone: phone,
         p_name: name,
         p_phone2: clip(body.phone2, 40) ? normalizeEgyptianPhone(clip(body.phone2, 40)!) : null,
         p_address: clip(body.address, 400),
-        p_governorate: clip(body.governorate, 80),
+        // Stored as the rest of the app names it ("القاهرة" → "Cairo"), so a
+        // missed order gets the courier's rate and the governorate dropdown.
+        p_governorate: governorate ? (normalizeGovernorate(governorate) ?? governorate) : null,
         p_product: clip(body.product, 200),
         p_page_url: clip(body.url, 500),
         p_referrer: clip(body.ref, 500),
@@ -75,7 +79,13 @@ export async function POST(request: Request) {
         p_score: score,
         p_reasons: reasons,
         p_submitted: body.submitted === true,
-    });
+    };
+    const sku = clip(body.sku, 60);
+    let { data, error } = await supabase.rpc("capture_missed_lead", { ...args, p_sku: sku });
+    // Before 20261101_missed_orders_in_queue.sql the function takes no code.
+    if (error && /capture_missed_lead|schema cache|function/i.test(error.message)) {
+        ({ data, error } = await supabase.rpc("capture_missed_lead", args));
+    }
     if (error) {
         console.error("[leads] capture failed:", error.message);
         return ok({ ok: false }, 200);

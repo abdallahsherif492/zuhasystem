@@ -18,6 +18,14 @@
 --
 -- If the customer orders after all — on the store, or through anyone — the
 -- waiting missed order is cancelled, so the same customer is not shipped twice.
+--
+-- Only a lead whose product is known joins the queue: by the code the store
+-- page carries (public/leads.js sends it), or a code in the product's title.
+-- The rest stay on the missed-orders page.
+--
+-- Safe to run again.
+
+ALTER TABLE public.missed_leads ADD COLUMN IF NOT EXISTS product_sku TEXT;
 
 -- 1. The lead remembers that it was moved into the queue.
 DO $$
@@ -41,6 +49,7 @@ BEGIN
     FOR r IN SELECT conname, pg_get_constraintdef(oid) AS def FROM pg_constraint
               WHERE conrelid = 'public.orders'::regclass AND contype = 'c'
                 AND pg_get_constraintdef(oid) ILIKE '%order_type%'
+                AND pg_get_constraintdef(oid) NOT ILIKE '%missed%'
     LOOP
         v_expr := regexp_replace(r.def, '^CHECK \((.*)\)( NOT VALID)?$', '\1');
         EXECUTE format('ALTER TABLE public.orders DROP CONSTRAINT %I', r.conname);
@@ -116,13 +125,15 @@ END $$;
 REVOKE ALL ON FUNCTION public.missed_leads_mark_converted(UUID, TEXT, UUID) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.missed_leads_mark_converted(UUID, TEXT, UUID) TO authenticated, service_role;
 
--- 6. Capture: a lead already in the queue stays there; the queue settles it.
+-- 6. Capture: now with the product's code; a lead already in the queue stays
+-- there, and the queue settles it.
+DROP FUNCTION IF EXISTS public.capture_missed_lead(UUID, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, JSONB, TEXT, TEXT, TEXT, JSONB, INT, TEXT[], BOOLEAN);
 CREATE OR REPLACE FUNCTION public.capture_missed_lead(
     p_business_id UUID, p_key TEXT, p_phone TEXT,
     p_name TEXT, p_phone2 TEXT, p_address TEXT, p_governorate TEXT,
     p_product TEXT, p_page_url TEXT, p_referrer TEXT, p_utm JSONB,
     p_session TEXT, p_ip TEXT, p_user_agent TEXT, p_signals JSONB,
-    p_score INT, p_reasons TEXT[], p_submitted BOOLEAN
+    p_score INT, p_reasons TEXT[], p_submitted BOOLEAN, p_sku TEXT DEFAULT NULL
 ) RETURNS JSONB
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
 DECLARE
@@ -172,11 +183,11 @@ BEGIN
     IF v_existing.id IS NULL THEN
         v_status := CASE WHEN v_order IS NOT NULL THEN 'converted' WHEN v_score >= 50 THEN 'bot' ELSE 'open' END;
         INSERT INTO public.missed_leads (
-            business_id, phone, name, phone2, address, governorate, product, page_url, referrer, utm,
+            business_id, phone, name, phone2, address, governorate, product, product_sku, page_url, referrer, utm,
             session_id, ip, user_agent, signals, bot_score, bot_reasons, submitted, status, order_id)
         VALUES (
             p_business_id, p_phone, NULLIF(btrim(p_name), ''), NULLIF(btrim(p_phone2), ''), NULLIF(btrim(p_address), ''),
-            NULLIF(btrim(p_governorate), ''), NULLIF(btrim(p_product), ''), p_page_url, p_referrer, p_utm,
+            NULLIF(btrim(p_governorate), ''), NULLIF(btrim(p_product), ''), NULLIF(btrim(p_sku), ''), p_page_url, p_referrer, p_utm,
             p_session, p_ip, p_user_agent, p_signals, v_score, v_reasons, COALESCE(p_submitted, false), v_status, v_order);
     ELSE
         UPDATE public.missed_leads SET
@@ -185,6 +196,7 @@ BEGIN
             address     = COALESCE(NULLIF(btrim(p_address), ''), address),
             governorate = COALESCE(NULLIF(btrim(p_governorate), ''), governorate),
             product     = COALESCE(NULLIF(btrim(p_product), ''), product),
+            product_sku = COALESCE(NULLIF(btrim(p_sku), ''), product_sku),
             page_url    = COALESCE(p_page_url, page_url),
             signals     = COALESCE(p_signals, signals),
             user_agent  = COALESCE(p_user_agent, user_agent),
@@ -207,8 +219,8 @@ BEGIN
     RETURN jsonb_build_object('ok', true);
 END $$;
 
-REVOKE ALL ON FUNCTION public.capture_missed_lead(UUID, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, JSONB, TEXT, TEXT, TEXT, JSONB, INT, TEXT[], BOOLEAN) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION public.capture_missed_lead(UUID, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, JSONB, TEXT, TEXT, TEXT, JSONB, INT, TEXT[], BOOLEAN) TO anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION public.capture_missed_lead(UUID, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, JSONB, TEXT, TEXT, TEXT, JSONB, INT, TEXT[], BOOLEAN, TEXT) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.capture_missed_lead(UUID, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, JSONB, TEXT, TEXT, TEXT, JSONB, INT, TEXT[], BOOLEAN, TEXT) TO anon, authenticated, service_role;
 
 -- 7. The page's refresh also settles leads already in the queue.
 CREATE OR REPLACE FUNCTION public.missed_leads_refresh(p_business_id UUID)
@@ -299,26 +311,24 @@ BEGIN
             CONTINUE;
         END IF;
 
-        -- The product, by its code in the page's title ("غسالة PW2 محمولة"):
-        -- the store's titles are Arabic and the catalogue's names English, so
-        -- the code is what they share. Otherwise the line is left unmapped
-        -- under the title, as an unrecognised store item is.
+        -- The product: by the code the store page carries, else a code in its
+        -- title ("غسالة PW2 محمولة" — the store's titles are Arabic and the
+        -- catalogue's names English, so the code is what they share). A lead
+        -- whose product is not known is left out: sales would be confirming
+        -- an order for nothing in particular.
         v_title := btrim(regexp_replace(COALESCE(l.product, ''), '\s*\|\s*متجر.*$', ''));
-        v_variant := NULL; v_price := 0; v_cost := 0;
+        v_variant := NULL;
         SELECT v.id, COALESCE(v.sale_price, 0), COALESCE(v.cost_price, 0)
           INTO v_variant, v_price, v_cost
           FROM public.variants v
          WHERE v.business_id = p_business_id
            AND length(regexp_replace(COALESCE(v.sku, ''), '[^A-Za-z0-9]', '', 'g')) >= 2
-           AND v_title ~* ('(^|[^A-Za-z0-9])' || regexp_replace(v.sku, '[^A-Za-z0-9]', '', 'g') || '([^A-Za-z0-9]|$)')
-         ORDER BY length(regexp_replace(v.sku, '[^A-Za-z0-9]', '', 'g')) DESC
+           AND (lower(regexp_replace(v.sku, '[^A-Za-z0-9]', '', 'g')) = lower(regexp_replace(COALESCE(l.product_sku, ''), '[^A-Za-z0-9]', '', 'g'))
+                OR v_title ~* ('(^|[^A-Za-z0-9])' || regexp_replace(v.sku, '[^A-Za-z0-9]', '', 'g') || '([^A-Za-z0-9]|$)'))
+         ORDER BY (lower(regexp_replace(v.sku, '[^A-Za-z0-9]', '', 'g')) = lower(regexp_replace(COALESCE(l.product_sku, ''), '[^A-Za-z0-9]', '', 'g'))) DESC,
+                  length(regexp_replace(v.sku, '[^A-Za-z0-9]', '', 'g')) DESC
          LIMIT 1;
-        -- No match leaves all three NULL, not as they were set above.
-        v_price := COALESCE(v_price, 0); v_cost := COALESCE(v_cost, 0);
-        -- A title still holding "store | tagline" is the home page, not a product.
-        IF v_variant IS NULL AND (v_title = '' OR v_title LIKE '%|%') THEN
-            v_title := 'منتج مش معروف — اسأل العميل';
-        END IF;
+        CONTINUE WHEN v_variant IS NULL;
 
         v_courier := 0;
         IF l.governorate IS NOT NULL AND v_rates ? l.governorate THEN
@@ -347,8 +357,8 @@ BEGIN
             v_price, COALESCE(v_ship, 0), v_courier, v_price + COALESCE(v_ship, 0), v_cost, 'Not Paid', 0)
         RETURNING id INTO v_order;
 
-        INSERT INTO public.order_items (business_id, order_id, variant_id, quantity, price_at_sale, cost_at_sale, unmapped_name)
-        VALUES (p_business_id, v_order, v_variant, 1, v_price, v_cost, CASE WHEN v_variant IS NULL THEN v_title END);
+        INSERT INTO public.order_items (business_id, order_id, variant_id, quantity, price_at_sale, cost_at_sale)
+        VALUES (p_business_id, v_order, v_variant, 1, v_price, v_cost);
 
         UPDATE public.missed_leads SET status = 'promoted', order_id = v_order WHERE id = l.id;
         v_created := v_created + 1;
@@ -365,4 +375,5 @@ NOTIFY pgrst, 'reload schema';
 --   DROP TRIGGER IF EXISTS trg_orders_missed_confirmed ON public.orders;
 --   DROP FUNCTION IF EXISTS public.orders_missed_confirmed();
 --   DROP FUNCTION IF EXISTS public.missed_leads_promote(UUID);
+--   DROP FUNCTION IF EXISTS public.capture_missed_lead(UUID, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, JSONB, TEXT, TEXT, TEXT, JSONB, INT, TEXT[], BOOLEAN, TEXT);
 --   then re-run 20261025_missed_leads.sql for the earlier functions.
