@@ -33,7 +33,7 @@ const DESTINATIONS: Dest[] = [
     { label: "الأوردرات", hint: "كل الأوردرات", href: "/orders", icon: ShoppingCart, keywords: "orders اوردرات طلبات" },
     { label: "أوردر جديد", hint: "إنشاء", href: "/orders/new", icon: Plus, keywords: "new order اوردر جديد انشاء create" },
     { label: "أوردرات المتاجر", hint: "محتاجة تأكيد", href: "/platform-orders", icon: Globe, keywords: "platform easyorders shopify منصات متاجر waiting" },
-    { label: "طلبات ناقصة", hint: "كتبوا رقمهم ومطلبوش", href: "/platform-orders/missed", icon: Globe, keywords: "missed abandoned leads ناقصة متروكة مفقودة سلة" },
+    { label: "طلبات ناقصة", hint: "سجلها والبوتات — الطلبات نفسها في جديدة من المتاجر", href: "/platform-orders/missed", icon: Globe, keywords: "missed abandoned leads ناقصة متروكة مفقودة سلة" },
     { label: "التحضير والشحن", hint: "Logistics", href: "/logistics", icon: Truck, keywords: "logistics fulfilment تحضير شحن عمليات" },
     { label: "مشاكل الشحن", hint: "أوردرات عالقة", href: "/logistics/issues", icon: LifeBuoy, keywords: "issues stuck returning hold مشاكل عالق مرتجع مؤجل متابعة" },
     { label: "شركات الشحن", href: "/shipping", icon: Truck, keywords: "shipping couriers شحن شركات" },

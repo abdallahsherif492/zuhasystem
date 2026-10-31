@@ -9,6 +9,7 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { formatCurrency, normalizeSearchText } from "@/lib/utils";
 import { DateRangePicker } from "@/components/date-range-picker";
 import { useSearchParams } from "next/navigation";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { ContactActions } from "@/components/orders/contact-actions";
@@ -32,6 +33,7 @@ import {
 import { DeliveryRateAdvice, DeliveryRateBadge } from "@/components/orders/delivery-rate";
 import { deliveryRateOf } from "@/lib/easyorders-delivery-rate";
 import { fetchDeliveryRatesAction } from "./delivery-rate-actions";
+import { MissedOrderNote, MissedOrderTag } from "@/components/orders/missed-order";
 
 const ORDER_SELECT = `
     *,
@@ -44,11 +46,23 @@ const ORDER_SELECT = `
     )
 `;
 
-/** Waiting, and from a store (EasyOrders or Shopify): what this page lists. */
+/**
+ * Waiting, and from a store (EasyOrders or Shopify) or a missed order from it
+ * (someone who filled the store's form and left; 20261101_missed_orders_in_queue.sql):
+ * what this page lists.
+ */
 function isWaitingPlatformOrder(o: { status?: string | null; easyorders_id?: string | null; tags?: unknown }) {
     if (String(o.status || '').trim().toLowerCase() !== 'waiting') return false;
     const tags = o.tags ? JSON.stringify(o.tags).toLowerCase() : "";
-    return !!o.easyorders_id || tags.includes("easyorders") || tags.includes("shopify");
+    return !!o.easyorders_id || tags.includes("easyorders") || tags.includes("shopify") || tags.includes(MISSED_TAG);
+}
+
+const MISSED_TAG = "missed-order";
+const isMissed = (o: { tags?: unknown }) => Array.isArray(o.tags) && o.tags.includes(MISSED_TAG);
+
+/** Missed orders become Waiting orders here; harmless before the migration is run. */
+async function promoteMissedOrders(businessId: string) {
+    await supabase.rpc("missed_leads_promote", { p_business_id: businessId });
 }
 import {
     AlertDialog,
@@ -201,6 +215,7 @@ function PlatformOrdersContent() {
     const fetchOrders = async () => {
         setLoading(true);
         if (!activeBusiness) return;
+        await promoteMissedOrders(activeBusiness.id);
         const { data, error } = await supabase
             .from('orders')
             .select(ORDER_SELECT)
@@ -332,6 +347,7 @@ function PlatformOrdersContent() {
             if (!loadedRef.current || running || document.visibilityState === "hidden") return;
             running = true;
             try {
+                await promoteMissedOrders(businessId);
                 // With the attempt summary when the column exists; without it
                 // until 20261006_confirmation_attempts.sql has been run.
                 const query = (cols: string) => supabase.from('orders').select(cols).eq('business_id', businessId).ilike('status', 'waiting');
@@ -775,6 +791,8 @@ function PlatformOrdersContent() {
                 matchesPlatform = !!order.easyorders_id || tagsStr.includes("easyorders");
             } else if (platformFilter === "shopify") {
                 matchesPlatform = tagsStr.includes("shopify");
+            } else if (platformFilter === "missed") {
+                matchesPlatform = isMissed(order);
             }
 
             return matchesSearch && matchesDate && matchesPlatform;
@@ -855,6 +873,11 @@ function PlatformOrdersContent() {
                     </h2>
                     <p className="text-muted-foreground">{t("Manage incoming orders from EasyOrders and Shopify waiting for review.")}</p>
                 </div>
+                {/* Missed orders are in the list above as orders; this is
+                    the record behind them, bots included. */}
+                <Link href="/platform-orders/missed" className="hidden shrink-0 text-xs text-muted-foreground underline-offset-4 hover:text-foreground hover:underline sm:block">
+                    سجل الطلبات الناقصة والبوتات
+                </Link>
             </div>
             
             <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-3 py-4">
@@ -876,6 +899,7 @@ function PlatformOrdersContent() {
                         <SelectItem value="all">{t("All Platforms")}</SelectItem>
                         <SelectItem value="easyorders">EasyOrders</SelectItem>
                         <SelectItem value="shopify">Shopify</SelectItem>
+                        <SelectItem value="missed">طلبات ناقصة</SelectItem>
                     </SelectContent>
                 </Select>
                 <DateRangePicker />
@@ -1003,6 +1027,7 @@ function PlatformOrdersContent() {
                                                 #{order.id.slice(0, 8)}
                                             </span>
                                             <DeliveryRateBadge rate={deliveryRateOf(order.customer_info)} />
+                                            {isMissed(order) && <MissedOrderTag />}
                                         </CardTitle>
                                         <p className="text-xs sm:text-sm text-muted-foreground mt-1">
                                             {format(new Date(order.created_at), "PPP p")}
@@ -1025,6 +1050,7 @@ function PlatformOrdersContent() {
                                 {/* Before the call: a customer who rarely takes
                                     their parcel is asked for a deposit. */}
                                 <DeliveryRateAdvice rate={deliveryRateOf(order.customer_info)} />
+                                {isMissed(order) && <MissedOrderNote info={order.customer_info} />}
                                 <LastAttempt order={order} />
                                 <AttemptHistory orderId={order.id} count={order.confirm_attempts ?? 0} />
                                 {/* Calling is the first thing that happens to one

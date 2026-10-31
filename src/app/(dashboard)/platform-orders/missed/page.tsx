@@ -22,7 +22,10 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
  * 20261025_missed_leads.sql.
  *
  * A lead shows as missed only after a quiet quarter of an hour, so people who
- * are still finishing their order are not called mid-checkout.
+ * are still finishing their order are not called mid-checkout. Then, unless it
+ * is a bot, it becomes a Waiting order on "New from stores", where sales
+ * confirm it like any other (20261101_missed_orders_in_queue.sql); this page
+ * is the record behind them, and where bots are reviewed.
  */
 
 interface Lead {
@@ -39,7 +42,7 @@ interface Lead {
     bot_score: number;
     bot_reasons: string[];
     submitted: boolean;
-    status: "open" | "bot" | "converted" | "contacted" | "dismissed";
+    status: "open" | "bot" | "converted" | "contacted" | "dismissed" | "promoted";
     order_id: string | null;
     touches: number;
     first_seen_at: string;
@@ -114,7 +117,7 @@ export default function MissedOrdersPage() {
         new: leads.filter(l => l.status === "open" && quiet(l)),
         filling: leads.filter(l => l.status === "open" && !quiet(l)),
         contacted: leads.filter(l => l.status === "contacted"),
-        converted: leads.filter(l => l.status === "converted"),
+        converted: leads.filter(l => l.status === "converted" || l.status === "promoted"),
         bot: leads.filter(l => l.status === "bot"),
         dismissed: leads.filter(l => l.status === "dismissed"),
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -142,7 +145,7 @@ export default function MissedOrdersPage() {
     const tabs: { key: Tab; label: string; count: number; tone?: string }[] = [
         { key: "new", label: "جديدة", count: groups.new.length, tone: "bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-200" },
         { key: "contacted", label: "اتكلمت", count: groups.contacted.length },
-        { key: "converted", label: "اتحوّلت لأوردر", count: groups.converted.length, tone: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-200" },
+        { key: "converted", label: "اتنقلت للأوردرات", count: groups.converted.length, tone: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-200" },
         { key: "bot", label: "بوتات", count: groups.bot.length, tone: "bg-slate-200 text-slate-800 dark:bg-slate-800 dark:text-slate-200" },
         { key: "dismissed", label: "اتقفلت", count: groups.dismissed.length },
     ];
@@ -154,8 +157,9 @@ export default function MissedOrdersPage() {
                 <div>
                     <h1 className="text-3xl font-bold tracking-tight">طلبات ناقصة</h1>
                     <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-                        ناس كتبوا رقمهم في فورم الطلب في المتجر ومشيوا من غير ما يطلبوا. بتظهر هنا بعد {QUIET_MINUTES} دقيقة من آخر حركة،
-                        وبتختفي لوحدها لو طلبوا بنفس الرقم. البوتات بتتفصل لوحدها في تاب لوحدها.
+                        ناس كتبوا رقمهم في فورم الطلب في المتجر ومشيوا من غير ما يطلبوا. بعد {QUIET_MINUTES} دقيقة من آخر حركة، اللي مش بوت
+                        بيتنقل لوحده لـ <Link href="/platform-orders" className="font-medium underline">جديدة من المتاجر</Link> كأوردر عليه علامة «طلب ناقص»، والسيلز بيأكدوه من هناك.
+                        البوتات بتفضل هنا في تاب لوحدها.
                     </p>
                 </div>
                 <Button variant="outline" onClick={() => load()} className="gap-2"><RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />تحديث</Button>
@@ -226,6 +230,7 @@ function LeadCard({ l, tab, newOrderHref, onStatus }: {
                 {(l.governorate || l.address) && <div className="truncate text-muted-foreground">{[l.governorate, l.address].filter(Boolean).join("، ")}</div>}
                 {l.submitted && l.status === "open" && <div className="text-xs font-medium text-amber-700">داس على زرار الطلب بس الأوردر ماوصلش</div>}
                 {l.status === "converted" && l.order_id && <Link href={`/orders/${l.order_id}`} className="text-xs font-medium text-emerald-700 hover:underline">طلب: #{l.order_id.slice(0, 8)}</Link>}
+                {l.status === "promoted" && <Link href="/platform-orders" className="text-xs font-medium text-violet-700 hover:underline">مستني التأكيد في جديدة من المتاجر</Link>}
                 {l.outcome && <div className="text-xs text-muted-foreground">{outcomeLabel(l.outcome)}{l.handled_by ? `، ${l.handled_by.split("@")[0]}` : ""}{l.handled_at ? ` ${ago(l.handled_at)}` : ""}</div>}
             </div>
 
@@ -250,7 +255,7 @@ function LeadCard({ l, tab, newOrderHref, onStatus }: {
                     <>
                         <Button asChild size="sm" variant="outline" className="gap-1.5"><a href={`tel:${l.phone}`}><Phone className="h-4 w-4" />اتصل</a></Button>
                         <Button asChild size="sm" variant="outline" className="gap-1.5 text-emerald-700 dark:text-emerald-400"><a href={wa} target="_blank" rel="noreferrer"><MessageCircle className="h-4 w-4" />واتساب</a></Button>
-                        {l.status !== "converted" && (
+                        {l.status !== "converted" && l.status !== "promoted" && (
                             <>
                                 <Button asChild size="sm" className="gap-1.5"><Link href={newOrderHref}><PlusCircle className="h-4 w-4" />اعمل أوردر</Link></Button>
                                 <DropdownMenu>
