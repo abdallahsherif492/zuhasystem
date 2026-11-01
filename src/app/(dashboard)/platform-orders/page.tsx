@@ -58,6 +58,7 @@ function isWaitingPlatformOrder(o: { status?: string | null; easyorders_id?: str
 }
 
 const MISSED_TAG = "missed-order";
+const CARDS_PER_PAGE = 15;
 const isMissed = (o: { tags?: unknown }) => Array.isArray(o.tags) && o.tags.includes(MISSED_TAG);
 
 /** Missed orders become Waiting orders here; harmless before the migration is run. */
@@ -854,6 +855,48 @@ function PlatformOrdersContent() {
     // else opens in a new tab.
     const onPageIds = new Set(visibleOrders.map(o => o.id));
 
+    // Cards are drawn a page at a time. With missed orders in the queue the
+    // list passed 130 cards, all drawn at once and all drawn again on every
+    // keystroke in any of them; the next page is drawn as the moderator
+    // scrolls near the end of this one.
+    const [shown, setShown] = useState(CARDS_PER_PAGE);
+    useEffect(() => { setShown(CARDS_PER_PAGE); }, [stageTab, platformFilter, searchQuery, fromDate, toDate, repeatOnly]);
+    const drawnOrders = visibleOrders.slice(0, shown);
+    const moreRef = useRef<HTMLDivElement>(null);
+    useEffect(() => {
+        const el = moreRef.current;
+        if (!el) return;
+        // Observed afresh after each page, so a sentinel still in view asks
+        // for the next one straight away.
+        const io = new IntersectionObserver(entries => {
+            if (entries.some(e => e.isIntersecting)) setShown(n => n + CARDS_PER_PAGE);
+        }, { rootMargin: "1200px 0px" });
+        io.observe(el);
+        return () => io.disconnect();
+    }, [shown, visibleOrders.length]);
+
+    // A twin's anchor link (#po-<id>) may point past the drawn page: draw up
+    // to it, then scroll to it once it is there.
+    const scrollTo = useRef<string | null>(null);
+    useEffect(() => {
+        const go = () => {
+            const id = window.location.hash.match(/^#po-(.+)$/)?.[1];
+            if (!id) return;
+            const i = visibleOrders.findIndex(o => o.id === id);
+            if (i >= shown) {
+                scrollTo.current = id;
+                setShown(i + CARDS_PER_PAGE);
+            }
+        };
+        window.addEventListener("hashchange", go);
+        return () => window.removeEventListener("hashchange", go);
+    }, [visibleOrders, shown]);
+    useEffect(() => {
+        if (!scrollTo.current) return;
+        document.getElementById(`po-${scrollTo.current}`)?.scrollIntoView();
+        scrollTo.current = null;
+    }, [shown]);
+
 
     if (loading) {
         return <div className="flex justify-center p-20"><Loader2 className="h-8 w-8 animate-spin" /></div>;
@@ -1002,7 +1045,7 @@ function PlatformOrdersContent() {
             ) : (
 
                 <div className="grid gap-6">
-                    {visibleOrders.map(order => (
+                    {drawnOrders.map(order => (
                         <Card
                             key={order.id}
                             id={`po-${order.id}`}
@@ -1612,6 +1655,13 @@ function PlatformOrdersContent() {
                             </CardFooter>
                         </Card>
                     ))}
+                    {visibleOrders.length > shown && (
+                        <div ref={moreRef} className="flex justify-center" dir="rtl">
+                            <Button variant="outline" onClick={() => setShown(n => n + CARDS_PER_PAGE)}>
+                                اعرض كمان ({visibleOrders.length - shown} باقيين)
+                            </Button>
+                        </div>
+                    )}
                 </div>
             )}
             </div>
