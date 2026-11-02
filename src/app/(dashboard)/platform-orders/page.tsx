@@ -33,7 +33,7 @@ import {
 import { DeliveryRateAdvice, DeliveryRateBadge } from "@/components/orders/delivery-rate";
 import { deliveryRateOf } from "@/lib/easyorders-delivery-rate";
 import { fetchDeliveryRatesAction } from "./delivery-rate-actions";
-import { MissedOrderNote, MissedOrderTag } from "@/components/orders/missed-order";
+import { MISSED_ORDERS_IN_QUEUE, MissedOrderNote, MissedOrderTag } from "@/components/orders/missed-order";
 
 const ORDER_SELECT = `
     *,
@@ -53,6 +53,7 @@ const ORDER_SELECT = `
  */
 function isWaitingPlatformOrder(o: { status?: string | null; easyorders_id?: string | null; tags?: unknown }) {
     if (String(o.status || '').trim().toLowerCase() !== 'waiting') return false;
+    if (!MISSED_ORDERS_IN_QUEUE && isMissed(o)) return false;
     const tags = o.tags ? JSON.stringify(o.tags).toLowerCase() : "";
     return !!o.easyorders_id || tags.includes("easyorders") || tags.includes("shopify") || tags.includes(MISSED_TAG);
 }
@@ -63,6 +64,7 @@ const isMissed = (o: { tags?: unknown }) => Array.isArray(o.tags) && o.tags.incl
 
 /** Missed orders become Waiting orders here; harmless before the migration is run. */
 async function promoteMissedOrders(businessId: string) {
+    if (!MISSED_ORDERS_IN_QUEUE) return;
     await supabase.rpc("missed_leads_promote", { p_business_id: businessId });
 }
 import {
@@ -942,7 +944,7 @@ function PlatformOrdersContent() {
                         <SelectItem value="all">{t("All Platforms")}</SelectItem>
                         <SelectItem value="easyorders">EasyOrders</SelectItem>
                         <SelectItem value="shopify">Shopify</SelectItem>
-                        <SelectItem value="missed">طلبات ناقصة</SelectItem>
+                        {MISSED_ORDERS_IN_QUEUE && <SelectItem value="missed">طلبات ناقصة</SelectItem>}
                     </SelectContent>
                 </Select>
                 <DateRangePicker />

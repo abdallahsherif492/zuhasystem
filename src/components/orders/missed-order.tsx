@@ -7,6 +7,13 @@ import { MousePointerClick, ShoppingBasket } from "lucide-react";
  * customer has not ordered yet, so the call asks rather than confirms.
  */
 
+/**
+ * Off for now: missed orders are neither moved into the queue nor shown on
+ * "New from stores" or counted beside it. Leads are still captured and listed
+ * on /platform-orders/missed. Set back to true to bring them back.
+ */
+export const MISSED_ORDERS_IN_QUEUE = false;
+
 export function MissedOrderTag() {
     return (
         <span

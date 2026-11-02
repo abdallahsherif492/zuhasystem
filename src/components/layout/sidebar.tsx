@@ -13,6 +13,7 @@ import { LayoutDashboard, AlertTriangle, Package, ShoppingCart, Settings, Users,
 
 import Image from "next/image";
 import { useState, useEffect } from "react";
+import { MISSED_ORDERS_IN_QUEUE } from "@/components/orders/missed-order";
 
 interface SidebarProps extends React.HTMLAttributes<HTMLDivElement> { }
 
@@ -104,12 +105,17 @@ export function SidebarContent({ onLinkClick }: { onLinkClick?: () => void }) {
             if (document.visibilityState === "hidden") return;
             // Missed orders join the queue as Waiting orders; whoever has the
             // system open moves them in (20261101_missed_orders_in_queue.sql).
-            await supabase.rpc("missed_leads_promote", { p_business_id: activeBusiness.id });
-            const { count } = await supabase
+            // While they are switched off they are not counted either.
+            if (MISSED_ORDERS_IN_QUEUE) {
+                await supabase.rpc("missed_leads_promote", { p_business_id: activeBusiness.id });
+            }
+            let query = supabase
                 .from("orders")
                 .select("id", { count: "exact", head: true })
                 .eq("business_id", activeBusiness.id)
                 .ilike("status", "waiting");
+            if (!MISSED_ORDERS_IN_QUEUE) query = query.or("order_type.is.null,order_type.neq.missed");
+            const { count } = await query;
             if (!cancelled) setWaitingCount(count ?? 0);
         };
         load();

@@ -11,6 +11,7 @@ import { useBusiness } from "@/contexts/BusinessContext";
 import { normalizeGovernorate } from "@/lib/governorates";
 import { ago } from "@/components/orders/confirmation-attempts";
 import { cn } from "@/lib/utils";
+import { MISSED_ORDERS_IN_QUEUE } from "@/components/orders/missed-order";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 
@@ -89,8 +90,12 @@ export default function MissedOrdersPage() {
     const load = useCallback(async (quiet = false) => {
         if (!activeBusiness) return;
         if (!quiet) setLoading(true);
-        // Close the ones that have ordered since, from any channel.
-        const refresh = await supabase.rpc("missed_leads_refresh", { p_business_id: activeBusiness.id });
+        // Close the ones that have ordered since, from any channel. The
+        // refresh also moves missed orders into the queue, so it waits while
+        // that is switched off; the webhook still closes leads that order.
+        const refresh = MISSED_ORDERS_IN_QUEUE
+            ? await supabase.rpc("missed_leads_refresh", { p_business_id: activeBusiness.id })
+            : { error: null };
         const since = new Date(Date.now() - 30 * 86_400_000).toISOString();
         const { data, error } = await supabase.from("missed_leads")
             .select("id, phone, name, phone2, address, governorate, product, page_url, referrer, utm, bot_score, bot_reasons, submitted, status, order_id, touches, first_seen_at, last_seen_at, outcome, handled_by, handled_at")
