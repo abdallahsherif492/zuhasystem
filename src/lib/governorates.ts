@@ -74,3 +74,19 @@ export function normalizeGovernorate(raw: string | null | undefined): string | n
     if (!key) return null;
     return BY_FOLD.get(key) ?? null;
 }
+
+/** The app stores governorates in English; couriers read Arabic. */
+const GOVERNORATE_AR: Record<string, string> = {
+    Cairo: "القاهرة", Giza: "الجيزة", Alexandria: "الاسكندرية", Qaliubiya: "القليوبية",
+    Dakahlia: "الدقهلية", Sharkia: "الشرقية", Monufia: "المنوفية", Gharbiya: "الغربية",
+    Beheira: "البحيرة", "Kafr Al Sheikh": "كفر الشيخ", Damietta: "دمياط", "Port Said": "بورسعيد",
+    Ismailia: "الاسماعيلية", Suez: "السويس", Matrouh: "مطروح", "Red Sea": "البحر الاحمر",
+    "North Sinai": "شمال سيناء", "South Sinai": "جنوب سيناء", "Beni Suef": "بني سويف",
+    Minya: "المنيا", Fayoum: "الفيوم", Assiut: "اسيوط", Sohag: "سوهاج", Qena: "قنا",
+    Luxor: "الاقصر", Aswan: "اسوان", "New Valley": "الوادي الجديد",
+};
+
+/** The Arabic name of a stored governorate, or "" when there is none to give. */
+export function governorateArabic(stored: string | null | undefined): string {
+    return GOVERNORATE_AR[String(stored ?? "")] ?? "";
+}

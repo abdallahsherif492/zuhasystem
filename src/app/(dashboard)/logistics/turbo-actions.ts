@@ -53,6 +53,7 @@ interface OrderRow {
     payment_status: string | null;
     notes: string | null;
     shipping_cost: number | null;
+    actual_shipping_cost: number | null;
     courier_code?: string | null;
     items: { quantity: number; unmapped_name: string | null; variant: { title: string | null; product: { name: string | null } | null } | null }[];
 }
@@ -68,7 +69,7 @@ async function alreadyAtTurbo(config: TurboConfig): Promise<Map<string, string>>
     return new Map(statuses.filter(s => s.invoice_number).map(s => [String(s.invoice_number).trim().toLowerCase(), String(s.code)]));
 }
 
-const ORDER_SELECT = "id, status, customer_info, total_amount, paid_amount, payment_status, notes, shipping_cost, courier_code, items:order_items(quantity, unmapped_name, variant:variants(title, product:products(name)))";
+const ORDER_SELECT = "id, status, customer_info, total_amount, paid_amount, payment_status, notes, shipping_cost, actual_shipping_cost, courier_code, items:order_items(quantity, unmapped_name, variant:variants(title, product:products(name)))";
 
 /** What the courier collects: the total less any deposit already paid. */
 const amountToCollect = (o: OrderRow) =>
@@ -79,7 +80,7 @@ const amountToCollect = (o: OrderRow) =>
  * → Waybill go with the order's own.
  */
 const notesFor = (o: OrderRow, waybill: WaybillSettings) =>
-    [o.notes, refusalNoteFor(waybill, o.shipping_cost)].map(n => (n || "").trim()).filter(Boolean).join(" | ");
+    [o.notes, refusalNoteFor(waybill, o.shipping_cost, o.actual_shipping_cost)].map(n => (n || "").trim()).filter(Boolean).join(" | ");
 
 const summaryOf = (o: OrderRow) => (o.items || []).map(i => {
     const name = i.variant?.product?.name || i.unmapped_name || "منتج";

@@ -11,11 +11,18 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import { cn } from "@/lib/utils";
 import {
-    SHIPPING_PLACEHOLDER, refusalNoteFor, waybillSettingsOf, type WaybillSettings,
+    SHIPPING_PLACEHOLDER, refusalNoteFor, waybillSettingsOf, type WaybillSettings, type WaybillTemplate,
 } from "@/lib/orders/waybill-settings";
 
 const EXAMPLE_SHIPPING = 70;
+
+const TEMPLATES: { id: WaybillTemplate; name: string; about: string }[] = [
+    { id: "courier", name: "للمندوب", about: "المبلغ والباركود في عمود على الشمال، واللوجو ورسالة الشكر تحتهم. أوضح قالب للأوردرات الكبيرة." },
+    { id: "ticket", name: "تذكرة", about: "جزء على الشمال للعميل فيه اللوجو كبير ورسالة الشكر، والباقي للمندوب." },
+    { id: "letterhead", name: "ورقة رسمية", about: "اللوجو ورسالة الشكر في شريط فوق، وتحته العميل والمنتجات والمبلغ جنب بعض." },
+];
 
 /** Settings → Waybill: the notes printed for the courier on every waybill. */
 export function WaybillSettingsCard() {
@@ -69,11 +76,57 @@ export function WaybillSettingsCard() {
             </CardHeader>
             <CardContent className="space-y-8">
                 <div className="space-y-3">
+                    <Label className="text-base">شكل البوليصة</Label>
+                    <div className="grid gap-3 sm:grid-cols-3" role="radiogroup" aria-label="شكل البوليصة">
+                        {TEMPLATES.map(tpl => (
+                            <button
+                                key={tpl.id}
+                                type="button"
+                                role="radio"
+                                aria-checked={settings.template === tpl.id}
+                                onClick={() => setSettings(s => ({ ...s, template: tpl.id }))}
+                                className={cn(
+                                    "rounded-lg border-2 p-3 text-start transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                                    settings.template === tpl.id ? "border-primary bg-primary/5" : "border-border hover:border-foreground/30",
+                                )}
+                            >
+                                <p className="font-bold">{tpl.name}</p>
+                                <p className="mt-1 text-xs text-muted-foreground">{tpl.about}</p>
+                            </button>
+                        ))}
+                    </div>
+                    <p className="text-xs text-muted-foreground">كل القوالب بتطبع 3 بوالص في ورقة A4، واللوجو بييجي من لوجو البيزنس.</p>
+                </div>
+
+                <div className="grid gap-6 md:grid-cols-2">
+                    <div className="space-y-2">
+                        <Label className="text-base">رقم المتجر</Label>
+                        <p className="text-sm text-muted-foreground">بيتطبع جنب اللوجو عشان المندوب أو العميل يكلمكم.</p>
+                        <Input dir="ltr" inputMode="tel" value={settings.storePhone} onChange={e => setSettings(s => ({ ...s, storePhone: e.target.value }))} placeholder="01xxxxxxxxx" />
+                    </div>
+                    <div className="space-y-2">
+                        <Label className="text-base">رسالة الشكر</Label>
+                        <p className="text-sm text-muted-foreground">سطر للعميل جنب اللوجو. سيبها فاضية لو مش عايزها.</p>
+                        <Input value={settings.thanks} onChange={e => setSettings(s => ({ ...s, thanks: e.target.value }))} />
+                    </div>
+                    <div className="space-y-2">
+                        <Label className="text-base">عرض للأوردر الجاي</Label>
+                        <p className="text-sm text-muted-foreground">بيتطبع بعد رسالة الشكر. سيبه فاضي لو مفيش عرض.</p>
+                        <Input value={settings.offer} onChange={e => setSettings(s => ({ ...s, offer: e.target.value }))} placeholder="خصم 10% على أوردرك الجاي بالكود" />
+                    </div>
+                    <div className="space-y-2">
+                        <Label className="text-base">كود الخصم</Label>
+                        <p className="text-sm text-muted-foreground">بيتطبع جنب العرض في مربع متقطع عشان العميل يحتفظ بيه.</p>
+                        <Input dir="ltr" value={settings.promoCode} onChange={e => setSettings(s => ({ ...s, promoCode: e.target.value }))} placeholder="LAYLA10" />
+                    </div>
+                </div>
+
+                <div className="space-y-3">
                     <div className="flex items-center justify-between gap-4">
                         <div>
                             <Label className="text-base">ملاحظة في حالة عدم الاستلام</Label>
                             <p className="text-sm text-muted-foreground">
-                                بتطلب من المندوب يحصّل مصاريف الشحن لو العميل رفض الأوردر. بتتطبع بخط كبير في عرض البوليصة.
+                                بتطلب من المندوب يحصّل مصاريف الشحن لو العميل رفض الأوردر. ليها مكان في كل القوالب، بخط كبير وفي مربع.
                             </p>
                         </div>
                         <Switch checked={settings.refusalNote.enabled} onCheckedChange={enabled => setRefusal({ enabled })} />
@@ -86,7 +139,7 @@ export function WaybillSettingsCard() {
                     />
                     <p className="text-xs text-muted-foreground">
                         اكتب <code className="rounded bg-muted px-1">{SHIPPING_PLACEHOLDER}</code> في المكان اللي عايز يظهر فيه مبلغ شحن الأوردر.
-                        الأوردرات اللي شحنها مجاني مش هيتطبع عليها الملاحظة دي.
+                        بتتطبع على كل بوليصة. لو الشحن مجاني، بيتكتب مكانه اللي شركة الشحن بتاخده مننا.
                     </p>
                     {missingAmount && (
                         <p className="text-xs font-medium text-amber-700 dark:text-amber-400">

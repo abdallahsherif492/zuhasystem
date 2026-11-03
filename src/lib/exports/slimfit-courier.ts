@@ -1,5 +1,6 @@
 import * as XLSX from "xlsx";
 import { supabase } from "@/lib/supabase";
+import { governorateArabic } from "@/lib/governorates";
 
 /**
  * SlimFit's courier sheet ("التسجيل"): the courier's own .xls template,
@@ -27,17 +28,6 @@ const NO_PHONE = "ــــــــــــــــــــــــ";
 const CALL_NOTE = "الاتصال قبل الوصول بساعة";
 const DELIVERY_TIME = "ثلاثة ايام";
 const WEEKDAYS = ["الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"];
-
-/** The app stores governorates in English; the courier's sheet takes Arabic. */
-const GOVERNORATE_AR: Record<string, string> = {
-    Cairo: "القاهرة", Giza: "الجيزة", Alexandria: "الاسكندرية", Qaliubiya: "القليوبية",
-    Dakahlia: "الدقهلية", Sharkia: "الشرقية", Monufia: "المنوفية", Gharbiya: "الغربية",
-    Beheira: "البحيرة", "Kafr Al Sheikh": "كفر الشيخ", Damietta: "دمياط", "Port Said": "بورسعيد",
-    Ismailia: "الاسماعيلية", Suez: "السويس", Matrouh: "مطروح", "Red Sea": "البحر الاحمر",
-    "North Sinai": "شمال سيناء", "South Sinai": "جنوب سيناء", "Beni Suef": "بني سويف",
-    Minya: "المنيا", Fayoum: "الفيوم", Assiut: "اسيوط", Sohag: "سوهاج", Qena: "قنا",
-    Luxor: "الاقصر", Aswan: "اسوان", "New Valley": "الوادي الجديد",
-};
 
 interface ExportOrder {
     id: string;
@@ -93,7 +83,7 @@ function rowFor(o: ExportOrder, serial: number, today: Date): { row: (string | n
         products.push(...cells);
     }
 
-    const gov = GOVERNORATE_AR[ci.governorate || ""] || ci.raw_easyorders_gov || ci.governorate || "";
+    const gov = governorateArabic(ci.governorate) || ci.raw_easyorders_gov || ci.governorate || "";
     const note = [o.notes?.trim(), CALL_NOTE].filter(Boolean).join(" - ");
 
     return {
