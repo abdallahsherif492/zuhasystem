@@ -8,6 +8,7 @@ import {
 } from "@/lib/shipping/turbo";
 import { logIntegrationActivity } from "@/lib/logs/integration-logger";
 import { logBusinessAction } from "@/lib/logs/actions-logger";
+import { refusalNoteFor, waybillSettingsOf, type WaybillSettings } from "@/lib/orders/waybill-settings";
 
 /**
  * Sending orders to Turbo from the logistics page: first a preview of what
@@ -40,7 +41,7 @@ async function memberClient(businessId: string) {
     if (!config?.enabled || !config.apiKey || !config.accountId) {
         throw new Error("Turbo is not set up. Add the authentication key and client code in Settings → Integrations.");
     }
-    return { supabase, config, email: user.email };
+    return { supabase, config, email: user.email, waybill: waybillSettingsOf(business?.theme_config) };
 }
 
 interface OrderRow {
@@ -51,6 +52,7 @@ interface OrderRow {
     paid_amount: number | null;
     payment_status: string | null;
     notes: string | null;
+    shipping_cost: number | null;
     courier_code?: string | null;
     items: { quantity: number; unmapped_name: string | null; variant: { title: string | null; product: { name: string | null } | null } | null }[];
 }
@@ -66,11 +68,18 @@ async function alreadyAtTurbo(config: TurboConfig): Promise<Map<string, string>>
     return new Map(statuses.filter(s => s.invoice_number).map(s => [String(s.invoice_number).trim().toLowerCase(), String(s.code)]));
 }
 
-const ORDER_SELECT = "id, status, customer_info, total_amount, paid_amount, payment_status, notes, courier_code, items:order_items(quantity, unmapped_name, variant:variants(title, product:products(name)))";
+const ORDER_SELECT = "id, status, customer_info, total_amount, paid_amount, payment_status, notes, shipping_cost, courier_code, items:order_items(quantity, unmapped_name, variant:variants(title, product:products(name)))";
 
 /** What the courier collects: the total less any deposit already paid. */
 const amountToCollect = (o: OrderRow) =>
     o.payment_status === "Paid" ? 0 : Math.max(0, (Number(o.total_amount) || 0) - (Number(o.paid_amount) || 0));
+
+/**
+ * Turbo prints its own waybill from these, so the courier notes from Settings
+ * → Waybill go with the order's own.
+ */
+const notesFor = (o: OrderRow, waybill: WaybillSettings) =>
+    [o.notes, refusalNoteFor(waybill, o.shipping_cost)].map(n => (n || "").trim()).filter(Boolean).join(" | ");
 
 const summaryOf = (o: OrderRow) => (o.items || []).map(i => {
     const name = i.variant?.product?.name || i.unmapped_name || "منتج";
@@ -154,7 +163,7 @@ export interface TurboSendResult { orderId: string; ok: boolean; code?: string; 
 
 export async function turboSendAction(businessId: string, items: { orderId: string; governmentId: number; areaId: number }[]): Promise<{ results: TurboSendResult[]; error?: string }> {
     try {
-        const { supabase, config, email } = await memberClient(businessId);
+        const { supabase, config, email, waybill } = await memberClient(businessId);
         const atTurbo = await alreadyAtTurbo(config);
         const results: TurboSendResult[] = [];
         for (const item of items) {
@@ -178,7 +187,7 @@ export async function turboSendAction(businessId: string, items: { orderId: stri
                 address: ci.address || "",
                 amount_to_be_collected: amountToCollect(order),
                 order_summary: summaryOf(order),
-                notes: order.notes || "",
+                notes: notesFor(order, waybill),
                 remote_order_id: ref,
                 invoice_number: ref,
                 receiver: ci.name || "",

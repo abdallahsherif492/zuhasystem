@@ -24,6 +24,7 @@ import Image from "next/image";
 import { IntegrationLogs } from "@/components/settings/integration-logs";
 import { SubscriptionSettings } from "@/components/settings/subscription-settings";
 import { IntegrationInstructions } from "@/components/settings/integration-instructions";
+import { WaybillSettingsCard } from "@/components/settings/waybill-settings";
 
 /**
  * A logo at most 512px on its longest side, as WebP (keeps transparency).
@@ -56,7 +57,7 @@ export default function SettingsPage() {
     const [activeTab, setActiveTab] = useState("theme");
     useEffect(() => {
         const tab = new URLSearchParams(window.location.search).get("tab");
-        if (tab && ["theme", "shipping", "platforms", "tools", "inventory", "commission", "billing"].includes(tab)) setActiveTab(tab);
+        if (tab && ["theme", "shipping", "platforms", "tools", "inventory", "waybill", "commission", "billing"].includes(tab)) setActiveTab(tab);
     }, []);
     
     // Form state
@@ -420,6 +421,7 @@ export default function SettingsPage() {
                     <TabsTrigger value="platforms">{t("Order Platforms")}</TabsTrigger>
                     <TabsTrigger value="tools">{t("Tools")}</TabsTrigger>
                     <TabsTrigger value="inventory">{t("Inventory")}</TabsTrigger>
+                    <TabsTrigger value="waybill">{t("Waybill")}</TabsTrigger>
                     <TabsTrigger value="commission">{t("Commission")}</TabsTrigger>
                     <TabsTrigger value="billing">{t("Billing & Subscription")}</TabsTrigger>
                     <TabsTrigger value="logs">{t("System Logs")}</TabsTrigger>
@@ -1548,6 +1550,10 @@ export default function SettingsPage() {
                 </TabsContent>
 
                 {/* System Logs Tab */}
+                <TabsContent value="waybill" className="space-y-4">
+                    <WaybillSettingsCard />
+                </TabsContent>
+
                 <TabsContent value="commission" className="space-y-4">
                     <CommissionSettings />
                 </TabsContent>

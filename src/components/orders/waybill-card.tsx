@@ -5,6 +5,7 @@ import { Cairo } from "next/font/google";
 import { format } from "date-fns";
 import Barcode from "react-barcode";
 import { arabicProductLabel } from "@/lib/orders/product-label";
+import { refusalNoteFor, waybillSettingsOf } from "@/lib/orders/waybill-settings";
 
 // The waybill is read by couriers, most of whom read Arabic first, and it is
 // printed on whatever office printer is at hand. A font the page brings with
@@ -50,9 +51,10 @@ export function WaybillCard({ order, isFirstOnPage, business }: { order: Waybill
     const phone2 = order.customer_info?.phone2;
     const combinedPhone = phone2 ? `${phone1} / ${phone2}` : phone1;
 
-    const baseNotes = order.notes || "";
-    const requestNotes = "قابل للكسر";
-    const combinedNotes = baseNotes ? `${baseNotes} | ${requestNotes}` : requestNotes;
+    // The notes come from Settings → Waybill (lib/orders/waybill-settings.ts).
+    const waybill = waybillSettingsOf(business?.theme_config);
+    const combinedNotes = [order.notes, waybill.fixedNote].map(n => (n || "").trim()).filter(Boolean).join(" | ");
+    const refusalNote = refusalNoteFor(waybill, order.shipping_cost);
 
     // COD Calculation
     let collectAmount = order.total_amount;
@@ -162,6 +164,15 @@ export function WaybillCard({ order, isFirstOnPage, business }: { order: Waybill
                     </tbody>
                 </table>
             </div>
+
+            {/* For the courier at the door, so the full width and boxed:
+                the one instruction on the label that is not about this
+                parcel's contents. */}
+            {refusalNote && (
+                <p dir="rtl" className="border-2 border-black px-2 py-0.5 text-center text-[12px] font-extrabold leading-snug">
+                    {refusalNote}
+                </p>
+            )}
 
             {/* Footer */}
             <div className="mt-0.5 flex justify-between items-end">
