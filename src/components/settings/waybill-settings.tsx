@@ -105,6 +105,11 @@ export function WaybillSettingsCard() {
                         <Input dir="ltr" inputMode="tel" value={settings.storePhone} onChange={e => setSettings(s => ({ ...s, storePhone: e.target.value }))} placeholder="01xxxxxxxxx" />
                     </div>
                     <div className="space-y-2">
+                        <Label className="text-base">الويبسايت</Label>
+                        <p className="text-sm text-muted-foreground">بيتطبع جنب رقم المتجر عشان العميل يطلب منكم تاني.</p>
+                        <Input dir="ltr" inputMode="url" value={settings.storeWebsite} onChange={e => setSettings(s => ({ ...s, storeWebsite: e.target.value }))} placeholder="zuha-store.com" />
+                    </div>
+                    <div className="space-y-2">
                         <Label className="text-base">رسالة الشكر</Label>
                         <p className="text-sm text-muted-foreground">سطر للعميل جنب اللوجو. سيبها فاضية لو مش عايزها.</p>
                         <Input value={settings.thanks} onChange={e => setSettings(s => ({ ...s, thanks: e.target.value }))} />

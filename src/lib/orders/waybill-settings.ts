@@ -14,6 +14,8 @@ export interface WaybillSettings {
     template: WaybillTemplate;
     /** The store's number, for the courier or customer to call. */
     storePhone: string;
+    /** The store's website, printed beside the phone. */
+    storeWebsite: string;
     /** A line to the customer beside the logo. */
     thanks: string;
     /** An offer for the next order, printed after the thanks, with its code if it has one. */
@@ -31,6 +33,7 @@ export interface WaybillSettings {
 export const DEFAULT_WAYBILL_SETTINGS: WaybillSettings = {
     template: "courier",
     storePhone: "",
+    storeWebsite: "",
     thanks: "شكرًا لثقتك فينا، نتمنى المنتج يعجبك",
     offer: "",
     promoCode: "",
@@ -46,6 +49,7 @@ export function waybillSettingsOf(themeConfig: { waybill?: Partial<WaybillSettin
     return {
         template: WAYBILL_TEMPLATES.includes(saved.template as WaybillTemplate) ? saved.template as WaybillTemplate : DEFAULT_WAYBILL_SETTINGS.template,
         storePhone: saved.storePhone ?? DEFAULT_WAYBILL_SETTINGS.storePhone,
+        storeWebsite: saved.storeWebsite ?? DEFAULT_WAYBILL_SETTINGS.storeWebsite,
         thanks: saved.thanks ?? DEFAULT_WAYBILL_SETTINGS.thanks,
         offer: saved.offer ?? DEFAULT_WAYBILL_SETTINGS.offer,
         promoCode: saved.promoCode ?? DEFAULT_WAYBILL_SETTINGS.promoCode,

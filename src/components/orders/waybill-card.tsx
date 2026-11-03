@@ -170,7 +170,12 @@ export function WaybillCard({ order, business }: { order: WaybillOrder, isFirstO
         <>
             {waybill.thanks.trim() && <div className="wb-thanks">{waybill.thanks}</div>}
             {offer}
-            {waybill.storePhone.trim() && <div className="wb-store-phone">{waybill.storePhone}</div>}
+            {(waybill.storePhone.trim() || waybill.storeWebsite.trim()) && (
+                <div className="wb-store-phone">
+                    {waybill.storePhone.trim() && <bdi>{waybill.storePhone}</bdi>}
+                    {waybill.storeWebsite.trim() && <bdi>{waybill.storeWebsite.trim().replace(/^https?:\/\//, "").replace(/\/$/, "")}</bdi>}
+                </div>
+            )}
         </>
     );
     const brand = <>{logo}{words}</>;
@@ -261,7 +266,8 @@ const WAYBILL_CSS = `
 .wb-logo { position: relative; filter: grayscale(1) contrast(1.6); }
 .wb-logo-text { display: flex; align-items: center; justify-content: center; font-size: 16pt; font-weight: 900; filter: none; text-align: center; }
 .wb-thanks { font-weight: 800; line-height: 1.3; }
-.wb-store-phone { font-weight: 800; direction: ltr; unicode-bidi: isolate; }
+/* The phone and the website on one line, wrapping when the space is narrow. */
+.wb-store-phone { display: flex; flex-wrap: wrap; justify-content: center; gap: 0 2.5mm; font-weight: 800; direction: ltr; }
 .wb-offer { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 0.5mm 2mm; font-weight: 800; line-height: 1.3; }
 /* Cut-out look: a code the customer is meant to keep and type. */
 .wb-promo { border: 0.5mm dashed #000; border-radius: 1mm; padding: 0 2mm !important; font-weight: 900; letter-spacing: 0.6pt; }
@@ -299,7 +305,7 @@ const WAYBILL_CSS = `
 .wb-letterhead .wb-head { display: grid; grid-template-columns: 42mm 1fr 52mm; align-items: center; gap: 3mm; padding-bottom: 2mm !important; border-bottom: 0.6mm solid #000; }
 .wb-letterhead .wb-logo { width: 42mm; height: 24mm; }
 .wb-letterhead .wb-thanks { font-size: 12.5pt; }
-.wb-letterhead .wb-store-phone { font-size: 10pt; }
+.wb-letterhead .wb-store-phone { font-size: 10pt; justify-content: flex-end; }
 .wb-letterhead .wb-offer { justify-content: flex-start; font-size: 10.5pt; }
 .wb-letterhead .wb-bars { height: 13mm; }
 .wb-letterhead .wb-cols { display: grid; grid-template-columns: 0.85fr 1.5fr 42mm; gap: 4mm; min-height: 0; }
