@@ -12,7 +12,8 @@ import { formatCurrency, cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend, CartesianGrid } from "recharts";
-import { Loader2, DollarSign, AlertTriangle, CheckCircle2, Plus, Globe, Bell, X, ChevronLeft, ChevronRight } from "lucide-react";
+import { Loader2, DollarSign, AlertTriangle, CheckCircle2, Plus, Globe, Bell, X } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cairoDate } from "@/lib/cairo-day";
 import { DateRangePicker } from "@/components/date-range-picker";
 import { AdvancedSearch } from "@/components/dashboard/advanced-search";
@@ -487,31 +488,28 @@ function DashboardContent() {
   );
 }
 
-/** One month at a time, back and forth; the months to come are not offered. */
+/** The months to choose from: this month first, then the year before it. */
 function MonthPicker({ month, max, onChange, ar }: { month: string; max: string; onChange: (m: string) => void; ar: boolean }) {
-  const shift = (by: number) => {
-    const [y, m] = month.split("-").map(Number);
-    const d = new Date(Date.UTC(y, m - 1 + by, 1));
-    return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
-  };
-  const label = new Intl.DateTimeFormat(ar ? "ar-EG-u-nu-latn" : "en-GB", { month: "long", year: "numeric", timeZone: "UTC" }).format(new Date(`${month}-01T12:00:00Z`));
-  const atLatest = month >= max;
-  // Earlier months sit on the reading side the eye comes from.
-  const Back = ar ? ChevronRight : ChevronLeft;
-  const Forward = ar ? ChevronLeft : ChevronRight;
+  const [y, m] = max.split("-").map(Number);
+  const nameOf = new Intl.DateTimeFormat(ar ? "ar-EG-u-nu-latn" : "en-GB", { month: "long", year: "numeric", timeZone: "UTC" });
+  const months = Array.from({ length: 12 }, (_, i) => {
+    const d = new Date(Date.UTC(y, m - 1 - i, 1));
+    const value = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+    const name = nameOf.format(d);
+    const label = i === 0 ? (ar ? `الشهر ده (${name})` : `This month (${name})`)
+      : i === 1 ? (ar ? `الشهر اللي فات (${name})` : `Last month (${name})`)
+      : name;
+    return { value, label };
+  });
   return (
-    <div className="flex items-center gap-1 rounded-lg border bg-card p-0.5" role="group" aria-label={ar ? "شهر الفلوس" : "Month shown"}>
-      <Button type="button" variant="ghost" size="icon" className="h-8 w-8" onClick={() => onChange(shift(-1))} aria-label={ar ? "الشهر اللي قبله" : "Previous month"}>
-        <Back className="h-4 w-4" />
-      </Button>
-      <span className="min-w-28 text-center text-sm font-medium tabular-nums" aria-live="polite">{label}</span>
-      <Button type="button" variant="ghost" size="icon" className="h-8 w-8" onClick={() => onChange(shift(1))} disabled={atLatest} aria-label={ar ? "الشهر اللي بعده" : "Next month"}>
-        <Forward className="h-4 w-4" />
-      </Button>
-      {month !== max && (
-        <Button type="button" variant="ghost" size="sm" className="h-8 px-2 text-xs" onClick={() => onChange(max)}>{ar ? "الشهر ده" : "This month"}</Button>
-      )}
-    </div>
+    <Select value={month} onValueChange={onChange}>
+      <SelectTrigger className="h-9 w-56" aria-label={ar ? "شهر الفلوس" : "Month shown"}>
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        {months.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+      </SelectContent>
+    </Select>
   );
 }
 
