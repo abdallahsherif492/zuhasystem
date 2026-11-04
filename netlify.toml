@@ -6,3 +6,7 @@
 
 [build.environment]
   NODE_VERSION = "22"
+  # NEXT_PUBLIC_* values are public by design: Next.js inlines them into the
+  # browser bundle, and the Supabase anon key is guarded by row-level security.
+  # Real secrets (SUPABASE_SERVICE_ROLE_KEY, CRON_SECRET) are still scanned.
+  SECRETS_SCAN_OMIT_KEYS = "NEXT_PUBLIC_SUPABASE_URL,NEXT_PUBLIC_SUPABASE_ANON_KEY,NEXT_PUBLIC_SENTRY_DSN"
