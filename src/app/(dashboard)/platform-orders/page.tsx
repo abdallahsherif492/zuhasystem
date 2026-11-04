@@ -38,13 +38,17 @@ import { MISSED_ORDERS_IN_QUEUE, MissedOrderNote, MissedOrderTag } from "@/compo
 const ORDER_SELECT = `
     *,
     order_items (
-        id, variant_id, quantity, price_at_sale, unmapped_name, unmapped_sku,
+        id, variant_id, quantity, price_at_sale, cost_at_sale, unmapped_name, unmapped_sku,
         variants (
             title, sku, product_id,
             products (name)
         )
     )
 `;
+
+/** What an order's lines cost us: the order's total_cost, which its profit is generated from. */
+const itemsCost = (items: { quantity: number; cost_at_sale?: number | null }[]) =>
+    items.reduce((sum, i) => sum + (Number(i.cost_at_sale) || 0) * (Number(i.quantity) || 0), 0);
 
 /**
  * Waiting, and from a store (EasyOrders or Shopify) or a missed order from it
@@ -84,6 +88,7 @@ interface OrderItem {
     variant_id: string | null;
     quantity: number;
     price_at_sale: number;
+    cost_at_sale?: number | null;
     unmapped_name?: string;
     unmapped_sku?: string;
     variants?: {
@@ -102,6 +107,7 @@ interface Order {
     status: string;
     subtotal: number;
     total_amount: number;
+    total_cost?: number | null;
     shipping_cost: number;
     easyorders_id?: string;
     shopify_id?: string;
@@ -125,6 +131,7 @@ interface Variant {
     title: string;
     sku: string;
     sale_price: number;
+    cost_price?: number | null;
     products: { name: string };
 }
 
@@ -198,7 +205,7 @@ function PlatformOrdersContent() {
         if (!activeBusiness) return;
         const { data } = await supabase
             .from('variants')
-            .select('id, title, sku, sale_price, products!inner(name)')
+            .select('id, title, sku, sale_price, cost_price, products!inner(name)')
             .eq('products.business_id', activeBusiness.id);
         if (data) setVariants(data as any[]);
     };
@@ -671,13 +678,18 @@ function PlatformOrdersContent() {
         const newItems = mutate(order.order_items);
         const newSubtotal = newItems.reduce((sum, i) => sum + (i.price_at_sale * i.quantity), 0);
         const newTotal = newSubtotal + order.shipping_cost;
+        // The cost follows the lines too. It used to stay as the order arrived,
+        // so an order whose unknown item was swapped for real products kept a
+        // cost of 0, and every quantity change left it stale; profit is
+        // generated from it, and so were Actual Returns and the dashboard.
+        const newCost = itemsCost(newItems);
 
         setOrders(prev => prev.map(o => o.id === orderId
-            ? { ...o, subtotal: newSubtotal, total_amount: newTotal, order_items: newItems }
+            ? { ...o, subtotal: newSubtotal, total_amount: newTotal, total_cost: newCost, order_items: newItems }
             : o));
 
         try {
-            await enqueueSave(orderId, () => handleUpdateOrder(orderId, { subtotal: newSubtotal, total_amount: newTotal }));
+            await enqueueSave(orderId, () => handleUpdateOrder(orderId, { subtotal: newSubtotal, total_amount: newTotal, total_cost: newCost }));
         } catch (e) {
             toast.error(t("Failed to save"));
         }
@@ -709,6 +721,7 @@ function PlatformOrdersContent() {
                 ...item,
                 variant_id: variantId,
                 price_at_sale: item.price_at_sale || variant.sale_price,
+                cost_at_sale: Number(variant.cost_price) || 0,
                 variants: {
                     title: variant.title,
                     sku: variant.sku,
@@ -719,7 +732,7 @@ function PlatformOrdersContent() {
             : item));
 
         try {
-            await enqueueSave(orderId, () => handleUpdateItem(itemId, { variant_id: variantId }));
+            await enqueueSave(orderId, () => handleUpdateItem(itemId, { variant_id: variantId, cost_at_sale: Number(variant.cost_price) || 0 }));
 
             if (activeBusiness && targetOrder) {
                 logBusinessAction({
@@ -1341,6 +1354,7 @@ function PlatformOrdersContent() {
                                                             };
                                                             
                                                             const newTotal = order.order_items.reduce((sum, item) => sum + (item.price_at_sale * item.quantity), 0) + vari.sale_price + order.shipping_cost;
+                                                            const newCost = itemsCost([...order.order_items, newItemObj]);
                                                             
                                                             setOrders(prev => prev.map(o => {
                                                                 if (o.id === order.id) {
@@ -1348,13 +1362,14 @@ function PlatformOrdersContent() {
                                                                         ...o,
                                                                         total_amount: newTotal,
                                                                         subtotal: newTotal - o.shipping_cost,
+                                                                        total_cost: newCost,
                                                                         order_items: [...o.order_items, newItemObj as any]
                                                                     };
                                                                 }
                                                                 return o;
                                                             }));
                                                             
-                                                            enqueueSave(order.id, () => handleUpdateOrder(order.id, { subtotal: newTotal - order.shipping_cost, total_amount: newTotal }))
+                                                            enqueueSave(order.id, () => handleUpdateOrder(order.id, { subtotal: newTotal - order.shipping_cost, total_amount: newTotal, total_cost: newCost }))
                                                                 .catch(() => toast.error(t("Failed to save")));
                                                             
                                                             setAddItemOpen(prev => ({...prev, [order.id]: false}));

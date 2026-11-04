@@ -582,24 +582,35 @@ export function moneyAttention(m: Money, ar: boolean): AttentionItem[] {
     return items;
 }
 
+const categoryIs = (name: string) => (e: { category: string }) => e.category?.trim().toLowerCase() === name;
+
 /**
- * The period's money: what delivered orders earned, what returns, ads and
- * running costs took, and what is left; beside it, where the cash is.
+ * The month's money: what delivered orders earned, what returns, ads and
+ * running costs took, and what is left; beside it, where the money is.
+ *
+ * Returns are what was booked by hand in accounting under "Returns" (the
+ * courier's charge on a returned parcel, deposits paid back), taken out of
+ * the running costs to stand on their own. Nothing is estimated for them:
+ * dashboard_money's return_shipping, the courier rate on every returned
+ * order, is not used.
  */
-export function MoneyPanel({ m, treasury, couriers, ar }: {
+export function MoneyPanel({ m, treasury, couriers, stock, ar }: {
     m: Money;
     treasury: { account_name: string; balance: number }[] | null;
     couriers: { company_name: string | null; outstanding: number }[] | null;
+    stock: { value: number; units: number } | null;
     ar: boolean;
 }) {
     const t = (a: string, e: string) => (ar ? a : e);
-    const net = m.delivered_profit - m.return_shipping - m.ads - m.opex;
-    const topOpex = m.expenses_by_category.filter(e => e.category?.trim().toLowerCase() !== "ads").slice(0, 3);
+    const returnsBooked = m.expenses_by_category.filter(categoryIs("returns")).reduce((s, e) => s + e.amount, 0);
+    const running = m.opex - returnsBooked;
+    const net = m.delivered_profit - returnsBooked - m.ads - running;
+    const topOpex = m.expenses_by_category.filter(e => !categoryIs("ads")(e) && !categoryIs("returns")(e)).slice(0, 3);
     const lines: { label: string; hint?: string; amount: number; sign: 1 | -1 }[] = [
         { label: t("ربح الأوردرات اللي اتسلمت", "Profit on delivered orders"), hint: t(`${int(m.delivered_orders)} أوردر، بعد تكلفة البضاعة والشحن`, `${int(m.delivered_orders)} orders, after goods and courier`), amount: m.delivered_profit, sign: 1 },
-        { label: t("شحن المرتجعات", "Courier fees on returns"), hint: t(`${int(m.returned_orders)} مرتجع`, `${int(m.returned_orders)} returns`), amount: m.return_shipping, sign: -1 },
+        { label: t("المرتجعات", "Returns"), hint: t(`المسجّل في الحسابات تحت Returns، و${int(m.returned_orders)} أوردر رجع`, `As booked in accounting under Returns; ${int(m.returned_orders)} orders came back`), amount: returnsBooked, sign: -1 },
         { label: t("الإعلانات", "Ads"), amount: m.ads, sign: -1 },
-        { label: t("مصاريف التشغيل", "Running costs"), hint: topOpex.map(e => `${e.category} ${int(e.amount)}`).join("، ") || undefined, amount: m.opex, sign: -1 },
+        { label: t("مصاريف التشغيل", "Running costs"), hint: topOpex.map(e => `${e.category} ${int(e.amount)}`).join("، ") || undefined, amount: running, sign: -1 },
     ];
     const cash = (treasury || []).reduce((s, a) => s + n(a.balance), 0);
     const owed = (couriers || []).filter(c => c.company_name).reduce((s, c) => s + n(c.outstanding), 0);
@@ -657,6 +668,16 @@ export function MoneyPanel({ m, treasury, couriers, ar }: {
                         <dd className="mt-0.5 text-2xl font-semibold tabular-nums" dir="ltr">{couriers ? money(Math.max(owed, 0)) : "—"}</dd>
                         {topCouriers.length > 0 && (
                             <div className="mt-1 text-xs text-muted-foreground">{topCouriers.map(c => `${c.company_name} ${int(n(c.outstanding))}`).join("، ")}</div>
+                        )}
+                    </div>
+                    <div className="px-4 py-3 sm:px-5">
+                        <dt className="flex items-center justify-between text-sm text-muted-foreground">
+                            <span>{t("في المخزون", "In stock")}</span>
+                            <Link href="/inventory" className="text-primary underline-offset-4 hover:underline">{t("المخزون", "Inventory")}</Link>
+                        </dt>
+                        <dd className="mt-0.5 text-2xl font-semibold tabular-nums" dir="ltr">{stock ? money(stock.value) : "—"}</dd>
+                        {stock && (
+                            <div className="mt-1 text-xs text-muted-foreground">{t(`${int(stock.units)} قطعة، بسعر التكلفة`, `${int(stock.units)} units, at cost`)}</div>
                         )}
                     </div>
                     {m.payables > 0 && (

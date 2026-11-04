@@ -12,7 +12,8 @@ import { formatCurrency, cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend, CartesianGrid } from "recharts";
-import { Loader2, DollarSign, AlertTriangle, CheckCircle2, Plus, Globe, Bell, X } from "lucide-react";
+import { Loader2, DollarSign, AlertTriangle, CheckCircle2, Plus, Globe, Bell, X, ChevronLeft, ChevronRight } from "lucide-react";
+import { cairoDate } from "@/lib/cairo-day";
 import { DateRangePicker } from "@/components/date-range-picker";
 import { AdvancedSearch } from "@/components/dashboard/advanced-search";
 import { format } from "date-fns";
@@ -20,8 +21,8 @@ import { ModeratorsLeague } from "@/components/dashboard/moderators-league";
 import { CommissionBoard } from "@/components/dashboard/commission-board";
 import { AdvancedAnalytics } from "@/components/dashboard/advanced-analytics";
 import {
-  AttentionList, Disclosure, FulfilmentStrip, MoneyPanel, PlatformQueue, Scoreboard, Section, ShippingQueue,
-  moneyAttention, normalizeMoney, normalizeOverview, overviewAttention, type AttentionItem, type Money, type Overview,
+  Disclosure, FulfilmentStrip, MoneyPanel, PlatformQueue, Scoreboard, Section, ShippingQueue,
+  normalizeMoney, normalizeOverview, type Money, type Overview,
 } from "@/components/dashboard/overview";
 
 // The dashboard is read in Arabic, and the app's own typeface has no Arabic
@@ -52,10 +53,9 @@ const unitsOf = (p: TopProduct) => Number(p.total_sold ?? p.total_units ?? p.qua
 
 /**
  * The dashboard, in the order the questions come:
- *   0. What needs someone right now?     one list, most urgent first, each with its page
  *   1. How did the period go?            sales, orders, confirmation, delivery, AOV
- *   2. The money (managers)              profit after returns, ads and running costs;
- *                                        treasury, money still with couriers, suppliers
+ *   2. The money (managers), by month    profit after returns, ads and running costs;
+ *                                        treasury, money still with couriers, stock, suppliers
  *   3. What work is waiting, and who did what?
  *                                        store orders to confirm, shipping problems,
  *                                        preparing and shipping, commission, the league
@@ -82,6 +82,12 @@ function DashboardContent() {
   const [topProducts, setTopProducts] = useState<TopProduct[]>([]);
   const [restockAlerts, setRestockAlerts] = useState<RestockAlertItem[]>([]);
   const [chartData, setChartData] = useState<ChartPoint[]>([]);
+
+  // The money section reads a whole month of its own, not the period above:
+  // a profit figure for a day or a week says little once costs are booked
+  // monthly. yyyy-MM, this month to start with.
+  const thisMonth = cairoDate().slice(0, 7);
+  const [moneyMonth, setMoneyMonth] = useState(thisMonth);
 
   const fromDate = searchParams.get("from");
   const toDate = searchParams.get("to");
@@ -115,6 +121,33 @@ function DashboardContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fromDate, toDate, activeBusiness]);
 
+  // The month's money; {allowed: false} for anyone who is not a manager.
+  useEffect(() => {
+    if (!activeBusiness) return;
+    let stale = false;
+    const [y, mo] = moneyMonth.split("-").map(Number);
+    const lastDay = new Date(Date.UTC(y, mo, 0)).getUTCDate();
+    (async () => {
+      const res = await supabase.rpc("dashboard_money", { p_business_id: activeBusiness.id, p_from: `${moneyMonth}-01`, p_to: `${moneyMonth}-${String(lastDay).padStart(2, "0")}` });
+      if (stale) return;
+      const m = res.error ? null : normalizeMoney(res.data as Money);
+      setMoneyData(m);
+      if (m?.allowed) {
+        // Where the cash is, from the functions the accounting and courier
+        // pages already use, so the three screens agree. Today's balances,
+        // whatever month is picked.
+        const [tr, cm] = await Promise.all([
+          supabase.rpc("get_treasury_balances", { p_business_id: activeBusiness.id }),
+          supabase.rpc("get_courier_collection_match", { p_business_id: activeBusiness.id, p_from: "2020-01-01T00:00:00Z", p_to: new Date().toISOString() }),
+        ]);
+        if (stale) return;
+        setTreasury(tr.error ? null : ((tr.data || []) as { account_name: string; balance: number }[]));
+        setCouriers(cm.error ? null : ((cm.data || []) as { company_name: string | null; outstanding: number }[]));
+      }
+    })().catch(e => console.error("dashboard_money failed:", e));
+    return () => { stale = true; };
+  }, [activeBusiness, moneyMonth]);
+
   async function fetchDashboardData() {
     if (!activeBusiness) return;
     const from = fromDate || todayStr;
@@ -123,11 +156,9 @@ function DashboardContent() {
     const end = `${to}T23:59:59`;
 
     try {
-      const [ov, mo, dailyRes, topRes, recentRes] = await Promise.all([
+      const [ov, dailyRes, topRes, recentRes] = await Promise.all([
         // The period, its predecessor and the queues, in one call.
         supabase.rpc("dashboard_overview", { p_business_id: activeBusiness.id, p_from: from, p_to: to }),
-        // The money; {allowed: false} for anyone who is not a manager.
-        supabase.rpc("dashboard_money", { p_business_id: activeBusiness.id, p_from: from, p_to: to }),
         supabase.rpc("get_daily_sales", { from_date: start, to_date: end, p_business_id: activeBusiness.id }),
         supabase.rpc("get_top_products", { from_date: start, to_date: end, limit_count: 5, p_business_id: activeBusiness.id }),
         supabase.from("orders")
@@ -145,19 +176,6 @@ function DashboardContent() {
       } else {
         setOverviewError(null);
         setOverview(normalizeOverview(ov.data as Overview));
-      }
-
-      const m = mo.error ? null : normalizeMoney(mo.data as Money);
-      setMoneyData(m);
-      if (m?.allowed) {
-        // Where the cash is, from the functions the accounting and courier
-        // pages already use, so the three screens agree.
-        const [tr, cm] = await Promise.all([
-          supabase.rpc("get_treasury_balances", { p_business_id: activeBusiness.id }),
-          supabase.rpc("get_courier_collection_match", { p_business_id: activeBusiness.id, p_from: "2020-01-01T00:00:00Z", p_to: new Date().toISOString() }),
-        ]);
-        setTreasury(tr.error ? null : ((tr.data || []) as { account_name: string; balance: number }[]));
-        setCouriers(cm.error ? null : ((cm.data || []) as { company_name: string | null; outstanding: number }[]));
       }
 
       setRecentOrders((recentRes.data || []) as RecentOrder[]);
@@ -222,8 +240,10 @@ function DashboardContent() {
         const predictedDemand = dailyVelocity * cDays;
         const currentStock = v.stock_qty || 0;
         const needToBuy = Math.max(0, Math.ceil(predictedDemand - currentStock));
-        stockValue += ((v.stock_qty || 0) * (v.cost_price || 0)) || 0;
-        stockUnits += v.stock_qty || 0;
+        // A negative count is a counting error, not stock that is owed.
+        const onHand = Math.max(0, v.stock_qty || 0);
+        stockValue += (onHand * (v.cost_price || 0)) || 0;
+        stockUnits += onHand;
         if (needToBuy > 0) {
           alerts.push({
             variantId: v.id,
@@ -259,18 +279,6 @@ function DashboardContent() {
   const compareLabel = fromDate === to ? c(isToday ? "عن امبارح" : "عن اليوم اللي قبله", isToday ? "vs yesterday" : "vs the day before") : c("عن الفترة اللي قبلها", "vs the period before");
   const maxSold = Math.max(1, ...topProducts.map(unitsOf));
   const waitingCount = overview?.platform.waiting ?? 0;
-
-  // Everything that needs someone, gathered from every section below.
-  const soldOut = restockAlerts.filter(r => r.currentStock <= 0);
-  const attention: AttentionItem[] = [
-    ...(overview ? overviewAttention(overview, ar) : []),
-    ...(moneyData?.allowed ? moneyAttention(moneyData, ar) : []),
-    ...(soldOut.length ? [{
-      key: "sold-out", tone: "risk" as const, href: "/purchases", action: c("اطلب", "Restock"),
-      text: c(`${soldOut.length} منتج بيتباع خلص من المخزون: ${soldOut.slice(0, 2).map(r => r.productName).join("، ")}${soldOut.length > 2 ? " وغيرهم" : ""}.`,
-              `${soldOut.length} selling products are out of stock: ${soldOut.slice(0, 2).map(r => r.productName).join(", ")}${soldOut.length > 2 ? " and more" : ""}.`),
-    }] : []),
-  ];
 
   const overviewNotice = overviewError && (
     <div className="rounded-xl border border-dashed p-5 text-sm text-muted-foreground">
@@ -331,17 +339,12 @@ function DashboardContent() {
           : <div className="h-[360px] animate-pulse rounded-2xl border bg-muted/30 motion-reduce:animate-none" />)}
       </section>
 
-      {/* 0 — What needs someone right now */}
-      <Section id="dash-attention" title={c("محتاج انتباهك", "Needs your attention")}
-               description={c("كل اللي مستني حد يتحرك، الأهم الأول.", "Everything waiting on someone, most urgent first.")}>
-        {overviewError === "missing" ? overviewNotice : <AttentionList items={attention} ar={ar} loading={!overview && !overviewError} />}
-      </Section>
-
       {/* 2 — The money: managers only */}
       {moneyData?.allowed && (
         <Section id="dash-money" title={c("الفلوس", "Money")}
-                 description={c("ربح الفترة بعد المرتجعات والإعلانات والمصاريف، وفين الكاش دلوقتي.", "The period's profit after returns, ads and costs, and where the cash is now.")}>
-          <MoneyPanel m={moneyData} treasury={treasury} couriers={couriers} ar={ar} />
+                 description={c("ربح الشهر بعد المرتجعات والإعلانات والمصاريف، وفين الفلوس دلوقتي.", "The month's profit after returns, ads and costs, and where the money is now.")}
+                 aside={<MonthPicker month={moneyMonth} max={thisMonth} onChange={setMoneyMonth} ar={ar} />}>
+          <MoneyPanel m={moneyData} treasury={treasury} couriers={couriers} stock={stock} ar={ar} />
         </Section>
       )}
       {moneyData === null && overview && overview.fulfilment === null && (
@@ -480,6 +483,34 @@ function DashboardContent() {
           </div>
         </div>
       </Section>
+    </div>
+  );
+}
+
+/** One month at a time, back and forth; the months to come are not offered. */
+function MonthPicker({ month, max, onChange, ar }: { month: string; max: string; onChange: (m: string) => void; ar: boolean }) {
+  const shift = (by: number) => {
+    const [y, m] = month.split("-").map(Number);
+    const d = new Date(Date.UTC(y, m - 1 + by, 1));
+    return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+  };
+  const label = new Intl.DateTimeFormat(ar ? "ar-EG-u-nu-latn" : "en-GB", { month: "long", year: "numeric", timeZone: "UTC" }).format(new Date(`${month}-01T12:00:00Z`));
+  const atLatest = month >= max;
+  // Earlier months sit on the reading side the eye comes from.
+  const Back = ar ? ChevronRight : ChevronLeft;
+  const Forward = ar ? ChevronLeft : ChevronRight;
+  return (
+    <div className="flex items-center gap-1 rounded-lg border bg-card p-0.5" role="group" aria-label={ar ? "شهر الفلوس" : "Month shown"}>
+      <Button type="button" variant="ghost" size="icon" className="h-8 w-8" onClick={() => onChange(shift(-1))} aria-label={ar ? "الشهر اللي قبله" : "Previous month"}>
+        <Back className="h-4 w-4" />
+      </Button>
+      <span className="min-w-28 text-center text-sm font-medium tabular-nums" aria-live="polite">{label}</span>
+      <Button type="button" variant="ghost" size="icon" className="h-8 w-8" onClick={() => onChange(shift(1))} disabled={atLatest} aria-label={ar ? "الشهر اللي بعده" : "Next month"}>
+        <Forward className="h-4 w-4" />
+      </Button>
+      {month !== max && (
+        <Button type="button" variant="ghost" size="sm" className="h-8 px-2 text-xs" onClick={() => onChange(max)}>{ar ? "الشهر ده" : "This month"}</Button>
+      )}
     </div>
   );
 }

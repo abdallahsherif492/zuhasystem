@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { supabase, fetchAll } from "@/lib/supabase";
 import { useBusiness } from "@/contexts/BusinessContext";
 import { formatCurrency } from "@/lib/utils";
+import { cairoDate, cairoDayStart, nextDay } from "@/lib/cairo-day";
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Loader2, DollarSign, ArrowDownRight, ArrowUpRight, Percent, Package, Wallet, TrendingDown, Truck, AlertTriangle } from "lucide-react";
@@ -39,6 +40,7 @@ function ActualReturnsContent() {
         operationalExpenses: 0,
         adsExpenses: 0,
         courierShippingCost: 0,
+        returnsExpenses: 0,
         netProfit: 0,
         profitMargin: 0,
         totalShippingCost: 0,
@@ -57,12 +59,15 @@ function ActualReturnsContent() {
     async function fetchActualReturns() {
         setLoading(true);
         try {
-            const today = new Date();
-            const defaultStart = new Date(today.getFullYear(), today.getMonth(), 1).toISOString();
-            const defaultEnd = today.toISOString();
-
-            const start = fromDate || defaultStart;
-            const end = toDate || defaultEnd;
+            // Whole Cairo days, the last one included. The picker sends
+            // yyyy-MM-dd; compared with created_at as it was, "to" meant UTC
+            // midnight at the start of the last day, so that day's orders
+            // were all left out, and the first day started at 3am.
+            const today = cairoDate();
+            const fromDay = fromDate || `${today.slice(0, 8)}01`;
+            const toDay = toDate || today;
+            const start = cairoDayStart(fromDay);
+            const endExclusive = cairoDayStart(nextDay(toDay));
 
             // 1. Fetch Collected Orders with fetchAll
             const orders = await fetchAll((from, to) => {
@@ -71,7 +76,7 @@ function ActualReturnsContent() {
                     .select('created_at, total_amount, total_cost, shipping_cost, actual_shipping_cost, status, customer_info')
                     .eq('status', 'Collected')
                     .gte('created_at', start)
-                    .lte('created_at', end);
+                    .lt('created_at', endExclusive);
                 if (activeBusiness?.id) {
                     q = q.eq('business_id', activeBusiness.id);
                 }
@@ -84,8 +89,8 @@ function ActualReturnsContent() {
                     .from('transactions')
                     .select('transaction_date, amount, category, type')
                     .eq('type', 'expense')
-                    .gte('transaction_date', start)
-                    .lte('transaction_date', end);
+                    .gte('transaction_date', fromDay)
+                    .lte('transaction_date', toDay);
                 if (activeBusiness?.id) {
                     q = q.eq('business_id', activeBusiness.id);
                 }
@@ -103,8 +108,8 @@ function ActualReturnsContent() {
                 let q = supabase
                     .from(table)
                     .select(col)
-                    .gte('date', start)
-                    .lte('date', end);
+                    .gte('date', fromDay)
+                    .lte('date', toDay);
                 if (activeBusiness?.id) {
                     q = q.eq('business_id', activeBusiness.id);
                 }
@@ -134,8 +139,11 @@ function ActualReturnsContent() {
 
             const ordersByDate: Record<string, { rev: number, cogs: number, courier: number }> = {};
 
+            // DD/MM/YYYY of the Cairo day, so orders and expenses meet on the same day.
+            const dayKey = (ymd: string) => ymd.split('-').reverse().join('/');
+
             (orders || []).forEach(o => {
-                const dateKey = new Date(o.created_at).toLocaleDateString('en-GB'); // DD/MM/YYYY
+                const dateKey = dayKey(cairoDate(o.created_at));
                 const r = Number(o.total_amount) || 0;
                 const c = Number(o.total_cost) || 0;
 
@@ -156,14 +164,21 @@ function ActualReturnsContent() {
             const opexByDate: Record<string, number> = {};
             let adsSpent = 0;
             const adsByDate: Record<string, number> = {};
+            // Returns are booked by hand, as expenses under "Returns": what the
+            // courier charged for a returned parcel, deposits paid back. Kept
+            // on a line of their own, and nothing is estimated for them.
+            let returnsSpent = 0;
 
             (transactions || []).forEach(t => {
                 const cat = t.category?.toLowerCase() || '';
                 if (cat === 'purchases') return; // Exclude Purchases from opex
-                const dateKey = new Date(t.transaction_date).toLocaleDateString('en-GB');
+                const dateKey = dayKey(String(t.transaction_date).slice(0, 10));
                 const amt = Math.abs(Number(t.amount)) || 0;
 
-                if (cat === 'ads') {
+                if (cat === 'returns') {
+                    returnsSpent += amt;
+                    opexByDate[dateKey] = (opexByDate[dateKey] || 0) + amt;
+                } else if (cat === 'ads') {
                     adsSpent += amt;
                     if (!adsByDate[dateKey]) adsByDate[dateKey] = 0;
                     adsByDate[dateKey] += amt;
@@ -174,7 +189,7 @@ function ActualReturnsContent() {
                 }
             });
 
-            const netProfit = rev - cogs - opex - adsSpent - courierTotal;
+            const netProfit = rev - cogs - opex - returnsSpent - adsSpent - courierTotal;
             const profitMargin = rev > 0 ? (netProfit / rev) * 100 : 0;
 
             setMetrics({
@@ -183,6 +198,7 @@ function ActualReturnsContent() {
                 operationalExpenses: opex,
                 adsExpenses: adsSpent,
                 courierShippingCost: courierTotal,
+                returnsExpenses: returnsSpent,
                 netProfit,
                 profitMargin,
                 totalShippingCost: ship,
@@ -240,7 +256,7 @@ function ActualReturnsContent() {
     const pieData = [
         { name: 'Net Profit', value: Math.max(0, metrics.netProfit) }, // Hide if negative
         { name: 'COGS', value: metrics.deliveredCogs },
-        { name: 'OpEx', value: metrics.operationalExpenses },
+        { name: 'OpEx', value: metrics.operationalExpenses + metrics.returnsExpenses },
         { name: 'Ads', value: metrics.adsExpenses },
         { name: 'Courier', value: metrics.courierShippingCost }
     ];
@@ -274,8 +290,8 @@ function ActualReturnsContent() {
                         <Wallet className="h-4 w-4 text-orange-500" />
                     </CardHeader>
                     <CardContent>
-                        <div className="text-2xl font-bold text-orange-500">-{formatCurrency(metrics.operationalExpenses)}</div>
-                        <p className="text-xs text-muted-foreground mt-1">Salaries, Rent, Fulfilment</p>
+                        <div className="text-2xl font-bold text-orange-500">-{formatCurrency(metrics.operationalExpenses + metrics.returnsExpenses)}</div>
+                        <p className="text-xs text-muted-foreground mt-1">Salaries, Rent, Fulfilment{metrics.returnsExpenses > 0 && ` + Returns ${formatCurrency(metrics.returnsExpenses)}`}</p>
                     </CardContent>
                 </Card>
                 <Card>
@@ -394,6 +410,10 @@ function ActualReturnsContent() {
                         <div className="flex justify-between items-center py-2 border-b">
                             <span className="font-medium text-muted-foreground">- Operational Expenses (Salaries, Rent, etc)</span>
                             <span className="text-orange-500 font-semibold">-{formatCurrency(metrics.operationalExpenses)}</span>
+                        </div>
+                        <div className="flex justify-between items-center py-2 border-b">
+                            <span className="font-medium text-muted-foreground">- Returns (as booked in accounting)</span>
+                            <span className="text-orange-500 font-semibold">-{formatCurrency(metrics.returnsExpenses)}</span>
                         </div>
                         <div className="flex justify-between items-center py-2 border-b">
                             <span className="font-medium text-muted-foreground">- Ad Spends</span>
