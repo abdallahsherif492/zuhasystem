@@ -107,7 +107,7 @@ function OrdersContent() {
     // RPC does not return — which courier (for its return fee) and whether a
     // returned order's goods went back on the shelf.
     const [overheadRows, setOverheadRows] = useState<OverheadRow[] | null>(null);
-    const [orderExtras, setOrderExtras] = useState<Map<string, { shipping_company_id: string | null; restock_on_return: boolean | null }>>(new Map());
+    const [orderExtras, setOrderExtras] = useState<Map<string, { shipping_company_id: string | null; restock_on_return: boolean | null; courier_code: string | null }>>(new Map());
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     // Selection State
@@ -146,7 +146,7 @@ function OrdersContent() {
         if (!activeBusiness || orders.length === 0) return;
         let cancelled = false;
         supabase.from("orders")
-            .select("id, shipping_company_id, restock_on_return")
+            .select("id, shipping_company_id, restock_on_return, courier_code")
             .eq("business_id", activeBusiness.id)
             .in("id", orders.map(o => o.id))
             .then(({ data }) => {
@@ -807,6 +807,14 @@ function OrdersContent() {
                                     <TableCell className="font-mono text-xs">
                                         <div className="flex flex-col gap-1">
                                             <span>{order.id.slice(0, 8)}</span>
+                                            {/* The courier's own number (Turbo's, for Layla Home), set
+                                                when the order is sent from Logistics: what to quote
+                                                when calling the courier about it. */}
+                                            {orderExtras.get(order.id)?.courier_code && (
+                                                <span className="w-fit rounded border px-1 text-[10px] text-muted-foreground" title="رقم الأوردر عند شركة الشحن">
+                                                    {shippingCompanies.find((c: any) => c.id === orderExtras.get(order.id)?.shipping_company_id)?.name || "شحن"} {orderExtras.get(order.id)?.courier_code}
+                                                </span>
+                                            )}
                                             {order.order_type === 'replacement' && <Badge variant="secondary" className="w-fit text-[10px] bg-green-100 text-green-800 hover:bg-green-100">استبدال</Badge>}
                                             {order.order_type === 'return' && <Badge variant="destructive" className="w-fit text-[10px]">استرجاع</Badge>}
                                         </div>

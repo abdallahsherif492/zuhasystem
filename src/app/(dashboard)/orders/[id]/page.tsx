@@ -650,6 +650,12 @@ export default function OrderDetailsPage() {
                                         ? shippingCompanies.find(c => c.id === order.shipping_company_id)?.name
                                         : <span className="text-muted-foreground">-</span>
                                     }
+                                    {/* The courier's number for this parcel, set when it is sent from Logistics. */}
+                                    {order.courier_code && (
+                                        <span className="ms-2 rounded border px-1.5 py-0.5 font-mono text-xs text-muted-foreground" title="رقم الأوردر عند شركة الشحن">
+                                            #{order.courier_code}
+                                        </span>
+                                    )}
                                 </div>
                             )}
                         </div>
