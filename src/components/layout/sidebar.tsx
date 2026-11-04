@@ -350,7 +350,7 @@ export function SidebarContent({ onLinkClick }: { onLinkClick?: () => void }) {
                                     
                                     return (
                                         <div key={itemIndex} className="space-y-1">
-                                            <Link href={item.href} onClick={onLinkClick}>
+                                            <Link href={item.href} onClick={onLinkClick} prefetch={false}>
                                                 <Button
                                                     variant={isActive ? "secondary" : "ghost"}
                                                     className={cn(
@@ -369,7 +369,7 @@ export function SidebarContent({ onLinkClick }: { onLinkClick?: () => void }) {
                                                     {item.subItems.map((subItem, subIndex) => {
                                                         const isSubActive = subItem.exactMatch ? pathname === subItem.href : pathname.startsWith(subItem.href);
                                                         return (
-                                                            <Link key={subIndex} href={subItem.href} onClick={onLinkClick}>
+                                                            <Link key={subIndex} href={subItem.href} onClick={onLinkClick} prefetch={false}>
                                                                 <Button
                                                                     variant="ghost"
                                                                     size="sm"

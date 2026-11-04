@@ -1,0 +1,8 @@
+# Netlify build settings. The Next.js runtime (OpenNext) is detected and installed
+# automatically; nothing else is needed for pages, route handlers or middleware.
+[build]
+  command = "npm run build"
+  publish = ".next"
+
+[build.environment]
+  NODE_VERSION = "22"

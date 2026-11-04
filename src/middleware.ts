@@ -131,12 +131,22 @@ export async function middleware(request: NextRequest) {
 export const config = {
     matcher: [
         /*
-         * Match all request paths except for the ones starting with:
-         * - _next/static (static files)
-         * - _next/image (image optimization files)
-         * - favicon.ico (favicon file)
-         * Feel free to modify this pattern to include more paths.
+         * Every page request except:
+         * - _next/static, _next/image, favicon.ico and image files;
+         * - /api: route handlers check their own callers (webhook secrets,
+         *   CRON_SECRET, the user's session), and this function returned early
+         *   for them anyway, after paying for a Supabase auth round trip;
+         * - /monitoring: the Sentry tunnel, which must stay open.
+         * Router prefetches are skipped too: a dashboard page prefetches every
+         * sidebar link, and each prefetch ran this function on the server. The
+         * real navigation that follows is still checked.
          */
-        '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+        {
+            source: '/((?!api/|monitoring|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+            missing: [
+                { type: 'header', key: 'next-router-prefetch' },
+                { type: 'header', key: 'purpose', value: 'prefetch' },
+            ],
+        },
     ],
 }

@@ -34,7 +34,8 @@ export const baseSentryOptions = {
     // expensive part of the quota and errors are the point of this.
     tracesSampleRate: 0.1,
 
-    environment: process.env.VERCEL_ENV || process.env.NODE_ENV || "development",
+    // VERCEL_ENV on Vercel, CONTEXT ("production", "deploy-preview") on Netlify.
+    environment: process.env.VERCEL_ENV || process.env.CONTEXT || process.env.NODE_ENV || "development",
 
     ignoreErrors: IGNORED,
 
