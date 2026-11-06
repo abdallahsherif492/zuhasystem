@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils";
 import { canOpenPage } from "@/lib/navigation-access";
 import { useStarterMode, STARTER_PAGES } from "@/hooks/use-starter-mode";
 import { Button } from "@/components/ui/button";
-import { LayoutDashboard, AlertTriangle, Package, ShoppingCart, Settings, Users, Truck, Banknote, LineChart, ShoppingBag, Megaphone, Box, DollarSign, ShieldCheck, FileText, Ticket, CreditCard, Clock, Inbox, Calendar, LogOut, Globe, ChevronDown, ChevronRight, BarChart3, PieChart, History, BookOpen, Wallet, Upload, LifeBuoy } from "lucide-react";
+import { LayoutDashboard, AlertTriangle, Package, ShoppingCart, Settings, Users, Truck, Banknote, LineChart, ShoppingBag, Megaphone, Box, DollarSign, ShieldCheck, FileText, Ticket, CreditCard, Clock, Inbox, Calendar, LogOut, Globe, ChevronDown, ChevronRight, BarChart3, PieChart, History, BookOpen, Wallet, Upload, LifeBuoy, XCircle } from "lucide-react";
 
 import Image from "next/image";
 import { useState, useEffect } from "react";
@@ -216,6 +216,7 @@ export function SidebarContent({ onLinkClick }: { onLinkClick?: () => void }) {
                         { title: t("Platform Orders"), href: "/insights/platform-orders", icon: Globe },
                         { title: t("Revenues"), href: "/insights/revenues", icon: DollarSign },
                         { title: t("Actual Returns"), href: "/insights/actual-returns", icon: DollarSign },
+                        { title: t("Cancellations"), href: "/insights/cancellations", icon: XCircle },
                         { title: t("Expenses"), href: "/insights/expenses", icon: Banknote },
                         { title: t("Channels"), href: "/insights/channel-analytics", icon: PieChart },
                         { title: t("Products"), href: "/insights/products-analysis", icon: BarChart3 },
