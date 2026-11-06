@@ -11,6 +11,7 @@
 
 import { governorateArabic } from "@/lib/governorates";
 import { reasonLabel } from "@/components/orders/confirmation-attempts";
+import { cancelReasonLabel } from "@/lib/orders/cancel-reasons";
 
 export interface RawOrder {
     id: string;
@@ -30,6 +31,10 @@ export interface RawOrder {
     closed_by: string | null;
     easyorders_id: string | null;
     shopify_id: string | null;
+    /** From 20261107_cancellation_review.sql; absent before it runs. */
+    cancelled_by?: string | null;
+    cancel_reason?: string | null;
+    cancel_note?: string | null;
 }
 
 export interface Row {
@@ -43,6 +48,7 @@ export interface Row {
     moderator: string | null;
     lastReason: string | null;
     lastNote: string | null;
+    cancelReason: string | null;
     facts: Record<DimensionKey, string[]>;
 }
 
@@ -139,7 +145,7 @@ export function buildRows(
             const at = new Date(o.created_at);
             const h = Number(cairoHour.format(at)) % 24;
             const attempts = Number(o.confirm_attempts) || 0;
-            const moderator = cancelled ? cancelledBy.get(o.id) || null : o.closed_by || null;
+            const moderator = cancelled ? o.cancelled_by || cancelledBy.get(o.id) || null : o.closed_by || null;
             const ship = Math.round(Number(o.shipping_cost) || 0);
             const p = phoneKey(o.customer_info?.phone);
             const t = at.getTime();
@@ -175,6 +181,7 @@ export function buildRows(
                 moderator,
                 lastReason: attempts ? reasonLabel(o.last_attempt_reason) : null,
                 lastNote: o.last_attempt_note,
+                cancelReason: [cancelReasonLabel(o.cancel_reason), o.cancel_note].filter(Boolean).join(" — ") || null,
                 facts,
             };
         });

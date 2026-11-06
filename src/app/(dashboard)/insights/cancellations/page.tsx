@@ -10,6 +10,7 @@ import { useBusiness } from "@/contexts/BusinessContext";
 import { formatCurrency, cn } from "@/lib/utils";
 import { DateRangePicker } from "@/components/date-range-picker";
 import { cairoDate, cairoDayStart, nextDay } from "@/lib/cairo-day";
+import { SuspectedCancellations } from "@/components/insights/suspected-cancellations";
 import {
     DIMENSIONS, UNKNOWN_MODERATOR, applyFilters, breakdown, buildRows, dimension, findings, summarize,
     type Dimension, type DimensionKey, type Filters, type Group, type RawOrder, type Row,
@@ -42,9 +43,12 @@ async function loadRows(businessId: string, fromDay: string, toDay: string): Pro
     const start = cairoDayStart(fromDay);
     const end = cairoDayStart(nextDay(toDay));
 
+    // Who cancelled and why live on the order once 20261107_cancellation_review.sql
+    // has run; before that the columns are not there and the log is all there is.
+    const readOrders = (cols: string) => fetchAll<RawOrder>((f, t) => supabase.from("orders").select(cols)
+        .eq("business_id", businessId).gte("created_at", start).lt("created_at", end).range(f, t) as unknown as PromiseLike<{ data: RawOrder[] | null; error: unknown }>);
     const [orders, variants] = await Promise.all([
-        fetchAll<RawOrder>((f, t) => supabase.from("orders").select(ORDER_COLUMNS)
-            .eq("business_id", businessId).gte("created_at", start).lt("created_at", end).range(f, t)),
+        readOrders(`${ORDER_COLUMNS}, cancelled_by, cancel_reason, cancel_note`).catch(() => readOrders(ORDER_COLUMNS)),
         fetchAll<{ id: string; title: string | null; products: { name: string } | { name: string }[] | null }>((f, t) =>
             supabase.from("variants").select("id, title, products(name)").eq("business_id", businessId).range(f, t)),
     ]);
@@ -238,6 +242,8 @@ function CancellationsContent() {
                         </div>
                     </section>
 
+                    {activeBusiness && <SuspectedCancellations businessId={activeBusiness.id} themeConfig={activeBusiness.theme_config} />}
+
                     <CancelledList rows={filtered.filter(r => r.cancelled)} />
                 </>
             )}
@@ -327,7 +333,7 @@ function CancelledList({ rows }: { rows: Row[] }) {
                                 <th className="px-4 py-2 text-start font-medium">العميل</th>
                                 <th className="px-4 py-2 text-start font-medium">المنتجات</th>
                                 <th className="px-4 py-2 text-start font-medium">القيمة</th>
-                                <th className="px-4 py-2 text-start font-medium">لغاه</th>
+                                <th className="px-4 py-2 text-start font-medium">لغاه وليه</th>
                                 <th className="px-4 py-2 text-start font-medium">آخر محاولة اتصال</th>
                             </tr>
                         </thead>
@@ -344,7 +350,10 @@ function CancelledList({ rows }: { rows: Row[] }) {
                                     </td>
                                     <td className="max-w-[16rem] px-4 py-2"><div className="line-clamp-2" dir="auto">{r.products.join("، ") || "—"}</div></td>
                                     <td className="px-4 py-2 tabular-nums" dir="ltr">{money(r.value)}</td>
-                                    <td className="px-4 py-2">{r.moderator ? r.moderator.split("@")[0] : <span className="text-muted-foreground">مش معروف</span>}</td>
+                                    <td className="max-w-[12rem] px-4 py-2">
+                                        <div>{r.moderator ? r.moderator.split("@")[0] : <span className="text-muted-foreground">مش معروف</span>}</div>
+                                        {r.cancelReason && <div className="text-xs text-muted-foreground">{r.cancelReason}</div>}
+                                    </td>
                                     <td className="max-w-[14rem] px-4 py-2">
                                         {r.lastReason ? <><div>{r.lastReason}</div>{r.lastNote && <div className="line-clamp-2 text-xs text-muted-foreground">{r.lastNote}</div>}</> : <span className="text-muted-foreground">—</span>}
                                     </td>

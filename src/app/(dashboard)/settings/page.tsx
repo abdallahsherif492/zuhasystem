@@ -25,6 +25,7 @@ import { IntegrationLogs } from "@/components/settings/integration-logs";
 import { SubscriptionSettings } from "@/components/settings/subscription-settings";
 import { IntegrationInstructions } from "@/components/settings/integration-instructions";
 import { WaybillSettingsCard } from "@/components/settings/waybill-settings";
+import { CancellationReviewSettingsCard } from "@/components/settings/cancellation-review-settings";
 
 /**
  * A logo at most 512px on its longest side, as WebP (keeps transparency).
@@ -57,7 +58,7 @@ export default function SettingsPage() {
     const [activeTab, setActiveTab] = useState("theme");
     useEffect(() => {
         const tab = new URLSearchParams(window.location.search).get("tab");
-        if (tab && ["theme", "shipping", "platforms", "tools", "inventory", "waybill", "commission", "billing"].includes(tab)) setActiveTab(tab);
+        if (tab && ["theme", "shipping", "platforms", "tools", "inventory", "waybill", "cancellations", "commission", "billing"].includes(tab)) setActiveTab(tab);
     }, []);
     
     // Form state
@@ -422,6 +423,7 @@ export default function SettingsPage() {
                     <TabsTrigger value="tools">{t("Tools")}</TabsTrigger>
                     <TabsTrigger value="inventory">{t("Inventory")}</TabsTrigger>
                     <TabsTrigger value="waybill">{t("Waybill")}</TabsTrigger>
+                    <TabsTrigger value="cancellations">{t("Cancellations")}</TabsTrigger>
                     <TabsTrigger value="commission">{t("Commission")}</TabsTrigger>
                     <TabsTrigger value="billing">{t("Billing & Subscription")}</TabsTrigger>
                     <TabsTrigger value="logs">{t("System Logs")}</TabsTrigger>
@@ -1550,6 +1552,10 @@ export default function SettingsPage() {
                 </TabsContent>
 
                 {/* System Logs Tab */}
+                <TabsContent value="cancellations" className="space-y-4">
+                    <CancellationReviewSettingsCard />
+                </TabsContent>
+
                 <TabsContent value="waybill" className="space-y-4">
                     <WaybillSettingsCard />
                 </TabsContent>

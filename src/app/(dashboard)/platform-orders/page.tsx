@@ -34,6 +34,8 @@ import { DeliveryRateAdvice, DeliveryRateBadge } from "@/components/orders/deliv
 import { deliveryRateOf } from "@/lib/easyorders-delivery-rate";
 import { fetchDeliveryRatesAction } from "./delivery-rate-actions";
 import { MISSED_ORDERS_IN_QUEUE, MissedOrderNote, MissedOrderTag } from "@/components/orders/missed-order";
+import { CancelOrderDialog } from "@/components/orders/cancel-order-dialog";
+import { cancelReasonLabel, type CancelReason } from "@/lib/orders/cancel-reasons";
 
 const ORDER_SELECT = `
     *,
@@ -565,11 +567,20 @@ function PlatformOrdersContent() {
         }
     };
 
-    const handleCancelOrder = async (orderId: string) => {
+    const handleCancelOrder = async (orderId: string, reason: CancelReason, note: string | null) => {
         const targetOrder = orders.find(o => o.id === orderId);
         const card = takeOut(orderId);
         try {
-            const moved = await leaveWaiting(orderId, { status: 'Cancelled' });
+            let moved: "done" | "gone";
+            try {
+                moved = await leaveWaiting(orderId, { status: 'Cancelled', cancel_reason: reason, cancel_note: note });
+            } catch (e) {
+                // Until 20261107_cancellation_review.sql has run there is
+                // nowhere to keep the reason; cancel without it.
+                const code = (e as { code?: string })?.code;
+                if (code !== "PGRST204" && code !== "42703") throw e;
+                moved = await leaveWaiting(orderId, { status: 'Cancelled' });
+            }
             card.settle();
             if (moved === "gone") {
                 toast.info("الأوردر ده اتنقل أو اتلغى قبل كده من زميلك.");
@@ -585,7 +596,8 @@ function PlatformOrdersContent() {
                     entityId: orderId,
                     entityName: orderLogName(orderId, targetOrder.customer_info, "Platform Order"),
                     changes: [
-                        { field: "Status", old_value: targetOrder.status, new_value: "Cancelled" }
+                        { field: "Status", old_value: targetOrder.status, new_value: "Cancelled" },
+                        { field: "Cancel reason", old_value: "", new_value: [cancelReasonLabel(reason), note].filter(Boolean).join(" — ") },
                     ]
                 });
             }
@@ -835,6 +847,7 @@ function PlatformOrdersContent() {
     // Waiting throughout; the tab is how far confirming it has got.
     const [stageTab, setStageTab] = useState<ConfirmStage | "all">("new");
     const [failing, setFailing] = useState<Order | null>(null);
+    const [cancelling, setCancelling] = useState<Order | null>(null);
     const stageCounts = {
         new: listed.filter(o => stageOf(o) === "new").length,
         retry: listed.filter(o => stageOf(o) === "retry").length,
@@ -982,6 +995,14 @@ function PlatformOrdersContent() {
                 )}
             </div>
 
+            {cancelling && (
+                <CancelOrderDialog
+                    customerName={cancelling.customer_info?.name || ""}
+                    open={!!cancelling}
+                    onOpenChange={o => { if (!o) setCancelling(null); }}
+                    onConfirm={(reason, note) => { const id = cancelling.id; setCancelling(null); return handleCancelOrder(id, reason, note); }}
+                />
+            )}
             {failing && (
                 <FailedAttemptDialog
                     orderId={failing.id}
@@ -1086,6 +1107,12 @@ function PlatformOrdersContent() {
                                             </span>
                                             <DeliveryRateBadge rate={deliveryRateOf(order.customer_info)} />
                                             {isMissed(order) && <MissedOrderTag />}
+                                            {JSON.stringify(order.tags || "").includes("reopened") && (
+                                                <Badge variant="outline" className="border-violet-300 bg-violet-50 text-violet-800 dark:border-violet-900 dark:bg-violet-950/40 dark:text-violet-200"
+                                                       title="كان اتلغى ورجع عشان يتحاول عليه تاني: اتلغى بسرعة أو من غير محاولات اتصال كفاية">
+                                                    محاولة تانية بعد الإلغاء
+                                                </Badge>
+                                            )}
                                         </CardTitle>
                                         <p className="text-xs sm:text-sm text-muted-foreground mt-1">
                                             {format(new Date(order.created_at), "PPP p")}
@@ -1596,28 +1623,11 @@ function PlatformOrdersContent() {
                                 </div>
                             </CardContent>
                             <CardFooter className="bg-muted/10 border-t p-4 flex flex-col-reverse sm:flex-row sm:justify-end gap-3">
-                                <AlertDialog>
-                                    <AlertDialogTrigger asChild>
-                                        <Button variant="outline" className="w-full sm:w-auto text-destructive border-destructive hover:bg-destructive/10">
-                                            <X className="mr-2 h-4 w-4" />
-                                            {t("Cancel Order")}
-                                        </Button>
-                                    </AlertDialogTrigger>
-                                    <AlertDialogContent>
-                                        <AlertDialogHeader>
-                                            <AlertDialogTitle>Cancel this order?</AlertDialogTitle>
-                                            <AlertDialogDescription>
-                                                This will move the order to the Cancelled status. You can view it later in the main Orders page.
-                                            </AlertDialogDescription>
-                                        </AlertDialogHeader>
-                                        <AlertDialogFooter>
-                                            <AlertDialogCancel>Go Back</AlertDialogCancel>
-                                            <AlertDialogAction className="bg-destructive hover:bg-destructive/90" onClick={() => handleCancelOrder(order.id)}>
-                                                Confirm Cancel
-                                            </AlertDialogAction>
-                                        </AlertDialogFooter>
-                                    </AlertDialogContent>
-                                </AlertDialog>
+                                <Button variant="outline" className="w-full sm:w-auto text-destructive border-destructive hover:bg-destructive/10"
+                                        onClick={() => setCancelling(order)}>
+                                    <X className="mr-2 h-4 w-4" />
+                                    {t("Cancel Order")}
+                                </Button>
 
                                 <Button
                                     variant="outline"
