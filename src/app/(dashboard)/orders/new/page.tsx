@@ -70,6 +70,9 @@ interface CartItem {
     quantity: number;
     maxStock: number;
     trackInventory: boolean;
+    /** Set on the lines a bundle was written as (lib/bundles.ts). */
+    bundleVariantId?: string;
+    bundleLabel?: string;
 }
 
 const GOVERNORATES = [
@@ -85,12 +88,15 @@ import { useBusiness } from "@/contexts/BusinessContext";
 import { ClosedBySelect } from "@/components/orders/closed-by-select";
 import { logBusinessAction } from "@/lib/logs/actions-logger";
 import { orderLogName } from "@/lib/logs/order-log-name";
+import { BundlePicker, BundleTag } from "@/components/bundles/bundle-picker";
+import { bundleLabel, expandBundle, loadBundles, type Bundle, type BundleVariant } from "@/lib/bundles";
 
 export default function NewOrderPage() {
     const { activeBusiness, currentUser } = useBusiness();
 
     const router = useRouter();
     const [products, setProducts] = useState<ProductWithVariants[]>([]);
+    const [bundles, setBundles] = useState<Bundle[]>([]);
     const [loading, setLoading] = useState(true);
     const [cart, setCart] = useState<CartItem[]>([]);
     const [submitting, setSubmitting] = useState(false);
@@ -151,6 +157,7 @@ export default function NewOrderPage() {
     useEffect(() => {
         if (activeBusiness) {
             fetchProducts();
+            loadBundles(supabase, activeBusiness.id).then(r => setBundles(r.bundles));
             searchCustomers("");
             fetchAccounts();
         }
@@ -282,7 +289,7 @@ export default function NewOrderPage() {
         }
 
         const existingItemIndex = cart.findIndex(
-            (item) => item.variantId === activeVariant.id && Math.sign(item.quantity) === Math.sign(finalQuantity)
+            (item) => item.variantId === activeVariant.id && !item.bundleVariantId && Math.sign(item.quantity) === Math.sign(finalQuantity)
         );
 
         if (existingItemIndex >= 0) {
@@ -312,6 +319,53 @@ export default function NewOrderPage() {
         }
         setQuantity(1);
         setSelectedVariant("");
+    };
+
+    /**
+     * A bundle goes in as its products, each at the bundle's price for it,
+     * `quantity` times over (negative when it is coming back).
+     */
+    const addBundleToCart = (bundle: Bundle, variant: BundleVariant) => {
+        const count = Math.max(1, Math.abs(quantity));
+        const sign = orderType === "return" || (orderType === "replacement" && itemDirection === "receive") ? -1 : 1;
+        const label = bundleLabel(bundle, variant);
+        const lines = expandBundle(variant, count);
+
+        if (sign > 0) {
+            // Everything this order would take of each product, bundle or not.
+            const want = new Map<string, number>();
+            for (const c of cart) if (c.quantity > 0) want.set(c.variantId, (want.get(c.variantId) || 0) + c.quantity);
+            for (const l of lines) want.set(l.variant_id, (want.get(l.variant_id) || 0) + l.quantity);
+            const short = lines.find(l => l.track_inventory && l.stock_qty < (want.get(l.variant_id) || 0));
+            if (short) {
+                alert(`مفيش مخزون كفاية من ${short.productName}${short.variantTitle !== "Default" ? ` (${short.variantTitle})` : ""}. المتاح ${short.stock_qty}.`);
+                return;
+            }
+        }
+
+        const next = [...cart];
+        for (const l of lines) {
+            const qty = l.quantity * sign;
+            const at = next.findIndex(c => c.variantId === l.variant_id && c.bundleVariantId === variant.id && Math.sign(c.quantity) === sign);
+            if (at >= 0) {
+                next[at] = { ...next[at], quantity: next[at].quantity + qty };
+            } else {
+                next.push({
+                    variantId: l.variant_id,
+                    productName: l.productName,
+                    variantTitle: l.variantTitle,
+                    sale_price: l.price_at_sale,
+                    cost_price: l.cost_at_sale,
+                    quantity: qty,
+                    maxStock: l.stock_qty,
+                    trackInventory: l.track_inventory,
+                    bundleVariantId: variant.id,
+                    bundleLabel: label,
+                });
+            }
+        }
+        setCart(next);
+        setQuantity(1);
     };
 
     const removeFromCart = (index: number) => {
@@ -502,6 +556,9 @@ export default function NewOrderPage() {
                 quantity: item.quantity,
                 price_at_sale: item.sale_price,
                 cost_at_sale: item.cost_price,
+                // Only when there is one, so this insert does not need the
+                // bundles migration until bundles are in use.
+                ...(item.bundleVariantId ? { bundle_variant_id: item.bundleVariantId } : {}),
             }));
 
             const { error: itemsError } = await supabase.from("order_items").insert(itemsData);
@@ -813,7 +870,13 @@ export default function NewOrderPage() {
                             <Button onClick={addItemToCart} disabled={!selectedVariant}>
                                 Add Item
                             </Button>
+                            <BundlePicker bundles={bundles} onPick={addBundleToCart} size="default" />
                         </div>
+                        {bundles.some(b => b.active) && (
+                            <p className="text-xs text-muted-foreground" dir="rtl">
+                                الباندل بيتضاف بمنتجاته وبسعر كل منتج فيه، وبعدد الـ Qty اللي فوق.
+                            </p>
+                        )}
                     </CardContent>
                 </Card>
 
@@ -843,6 +906,7 @@ export default function NewOrderPage() {
                                             <TableCell>
                                                 <div className="font-medium">{item.productName}</div>
                                                 <div className="text-xs text-muted-foreground">{item.variantTitle}</div>
+                                                {item.bundleLabel && <BundleTag label={item.bundleLabel} className="mt-1" />}
                                                 {item.quantity < 0 && (
                                                     <Badge variant="destructive" className="mt-1 text-[10px]">Returned Product</Badge>
                                                 )}

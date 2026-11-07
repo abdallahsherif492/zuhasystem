@@ -36,11 +36,13 @@ import { fetchDeliveryRatesAction } from "./delivery-rate-actions";
 import { MISSED_ORDERS_IN_QUEUE, MissedOrderNote, MissedOrderTag } from "@/components/orders/missed-order";
 import { CancelOrderDialog } from "@/components/orders/cancel-order-dialog";
 import { cancelReasonLabel, type CancelReason } from "@/lib/orders/cancel-reasons";
+import { BundlePicker, BundleTag } from "@/components/bundles/bundle-picker";
+import { bundleLabel, bundleSkuIndex, bundleVariantIndex, expandBundle, loadBundles, skuKey, type Bundle, type BundleVariant } from "@/lib/bundles";
 
 const ORDER_SELECT = `
     *,
     order_items (
-        id, variant_id, quantity, price_at_sale, cost_at_sale, unmapped_name, unmapped_sku,
+        *,
         variants (
             title, sku, product_id,
             products (name)
@@ -93,6 +95,8 @@ interface OrderItem {
     cost_at_sale?: number | null;
     unmapped_name?: string;
     unmapped_sku?: string;
+    /** The bundle this line was written from (20261108_bundles.sql). */
+    bundle_variant_id?: string | null;
     variants?: {
         title: string;
         sku: string;
@@ -161,6 +165,9 @@ function PlatformOrdersContent() {
     const [saving, setSaving] = useState<string | null>(null);
     const [variants, setVariants] = useState<Variant[]>([]);
     const [products, setProducts] = useState<any[]>([]);
+    const [bundles, setBundles] = useState<Bundle[]>([]);
+    const bundleNames = useMemo(() => bundleVariantIndex(bundles), [bundles]);
+    const bundlesBySku = useMemo(() => bundleSkuIndex(bundles), [bundles]);
     
     // Treasury Modal state
     const [depositModalOpen, setDepositModalOpen] = useState(false);
@@ -188,6 +195,7 @@ function PlatformOrdersContent() {
             fetchVariants();
             fetchProducts();
             fetchAccounts();
+            loadBundles(supabase, activeBusiness.id).then(r => setBundles(r.bundles));
         }
     }, [activeBusiness]);
 
@@ -771,6 +779,65 @@ function PlatformOrdersContent() {
     };
 
 
+    /**
+     * Write a bundle into an order as its products. `replace` is an unmapped
+     * line that turned out to be this bundle (EasyOrders sends a bundle as one
+     * product): it goes, and the bundle takes its quantity and its price.
+     */
+    const addBundleToOrder = async (orderId: string, bundle: Bundle, variant: BundleVariant, replace?: OrderItem) => {
+        const order = ordersRef.current.find(o => o.id === orderId);
+        if (!order || !activeBusiness) return;
+        const lines = replace
+            ? expandBundle(variant, Math.max(1, replace.quantity), replace.price_at_sale > 0 ? replace.price_at_sale : null)
+            : expandBundle(variant, 1);
+        const label = bundleLabel(bundle, variant);
+
+        const { data: inserted, error } = await supabase.from('order_items').insert(lines.map(l => ({
+            business_id: activeBusiness.id,
+            order_id: orderId,
+            variant_id: l.variant_id,
+            quantity: l.quantity,
+            price_at_sale: l.price_at_sale,
+            cost_at_sale: l.cost_at_sale,
+            bundle_variant_id: l.bundle_variant_id,
+        }))).select('id');
+        if (error || !inserted || inserted.length !== lines.length) {
+            console.error("bundle insert", error);
+            toast.error("الباندل ماتضافش، جرّب تاني.");
+            return;
+        }
+        if (replace) {
+            const { error: delError } = await supabase.from('order_items').delete().eq('business_id', activeBusiness.id).eq('id', replace.id);
+            if (delError) toast.error("المنتجات اتضافت بس السطر القديم ماتشالش. امسحه بإيدك.");
+        }
+
+        const newItems: OrderItem[] = lines.map((l, k) => ({
+            id: inserted[k].id,
+            variant_id: l.variant_id,
+            quantity: l.quantity,
+            price_at_sale: l.price_at_sale,
+            cost_at_sale: l.cost_at_sale,
+            bundle_variant_id: l.bundle_variant_id,
+            variants: { title: l.variantTitle, sku: l.sku || "", product_id: "", products: { name: l.productName } },
+        }));
+        await applyItemChange(orderId, items => [...items.filter(i => i.id !== replace?.id), ...newItems]);
+
+        logBusinessAction({
+            businessId: activeBusiness.id,
+            userEmail: currentUser?.email || "Staff",
+            actionType: "edit",
+            entityType: "order",
+            entityId: orderId,
+            entityName: orderLogName(orderId, order.customer_info, "Platform Order"),
+            changes: [{
+                field: "Bundle",
+                old_value: replace ? (replace.unmapped_name || "Unmapped Item") : null,
+                new_value: `${label}: ${lines.map(l => `${l.productName} ×${l.quantity}`).join(" + ")}`,
+            }],
+        });
+        toast.success(`اتضاف ${label}`);
+    };
+
     const deleteItemFromOrder = async (orderId: string, itemId: string) => {
         await applyItemChange(orderId, items => items.filter(item => item.id !== itemId));
 
@@ -1280,6 +1347,8 @@ function PlatformOrdersContent() {
                                         <div className="flex justify-between items-center border-b pb-2">
                                             <h3 className="font-semibold text-lg">{t("Products & Mapping")}</h3>
                                             
+                                            <div className="flex items-center gap-2">
+                                            <BundlePicker bundles={bundles} onPick={(b, v) => addBundleToOrder(order.id, b, v)} />
                                             <Popover open={addItemOpen[order.id]} onOpenChange={(open) => setAddItemOpen(prev => ({...prev, [order.id]: open}))}>
                                                 <PopoverTrigger asChild>
                                                     <Button size="sm" variant="outline" className="h-8">
@@ -1410,6 +1479,7 @@ function PlatformOrdersContent() {
                                                     </div>
                                                 </PopoverContent>
                                             </Popover>
+                                            </div>
                                         </div>
 
                                         <div className="space-y-3 max-h-[300px] overflow-y-auto pr-1">
@@ -1420,6 +1490,10 @@ function PlatformOrdersContent() {
                                                     : null;
                                                 const chosenProdId = selectedItemProduct[item.id] || defaultProd?.id;
                                                 const activeProd = products.find(p => p.id === chosenProdId);
+                                                // An unmapped line whose code is a bundle's: it came in
+                                                // before the bundle was made, or before the webhook knew it.
+                                                const bundleMatch = isUnmapped && item.unmapped_sku ? bundlesBySku.get(skuKey(item.unmapped_sku)) : undefined;
+                                                const fromBundle = item.bundle_variant_id ? bundleNames.get(item.bundle_variant_id)?.label : undefined;
 
                                                 return (
                                                     <div key={item.id} className={cn("p-3 rounded-lg border space-y-2", isUnmapped ? "bg-red-50/50 border-red-200" : "bg-muted/30")}>
@@ -1437,6 +1511,16 @@ function PlatformOrdersContent() {
                                                                 </div>
                                                                 {item.unmapped_sku && (
                                                                     <p className="text-xs font-mono text-muted-foreground">SKU: {item.unmapped_sku}</p>
+                                                                )}
+                                                                {fromBundle && <BundleTag label={fromBundle} />}
+                                                                {bundleMatch && (
+                                                                    <Button
+                                                                        size="sm"
+                                                                        className="mt-1 h-8 bg-violet-600 text-white hover:bg-violet-700"
+                                                                        onClick={() => addBundleToOrder(order.id, bundleMatch.bundle, bundleMatch.variant, item)}
+                                                                    >
+                                                                        ده باندل «{bundleLabel(bundleMatch.bundle, bundleMatch.variant)}»، فكّه لمنتجاته
+                                                                    </Button>
                                                                 )}
                                                             </div>
                                                             <Button 

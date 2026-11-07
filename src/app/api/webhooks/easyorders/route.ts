@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { logIntegrationActivity } from '@/lib/logs/integration-logger';
 import { readDeliveryRate } from '@/lib/easyorders-delivery-rate';
+import { bundleSkuIndex, expandBundle, loadBundles, type Bundle } from '@/lib/bundles';
 
 // Dictionary for Governorate mapping (Arabic to English)
 // Values here MUST match the courier rate card keys and the governorate
@@ -296,7 +297,15 @@ export async function POST(request: Request) {
             });
         }
 
-        const processedItems = [];
+        // EasyOrders has no bundles: a bundle there is one product with one
+        // SKU. That SKU is looked up among our bundles and the line is written
+        // as the bundle's products, each at its share of what EasyOrders
+        // charged (lib/bundles.ts). Before 20261108_bundles.sql is run the
+        // lookup fails and there are simply no bundles.
+        const { bundles } = await loadBundles(supabase, businessId).catch(() => ({ bundles: [] as Bundle[] }));
+        const bundlesBySku = bundleSkuIndex(bundles);
+
+        const processedItems: Record<string, unknown>[] = [];
 
         for (const item of rawItems) {
             // EasyOrders puts sku in product.sku or variant.taager_code
@@ -306,7 +315,27 @@ export async function POST(request: Request) {
             const itemName = item.product?.name || item.name || item.title || "Unknown Item";
 
             const matchedVariant = itemSku ? variantsMap.get(itemSku) : null;
-            
+            const matchedBundle = !matchedVariant && itemSku ? bundlesBySku.get(itemSku) : null;
+
+            if (matchedBundle && matchedBundle.variant.items.length) {
+                // EasyOrders' price is for one bundle; 0 means it sent none.
+                const lines = expandBundle(matchedBundle.variant, itemQty, itemPrice > 0 ? itemPrice : null);
+                for (const line of lines) {
+                    calculatedSubtotal += line.price_at_sale * line.quantity;
+                    calculatedTotalCost += line.cost_at_sale * line.quantity;
+                    processedItems.push({
+                        variant_id: line.variant_id,
+                        quantity: line.quantity,
+                        price_at_sale: line.price_at_sale,
+                        cost_at_sale: line.cost_at_sale,
+                        bundle_variant_id: line.bundle_variant_id,
+                        unmapped_name: null,
+                        unmapped_sku: null,
+                    });
+                }
+                continue;
+            }
+
             let variantId = null;
             let costAtSale = 0;
 

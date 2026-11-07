@@ -5,6 +5,8 @@ import { useParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { formatCurrency } from "@/lib/utils";
 import { STOCK_OUT_STATUSES } from "@/lib/inventory";
+import { BundlePicker, BundleTag } from "@/components/bundles/bundle-picker";
+import { bundleLabel, bundleVariantIndex, expandBundle, loadBundles, type Bundle, type BundleVariant } from "@/lib/bundles";
 import { syncStatusToEasyOrders } from "@/lib/easyorders";
 import { processOrderForVrobo } from "@/lib/vrobo/api";
 import { Button } from "@/components/ui/button";
@@ -83,6 +85,8 @@ export default function OrderDetailsPage() {
 
     // Product Data for Selector
     const [products, setProducts] = useState<any[]>([]);
+    const [bundles, setBundles] = useState<Bundle[]>([]);
+    const bundleNames = bundleVariantIndex(bundles);
     const [shippingCompanies, setShippingCompanies] = useState<any[]>([]);
     const [selectedProduct, setSelectedProduct] = useState("");
     const [selectedVariant, setSelectedVariant] = useState("");
@@ -123,6 +127,7 @@ export default function OrderDetailsPage() {
         if (activeBusiness) {
             fetchOrderDetails();
             fetchProducts();
+            loadBundles(supabase, activeBusiness.id).then(r => setBundles(r.bundles));
             fetchAccounts();
             fetchShippingCompanies();
         }
@@ -229,7 +234,8 @@ export default function OrderDetailsPage() {
                 sale_price: item.price_at_sale,
                 cost_price: item.cost_at_sale || item.variant?.cost_price || 0, // Fallback
                 stock_qty: item.variant?.stock_qty, // For reference
-                track_inventory: item.variant?.track_inventory
+                track_inventory: item.variant?.track_inventory,
+                bundleVariantId: item.bundle_variant_id || undefined,
             })));
 
         } catch (error) {
@@ -246,7 +252,7 @@ export default function OrderDetailsPage() {
         if (!activeProduct || !activeVariant) return;
 
         // check if already exists
-        const existingIdx = editItems.findIndex(i => i.variantId === activeVariant.id);
+        const existingIdx = editItems.findIndex(i => i.variantId === activeVariant.id && !i.bundleVariantId);
         if (existingIdx >= 0) {
             const newItems = [...editItems];
             newItems[existingIdx].quantity += 1;
@@ -265,6 +271,34 @@ export default function OrderDetailsPage() {
             }]);
         }
         setSelectedVariant("");
+    };
+
+    /** A bundle goes in as its products, each at the bundle's price for it. */
+    const handleAddBundle = (bundle: Bundle, variant: BundleVariant) => {
+        const next = [...editItems];
+        for (const l of expandBundle(variant, 1)) {
+            const at = next.findIndex(i => i.variantId === l.variant_id && i.bundleVariantId === variant.id);
+            if (at >= 0) {
+                next[at] = { ...next[at], quantity: next[at].quantity + l.quantity };
+                continue;
+            }
+            next.push({
+                // Its id is chosen here, so the bundle can be noted on the
+                // line once the save has written it.
+                clientId: crypto.randomUUID(),
+                variantId: l.variant_id,
+                productName: l.productName,
+                variantTitle: l.variantTitle,
+                quantity: l.quantity,
+                sale_price: l.price_at_sale,
+                cost_price: l.cost_at_sale,
+                stock_qty: l.stock_qty,
+                track_inventory: l.track_inventory,
+                bundleVariantId: variant.id,
+            });
+        }
+        setEditItems(next);
+        toast.success(`اتضاف ${bundleLabel(bundle, variant)}`);
     };
 
     const handleRemoveItem = (index: number) => {
@@ -336,7 +370,7 @@ export default function OrderDetailsPage() {
 
             // 5 & 6. Transactional Update via RPC
             const upsertItemsPayload = editItems.map(item => ({
-                id: item.id || null, // null for new items
+                id: item.id || item.clientId || null, // null for new items
                 variant_id: item.variantId,
                 quantity: item.quantity,
                 price_at_sale: item.sale_price,
@@ -413,6 +447,18 @@ export default function OrderDetailsPage() {
             });
 
             if (rpcError) throw rpcError;
+
+            // update_order_and_items does not know about bundles: the lines a
+            // bundle was just written as are marked here. A failure only loses
+            // the "from bundle" tag, never the lines.
+            const fromBundle = editItems.filter(i => i.clientId && i.bundleVariantId);
+            for (const bvId of [...new Set(fromBundle.map(i => i.bundleVariantId as string))]) {
+                const { error: tagError } = await supabase.from("order_items")
+                    .update({ bundle_variant_id: bvId })
+                    .eq("order_id", orderId)
+                    .in("id", fromBundle.filter(i => i.bundleVariantId === bvId).map(i => i.clientId));
+                if (tagError) console.error("bundle tag", tagError);
+            }
 
             const auditChanges: ActionDiff[] = [];
             if (order?.status !== editForm.status) {
@@ -788,6 +834,7 @@ export default function OrderDetailsPage() {
                                         </Button>
                                     </div>
                                 </div>
+                                <BundlePicker bundles={bundles} onPick={handleAddBundle} />
                             </div>
                         )}
 
@@ -807,6 +854,11 @@ export default function OrderDetailsPage() {
                                         <TableCell>
                                             <div className="font-medium">{item.productName || item.variant?.product?.name}</div>
                                             <div className="text-xs text-muted-foreground">{item.variantTitle || item.variant?.title}</div>
+                                            {(() => {
+                                                const bv = item.bundleVariantId || item.bundle_variant_id;
+                                                const name = bv ? bundleNames.get(bv)?.label : null;
+                                                return name ? <BundleTag label={name} className="mt-1" /> : null;
+                                            })()}
                                         </TableCell>
                                         <TableCell className="text-right">
                                             {isEditing ? (

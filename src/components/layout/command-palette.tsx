@@ -10,7 +10,7 @@ import { supabase } from "@/lib/supabase";
 import { useBusiness } from "@/contexts/BusinessContext";
 import { canOpenPage } from "@/lib/navigation-access";
 import { formatCurrency } from "@/lib/utils";
-import { LayoutDashboard, ShoppingCart, Globe, Truck, Package, Box, Users, Banknote, LineChart, Settings, Ticket, Megaphone, FileText, ShoppingBag, Calendar, History, BookOpen, Wallet, AlertTriangle, Loader2, Search, Plus, LifeBuoy } from "lucide-react";
+import { LayoutDashboard, ShoppingCart, Globe, Truck, Package, Box, Users, Banknote, LineChart, Settings, Ticket, Megaphone, FileText, ShoppingBag, Calendar, History, BookOpen, Wallet, AlertTriangle, Loader2, Search, Plus, LifeBuoy, Layers } from "lucide-react";
 
 /**
  * Global search, opened with Ctrl/Cmd+K from anywhere.
@@ -41,6 +41,8 @@ const DESTINATIONS: Dest[] = [
     { label: "تحديث الشحن جماعي", hint: "رفع ملف", href: "/shipping/update", icon: Truck, keywords: "bulk update csv تحديث جماعي رفع" },
     { label: "المنتجات", href: "/products", icon: Package, keywords: "products منتجات كتالوج" },
     { label: "منتج جديد", href: "/products/new", icon: Plus, keywords: "new product منتج جديد" },
+    { label: "الباندلز", hint: "منتجات بتتباع مع بعض", href: "/products/bundles", icon: Layers, keywords: "bundles bundle باندل باندلز عرض طقم مجموعة" },
+    { label: "باندل جديد", href: "/products/bundles/new", icon: Plus, keywords: "new bundle باندل جديد عرض" },
     { label: "المخزون", href: "/inventory", icon: Box, keywords: "inventory stock مخزون جرد" },
     { label: "التوالف", href: "/inventory/damages", icon: AlertTriangle, keywords: "damages توالف تلف هالك" },
     { label: "المشتريات", href: "/purchases", icon: ShoppingBag, keywords: "purchases مشتريات شراء" },

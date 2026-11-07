@@ -112,9 +112,12 @@ export async function importEasyOrdersProducts(businessId: string): Promise<Easy
     list = list.filter(p => p && p.id && p.name && !p.hidden);
 
     // What the store already has, so nothing is duplicated.
-    const [{ data: existingProducts }, { data: existingVariants }] = await Promise.all([
+    // A bundle is one product on EasyOrders but not here (lib/bundles.ts), so
+    // its SKU is skipped too; the bundles table is absent before its migration.
+    const [{ data: existingProducts }, { data: existingVariants }, { data: bundleVariants }] = await Promise.all([
         admin.from("products").select("name").eq("business_id", businessId),
         admin.from("variants").select("sku").eq("business_id", businessId),
+        admin.from("bundle_variants").select("sku").eq("business_id", businessId),
     ]);
     // Built for a store setting up, not for one with a catalogue already.
     // Names here and on EasyOrders often differ (English here, Arabic there),
@@ -123,7 +126,7 @@ export async function importEasyOrdersProducts(businessId: string): Promise<Easy
         return { ok: false, error: "متجرك فيه منتجات بالفعل. الاستيراد ده للمتاجر الجديدة — لو محتاجه كلّمنا." };
     }
     const haveNames = new Set((existingProducts || []).map(p => norm(p.name)));
-    const haveSkus = new Set((existingVariants || []).map(v => normSku(v.sku)).filter(Boolean));
+    const haveSkus = new Set([...(existingVariants || []), ...(bundleVariants || [])].map(v => normSku(v.sku)).filter(Boolean));
 
     let imported = 0, skipped = 0, withoutCode = 0, failed = 0;
     await pool(list, 6, async (summary) => {

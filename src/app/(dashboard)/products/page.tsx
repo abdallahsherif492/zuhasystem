@@ -16,7 +16,7 @@ import {
     TableHeader,
     TableRow,
 } from "@/components/ui/table";
-import { Plus, Edit, Loader2, Search } from "lucide-react";
+import { Plus, Edit, Loader2, Search, Layers } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 
@@ -71,11 +71,16 @@ export default function ProductsPage() {
                         onChange={(e) => setSearchQuery(e.target.value)}
                     />
                 </div>
-                <Link href="/products/new">
-                    <Button id="add-product-btn">
-                        <Plus className="mr-2 h-4 w-4" /> {t("New Product")}
+                <div className="flex gap-2">
+                    <Button asChild variant="outline">
+                        <Link href="/products/bundles"><Layers className="mr-2 h-4 w-4" /> {t("Bundles")}</Link>
                     </Button>
-                </Link>
+                    <Link href="/products/new">
+                        <Button id="add-product-btn">
+                            <Plus className="mr-2 h-4 w-4" /> {t("New Product")}
+                        </Button>
+                    </Link>
+                </div>
             </div>
 
             <div id="products-table" className="rounded-md border">
