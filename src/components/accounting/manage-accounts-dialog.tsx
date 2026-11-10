@@ -23,7 +23,7 @@ import {
     TableRow,
 } from "@/components/ui/table";
 
-export function ManageAccountsDialog({ onSuccess }: { onSuccess?: () => void }) {
+export function ManageAccountsDialog({ onSuccess, trigger }: { onSuccess?: () => void; trigger?: React.ReactNode }) {
     const { activeBusiness } = useBusiness();
     const [open, setOpen] = useState(false);
     const [accounts, setAccounts] = useState<any[]>([]);
@@ -100,10 +100,12 @@ export function ManageAccountsDialog({ onSuccess }: { onSuccess?: () => void }) 
     return (
         <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
-                <Button variant="outline" className="gap-2">
-                    <Wallet className="h-4 w-4" />
-                    Manage Treasury Accounts
-                </Button>
+                {trigger ?? (
+                    <Button variant="outline" className="gap-2">
+                        <Wallet className="h-4 w-4" />
+                        Manage Treasury Accounts
+                    </Button>
+                )}
             </DialogTrigger>
             <DialogContent className="sm:max-w-[500px]">
                 <DialogHeader>

@@ -27,15 +27,21 @@ import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/lib/supabase";
 import { useBusiness } from "@/contexts/BusinessContext";
-import { useEffect } from "react";
+import { useEffect, type ReactNode } from "react";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 interface TransferDialogProps {
     onSuccess: () => void;
+    /** The button that opens it; a default one when left out. */
+    trigger?: ReactNode;
 }
 
 
-export function TransferDialog({ onSuccess }: TransferDialogProps) {
+export function TransferDialog({ onSuccess, trigger }: TransferDialogProps) {
     const { activeBusiness } = useBusiness();
+    const { language } = useLanguage();
+    const ar = language === "ar";
+    const L = (a: string, e: string) => (ar ? a : e);
     const [open, setOpen] = useState(false);
     const [loading, setLoading] = useState(false);
     const [accounts, setAccounts] = useState<any[]>([]);
@@ -65,7 +71,7 @@ export function TransferDialog({ onSuccess }: TransferDialogProps) {
     const handleSubmit = async () => {
         if (!amount || !fromAccount || !toAccount || !date) return;
         if (fromAccount === toAccount) {
-            alert("Cannot transfer to the same account");
+            alert(L("مينفعش تحوّل لنفس الخزنة", "Cannot transfer to the same account"));
             return;
         }
 
@@ -120,26 +126,28 @@ export function TransferDialog({ onSuccess }: TransferDialogProps) {
     return (
         <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
-                <Button variant="outline" className="gap-2">
-                    <ArrowRightLeft className="h-4 w-4" />
-                    Transfer Funds
-                </Button>
+                {trigger ?? (
+                    <Button variant="outline" className="gap-2">
+                        <ArrowRightLeft className="h-4 w-4" />
+                        {L("تحويل بين الخزن", "Transfer Funds")}
+                    </Button>
+                )}
             </DialogTrigger>
-            <DialogContent className="sm:max-w-[425px]">
-                <DialogHeader>
-                    <DialogTitle>Internal Transfer</DialogTitle>
+            <DialogContent className="sm:max-w-[425px]" dir={ar ? "rtl" : "ltr"}>
+                <DialogHeader className="pr-6 text-start">
+                    <DialogTitle>{L("تحويل بين الخزن", "Internal Transfer")}</DialogTitle>
                     <DialogDescription>
-                        Move funds between accounts. This will not affect revenue or expenses.
+                        {L("نقل فلوس من خزنة لخزنة. مش بيأثر على الدخل ولا المصاريف.", "Move funds between accounts. This will not affect revenue or expenses.")}
                     </DialogDescription>
                 </DialogHeader>
                 <div className="grid gap-4 py-4">
 
                     <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-2">
-                            <Label>From</Label>
+                            <Label>{L("من", "From")}</Label>
                             <Select value={fromAccount} onValueChange={setFromAccount}>
                                 <SelectTrigger>
-                                    <SelectValue placeholder="Sender" />
+                                    <SelectValue placeholder={L("الخزنة اللي هتطلع منها", "Sender")} />
                                 </SelectTrigger>
                                 <SelectContent>
                                     {accounts.map((acc) => (
@@ -151,10 +159,10 @@ export function TransferDialog({ onSuccess }: TransferDialogProps) {
                             </Select>
                         </div>
                         <div className="space-y-2">
-                            <Label>To</Label>
+                            <Label>{L("إلى", "To")}</Label>
                             <Select value={toAccount} onValueChange={setToAccount}>
                                 <SelectTrigger>
-                                    <SelectValue placeholder="Receiver" />
+                                    <SelectValue placeholder={L("الخزنة اللي هتدخلها", "Receiver")} />
                                 </SelectTrigger>
                                 <SelectContent>
                                     {accounts.map((acc) => (
@@ -168,7 +176,7 @@ export function TransferDialog({ onSuccess }: TransferDialogProps) {
                     </div>
 
                     <div className="space-y-2">
-                        <Label>Amount (EGP)</Label>
+                        <Label>{L("المبلغ (ج.م)", "Amount (EGP)")}</Label>
                         <Input
                             type="number"
                             min="0"
@@ -180,7 +188,7 @@ export function TransferDialog({ onSuccess }: TransferDialogProps) {
                     </div>
 
                     <div className="space-y-2">
-                        <Label>Date</Label>
+                        <Label>{L("التاريخ", "Date")}</Label>
                         <Popover>
                             <PopoverTrigger asChild>
                                 <Button
@@ -191,7 +199,7 @@ export function TransferDialog({ onSuccess }: TransferDialogProps) {
                                     )}
                                 >
                                     <CalendarIcon className="mr-2 h-4 w-4" />
-                                    {date ? format(date, "PPP") : <span>Pick a date</span>}
+                                    {date ? format(date, "PPP") : <span>{L("اختار يوم", "Pick a date")}</span>}
                                 </Button>
                             </PopoverTrigger>
                             <PopoverContent className="w-auto p-0">
@@ -208,7 +216,7 @@ export function TransferDialog({ onSuccess }: TransferDialogProps) {
                 <DialogFooter>
                     <Button onClick={handleSubmit} disabled={loading || !amount || !fromAccount || !toAccount}>
                         {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                        Transfer
+                        {L("حوّل", "Transfer")}
                     </Button>
                 </DialogFooter>
             </DialogContent>

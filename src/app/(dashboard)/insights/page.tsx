@@ -276,12 +276,14 @@ function InsightsContent() {
                 stockData,
                 payablesRes
             ] = await Promise.all([
-                // 1. Total Investment
+                // 1. Total Investment, net of what the owners took back out
+                // (withdrawals are stored negative), so the growth ratio
+                // compares the business with the money actually left in it.
                 fetchAll((from, to) =>
                     supabase.from('transactions')
                         .select('amount')
                         .eq('business_id', activeBusiness.id)
-                        .eq('type', 'investment')
+                        .in('type', ['investment', 'withdrawal'])
                         .range(from, to)
                 ),
                 // 2. Pending Orders (Prepared + Shipped Only)
