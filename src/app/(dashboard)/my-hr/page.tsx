@@ -15,7 +15,7 @@ import { Loader2, Plus, Calendar, Clock, LogIn, LogOut } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { toast } from "sonner";
 import { MyPayslipsCard } from "@/components/payroll/my-payslips-card";
-import { MyDailyTargets } from "@/components/hr/daily-targets";
+import Link from "next/link";
 
 type HRRequest = {
     id: string;
@@ -86,7 +86,7 @@ function getShiftStartDateTime(logicalDateStr: string, shiftStartStr: string | n
 }
 
 export default function MyHRPage() {
-    const { activeBusiness, currentUser, shiftStart, shiftEnd, weekendDays } = useBusiness();
+    const { activeBusiness, shiftStart, shiftEnd, weekendDays } = useBusiness();
     const [requests, setRequests] = useState<HRRequest[]>([]);
     const [loading, setLoading] = useState(true);
     
@@ -326,6 +326,13 @@ export default function MyHRPage() {
 
     return (
         <div className="space-y-6 max-w-5xl mx-auto">
+            <Link href="/my-hr/today" dir="rtl" className="flex items-center justify-between gap-3 rounded-xl border bg-card p-4 transition-colors hover:bg-muted/40">
+                <span>
+                    <span className="block font-semibold">يومي: الشيفت والتارجت والخصومات</span>
+                    <span className="block text-sm text-muted-foreground">سجّل حضور وانصراف، وشوف التارجت بتاعك والكوميشن والخصومات بتاعة الشهر.</span>
+                </span>
+                <span className="shrink-0 text-sm font-medium text-primary">افتح</span>
+            </Link>
             <div className="flex justify-between items-center">
                 <div>
                     <h1 className="text-3xl font-bold tracking-tight">My HR & Requests</h1>
@@ -619,7 +626,6 @@ export default function MyHRPage() {
                 </CardContent>
             </Card>
 
-            {activeBusiness && currentUser?.email && <MyDailyTargets businessId={activeBusiness.id} email={currentUser.email} />}
             {activeBusiness && <MyPayslipsCard businessId={activeBusiness.id} />}
         </div>
     );

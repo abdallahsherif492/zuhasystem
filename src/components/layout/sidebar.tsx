@@ -142,6 +142,7 @@ export function SidebarContent({ onLinkClick }: { onLinkClick?: () => void }) {
                 { title: t("Dashboard"), href: "/dashboard", icon: LayoutDashboard, exactMatch: true },
                 { title: t("Start here"), href: "/getting-started", icon: BookOpen },
                 { title: t("System Guide"), href: "/guide", icon: BookOpen },
+                { title: t("My day"), href: "/my-hr/today", icon: Target },
                 { title: t("My HR"), href: "/my-hr", icon: Calendar },
             ]
         },

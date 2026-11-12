@@ -51,6 +51,12 @@ export interface TargetSettings {
     deduct_rate: number;
     monthly_cap: number | null;
     starts_on: string | null;
+    /** Minutes of slack before a late arrival or an early leave counts. */
+    grace_minutes: number;
+    deduct_late: number;
+    deduct_early: number;
+    deduct_no_clockout: number;
+    deduct_no_clockin: number;
 }
 
 export const DEFAULT_SETTINGS: TargetSettings = {
@@ -70,6 +76,11 @@ export const DEFAULT_SETTINGS: TargetSettings = {
     deduct_rate: 0,
     monthly_cap: null,
     starts_on: null,
+    grace_minutes: 10,
+    deduct_late: 0,
+    deduct_early: 0,
+    deduct_no_clockout: 0,
+    deduct_no_clockin: 0,
 };
 
 export const METRIC_LABEL: Record<MetricKey, string> = {
@@ -121,6 +132,23 @@ export interface Attempt { order_id: string; attempted_by: string | null; create
 
 export interface Clocking { user_email: string; date: string; clock_in_time: string | null; clock_out_time: string | null }
 
+/**
+ * The clock-in that belongs to the member's shift on `day`: by when it
+ * happened, not by attendance_logs.date (My HR files a night clock-in under a
+ * "shift date" that can be the day before).
+ */
+export function clockingFor(member: Member, day: string, clockings: Clocking[]): Clocking | null {
+    const mine = clockings.filter(c => c.clock_in_time && c.user_email.toLowerCase() === member.user_email.toLowerCase());
+    const sched = scheduledShift(member, day);
+    if (sched) {
+        const hit = mine.find(c => { const t = Date.parse(c.clock_in_time!); return t >= sched.start - 6 * HOUR && t < sched.end; });
+        if (hit) return hit;
+    }
+    // Not a scheduled day, or far off the schedule: the one clocked in on that Cairo day.
+    return mine.find(c => cairoDate(new Date(c.clock_in_time!)) === day
+        && !(sched && Date.parse(c.clock_in_time!) >= sched.end)) || null;
+}
+
 export interface TargetData {
     members: Member[];
     storeOrders: StoreOrder[];
@@ -153,18 +181,19 @@ export interface Shift { email: string; day: string; start: number; end: number 
  * clocked in that day, the real hours count rather than the schedule: a
  * schedule can be out of date, a clock-in is what happened.
  */
-export function shiftOn(member: Member, day: string, clocking?: Clocking | null, now = Date.now()): Shift | null {
+export function shiftOn(member: Member, day: string, clocking?: Clocking | null): Shift | null {
     const scheduled = scheduledShift(member, day);
     if (clocking?.clock_in_time) {
         const start = Date.parse(clocking.clock_in_time);
         const length = scheduled ? scheduled.end - scheduled.start : 8 * HOUR;
-        const end = clocking.clock_out_time ? Date.parse(clocking.clock_out_time) : Math.max(start + length, Math.min(now, start + 16 * HOUR));
+        // Not clocked out (yet, or forgotten): a shift of the usual length.
+        const end = clocking.clock_out_time ? Date.parse(clocking.clock_out_time) : start + length;
         if (end > start) return { email: member.user_email.toLowerCase(), day, start, end };
     }
     return scheduled;
 }
 
-function scheduledShift(member: Member, day: string): Shift | null {
+export function scheduledShift(member: Member, day: string): Shift | null {
     const weekday = WEEKDAYS[new Date(`${day}T12:00:00Z`).getUTCDay()];
     if ((member.weekend_days || []).includes(weekday)) return null;
     const startMin = minutesOf(member.shift_start, 9 * 60);
@@ -190,6 +219,28 @@ export interface MetricResult {
     met: boolean;
     /** Plain-language account, for the moderator and the manager. */
     detail: string;
+    /** For "confirm": what the work was. */
+    parts?: { confirmed: number; cancelled: number; attempted: number };
+}
+
+export type AttendanceKey = "late" | "early" | "no_clockout" | "no_clockin";
+
+export const ATTENDANCE_LABEL: Record<AttendanceKey, string> = {
+    late: "تأخير",
+    early: "خروج بدري",
+    no_clockout: "نسيان تسجيل الانصراف",
+    no_clockin: "من غير تسجيل حضور",
+};
+
+export interface Attendance {
+    scheduled_start: string;
+    scheduled_end: string;
+    clock_in: string | null;
+    clock_out: string | null;
+    late_minutes: number;
+    early_minutes: number;
+    /** What counted against them, each with what it costs. */
+    items: { key: AttendanceKey; amount: number; detail: string }[];
 }
 
 export interface Scorecard {
@@ -202,9 +253,55 @@ export interface Scorecard {
     share: number;
     metrics: MetricResult[];
     missed: MetricKey[];
+    /** Targets missed plus attendance, before any monthly cap. */
     deduction: number;
+    attendance: Attendance | null;
     /** Until when this was measured (now, for a shift still running). */
     measured_until: string;
+}
+
+const attendanceCost = (s: TargetSettings, k: AttendanceKey) =>
+    Number(k === "late" ? s.deduct_late : k === "early" ? s.deduct_early : k === "no_clockout" ? s.deduct_no_clockout : s.deduct_no_clockin) || 0;
+
+const mins = (ms: number) => Math.round(ms / 60_000);
+
+/**
+ * Late, early or forgotten, against the scheduled shift. While the shift is
+ * still running only what has already happened counts (being late); leaving
+ * early and forgetting to clock out are known once it ends.
+ */
+export function attendanceFor(member: Member, day: string, clocking: Clocking | null, settings: TargetSettings, now = Date.now(), worked = true): Attendance | null {
+    const sched = scheduledShift(member, day);
+    if (!sched) return null;
+    const grace = Math.max(0, Number(settings.grace_minutes) || 0) * 60_000;
+    const over = now >= sched.end;
+    const clockIn = clocking?.clock_in_time ? Date.parse(clocking.clock_in_time) : null;
+    const clockOut = clocking?.clock_out_time ? Date.parse(clocking.clock_out_time) : null;
+    const out: Attendance = {
+        scheduled_start: new Date(sched.start).toISOString(),
+        scheduled_end: new Date(sched.end).toISOString(),
+        clock_in: clockIn ? new Date(clockIn).toISOString() : null,
+        clock_out: clockOut ? new Date(clockOut).toISOString() : null,
+        late_minutes: 0, early_minutes: 0, items: [],
+    };
+    if (clockIn === null) {
+        // Only when they worked: a day with no activity at all is for the
+        // manager to call (absence or leave), not a missed clock-in.
+        if (over && worked) out.items.push({ key: "no_clockin", amount: attendanceCost(settings, "no_clockin"), detail: "اشتغلت من غير ما تسجّل حضور." });
+        return out;
+    }
+    if (clockIn > sched.start + grace) {
+        out.late_minutes = mins(clockIn - sched.start);
+        out.items.push({ key: "late", amount: attendanceCost(settings, "late"), detail: `سجّلت حضور متأخر ${out.late_minutes} دقيقة.` });
+    }
+    if (clockOut !== null && clockOut < sched.end - grace) {
+        out.early_minutes = mins(sched.end - clockOut);
+        out.items.push({ key: "early", amount: attendanceCost(settings, "early"), detail: `سجّلت انصراف قبل آخر الشيفت بـ ${out.early_minutes} دقيقة.` });
+    }
+    if (clockOut === null && over && now >= sched.end + 30 * 60_000) {
+        out.items.push({ key: "no_clockout", amount: attendanceCost(settings, "no_clockout"), detail: "الشيفت خلص ومسجلتش انصراف." });
+    }
+    return out;
 }
 
 const cancelledFromWaiting = (o: StoreOrder) => !!o.cancelled_at && (!o.cancelled_from || o.cancelled_from.toLowerCase() === "waiting");
@@ -221,8 +318,9 @@ const lower = (s: string | null | undefined) => (s || "").toLowerCase();
 export function scoreDay(day: string, settings: TargetSettings, data: TargetData, now = Date.now()): Scorecard[] {
     const included = new Set(settings.members.map(lower));
     const members = data.members.filter(m => included.has(lower(m.user_email)));
-    const clockOf = (email: string) => data.clockings.find(c => c.date === day && lower(c.user_email) === lower(email)) || null;
-    const shifts = members.map(m => shiftOn(m, day, clockOf(m.user_email), now)).filter((s): s is Shift => !!s && s.start < now);
+    const memberOf = new Map(members.map(m => [lower(m.user_email), m]));
+    const clockOf = (email: string) => { const m = memberOf.get(lower(email)); return m ? clockingFor(m, day, data.clockings) : null; };
+    const shifts = members.map(m => shiftOn(m, day, clockOf(m.user_email))).filter((s): s is Shift => !!s && s.start < now);
     const H = Math.max(0, Number(settings.confirm_within_hours) || 0) * HOUR;
     const backlog = Math.max(0, Number(settings.backlog_days) || 0) * 24 * HOUR;
     const followEvery = Math.max(1, Number(settings.followup_every_days) || 1) * 24 * HOUR;
@@ -250,7 +348,7 @@ export function scoreDay(day: string, settings: TargetSettings, data: TargetData
             measured_until: new Date(end).toISOString(),
         };
         if (!working.includes(shift)) {
-            return { ...base, status: "leave" as const, share: 0, metrics: [], missed: [], deduction: 0 };
+            return { ...base, status: "leave" as const, share: 0, metrics: [], missed: [], deduction: 0, attendance: null };
         }
 
         // This moderator's share of the staffing on duty during their shift.
@@ -284,6 +382,7 @@ export function scoreDay(day: string, settings: TargetSettings, data: TargetData
         const confirmTarget = Math.ceil(needed * share);
         const confirm: MetricResult = {
             key: "confirm", target: confirmTarget, done: worked, met: worked >= confirmTarget,
+            parts: { confirmed, cancelled, attempted: calledIds.size },
             detail: `المطلوب يتشتغل عليه في الشيفت ${needed} أوردر (${waitingAtStart} مستنيين من قبل الشيفت + ${arrivedDue} وصلوا وعدّى عليهم ${settings.confirm_within_hours} ساعة)، نصيبك ${Math.round(share * 100)}% = ${confirmTarget}. اشتغلت على ${worked}: ${confirmed} تأكيد، ${cancelled} إلغاء، ${calledIds.size} محاولة متسجلة.`,
         };
 
@@ -324,13 +423,17 @@ export function scoreDay(day: string, settings: TargetSettings, data: TargetData
         };
 
         const metrics = [confirm, msg, follow, rateM];
-        const anything = worked + messages + followed > 0 || !!clockOf(shift.email);
+        const clocking = clockOf(shift.email);
+        const anything = worked + messages + followed > 0 || !!clocking;
         if (!anything && end >= shift.end) {
-            return { ...base, status: "absent" as const, share, metrics, missed: [], deduction: 0 };
+            return { ...base, status: "absent" as const, share, metrics, missed: [], deduction: 0, attendance: null };
         }
+        const member = memberOf.get(shift.email)!;
+        const attendance = attendanceFor(member, day, clocking, settings, now, worked + messages + followed > 0);
         const missed = metrics.filter(m => !m.met).map(m => m.key);
-        const deduction = missed.reduce((s, k) => s + deductionFor(settings, k), 0);
-        return { ...base, status: "evaluated" as const, share, metrics, missed, deduction };
+        const deduction = missed.reduce((s, k) => s + deductionFor(settings, k), 0)
+            + (attendance?.items.reduce((s, i) => s + i.amount, 0) || 0);
+        return { ...base, status: "evaluated" as const, share, metrics, missed, deduction, attendance };
     });
 }
 

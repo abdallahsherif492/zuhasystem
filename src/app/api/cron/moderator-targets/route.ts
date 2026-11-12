@@ -3,7 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import { resolveCronCaller } from "../auto-sync/cron-auth";
 import { cairoDate } from "@/lib/cairo-day";
 import {
-    METRIC_LABEL, dataSince, loadTargetData, scoreDay, settingsOf,
+    ATTENDANCE_LABEL, METRIC_LABEL, dataSince, loadTargetData, scoreDay, settingsOf,
     type MetricKey, type Scorecard, type TargetSettings,
 } from "@/lib/hr/daily-targets";
 
@@ -122,7 +122,10 @@ async function scoreBusiness(businessId: string, settings: TargetSettings) {
                     period: card.work_date.slice(0, 8) + "01",
                     kind: "deduction",
                     amount: deduction,
-                    reason: `تارجت يوم ${card.work_date}: ${card.missed.map((k: MetricKey) => METRIC_LABEL[k]).join("، ")}`,
+                    reason: `تارجت يوم ${card.work_date}: ${[
+                        ...card.missed.map((k: MetricKey) => METRIC_LABEL[k]),
+                        ...(card.attendance?.items || []).filter(i => i.amount > 0).map(i => ATTENDANCE_LABEL[i.key]),
+                    ].join("، ")}`,
                     entry_date: card.work_date,
                     created_by: "system: daily targets",
                 }).select("id").single();
@@ -133,7 +136,7 @@ async function scoreBusiness(businessId: string, settings: TargetSettings) {
             note = note || "التسجيل في المرتبات مقفول من الإعدادات";
         }
 
-        const { error: insErr } = await admin.from("moderator_scorecards").insert({
+        const record = {
             business_id: businessId,
             user_email: card.user_email,
             work_date: card.work_date,
@@ -146,7 +149,15 @@ async function scoreBusiness(businessId: string, settings: TargetSettings) {
             deduction,
             adjustment_id: adjustmentId,
             payroll_note: note,
-        });
+            attendance: card.attendance,
+        };
+        let { error: insErr } = await admin.from("moderator_scorecards").insert(record);
+        if (insErr && /attendance/.test(insErr.message)) {
+            // 20261114_target_attendance.sql not run yet.
+            const { attendance: _skip, ...without } = record;
+            void _skip;
+            ({ error: insErr } = await admin.from("moderator_scorecards").insert(without));
+        }
         if (insErr) {
             // Scored by a run in parallel: undo the booking so it is not doubled.
             if (adjustmentId) await admin.from("payroll_adjustments").delete().eq("id", adjustmentId);

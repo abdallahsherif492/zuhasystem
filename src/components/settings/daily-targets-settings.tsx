@@ -66,13 +66,25 @@ export function DailyTargetsSettings() {
             updated_by: currentUser?.email || null,
             updated_at: new Date().toISOString(),
         });
+        let failed = error;
+        if (error && /grace_minutes|deduct_late|deduct_early|deduct_no_clock/.test(error.message)) {
+            // 20261114_target_attendance.sql not run yet: save the rest.
+            const { grace_minutes, deduct_late, deduct_early, deduct_no_clockout, deduct_no_clockin, ...rest } = s;
+            void grace_minutes; void deduct_late; void deduct_early; void deduct_no_clockout; void deduct_no_clockin;
+            ({ error: failed } = await supabase.from("moderator_target_settings").upsert({
+                business_id: businessId, ...rest, starts_on: rest.starts_on || null,
+                updated_by: currentUser?.email || null, updated_at: new Date().toISOString(),
+            }));
+            if (!failed) toast.warning("اتحفظ من غير خصومات الحضور. شغّل supabase/migrations/20261114_target_attendance.sql الأول.");
+        }
         setSaving(false);
-        if (error) {
+        if (failed) {
+            const error = failed;
             console.error(error);
             toast.error(/row-level security/i.test(error.message) ? "الأونر أو الأدمن بس اللي يقدر يغيّر الإعدادات دي." : "ماتحفظش، جرّب تاني.");
             return;
         }
-        toast.success("اتحفظ.");
+        if (!error) toast.success("اتحفظ.");
     };
 
     const amount = (k: keyof TargetSettings, label: string, hint: string) => (
@@ -171,6 +183,27 @@ export function DailyTargetsSettings() {
                             <Input id="dt-st" type="date" value={s.starts_on || ""} onChange={e => set("starts_on", e.target.value || null)} />
                             <p className="text-xs text-muted-foreground">الشيفتات اللي قبله مش بتتقاس.</p>
                         </div>
+                    </div>
+                </section>
+
+                {/* Attendance */}
+                <section className="space-y-4">
+                    <div>
+                        <h3 className="font-medium">الحضور والانصراف</h3>
+                        <p className="text-sm text-muted-foreground">
+                            بيتقارن بمواعيد الشيفت المتسجلة في الفريق، فلازم تكون مظبوطة. المودريتور بيسجّل من صفحة «يومي»: /my-hr/today. أي بند تسيبه 0 مش بيتخصم عليه.
+                        </p>
+                    </div>
+                    <div className="grid gap-4 sm:grid-cols-2">
+                        <div className="space-y-1">
+                            <Label htmlFor="dt-g" className="text-sm">سماح (دقايق)</Label>
+                            <Input id="dt-g" type="number" min={0} value={s.grace_minutes} onChange={num("grace_minutes")} />
+                            <p className="text-xs text-muted-foreground">التأخير أو الخروج بدري أقل من كده مش بيتحسب.</p>
+                        </div>
+                        {amount("deduct_late", "التأخير", "سجّل حضور بعد بداية الشيفت + السماح.")}
+                        {amount("deduct_early", "الخروج بدري", "سجّل انصراف قبل آخر الشيفت − السماح.")}
+                        {amount("deduct_no_clockout", "نسيان تسجيل الانصراف", "الشيفت خلص من نص ساعة ولسه ماسجلش انصراف.")}
+                        {amount("deduct_no_clockin", "شغل من غير تسجيل حضور", "اشتغل على أوردرات في الشيفت ومسجلش حضور خالص.")}
                     </div>
                 </section>
 
