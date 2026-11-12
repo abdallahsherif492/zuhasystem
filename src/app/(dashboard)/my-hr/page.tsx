@@ -15,6 +15,7 @@ import { Loader2, Plus, Calendar, Clock, LogIn, LogOut } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { toast } from "sonner";
 import { MyPayslipsCard } from "@/components/payroll/my-payslips-card";
+import { MyDailyTargets } from "@/components/hr/daily-targets";
 
 type HRRequest = {
     id: string;
@@ -85,7 +86,7 @@ function getShiftStartDateTime(logicalDateStr: string, shiftStartStr: string | n
 }
 
 export default function MyHRPage() {
-    const { activeBusiness, shiftStart, shiftEnd, weekendDays } = useBusiness();
+    const { activeBusiness, currentUser, shiftStart, shiftEnd, weekendDays } = useBusiness();
     const [requests, setRequests] = useState<HRRequest[]>([]);
     const [loading, setLoading] = useState(true);
     
@@ -618,6 +619,7 @@ export default function MyHRPage() {
                 </CardContent>
             </Card>
 
+            {activeBusiness && currentUser?.email && <MyDailyTargets businessId={activeBusiness.id} email={currentUser.email} />}
             {activeBusiness && <MyPayslipsCard businessId={activeBusiness.id} />}
         </div>
     );

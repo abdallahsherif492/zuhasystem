@@ -57,6 +57,7 @@ const DESTINATIONS: Dest[] = [
     { label: "الفريق", href: "/team", icon: Users, keywords: "team staff فريق موظفين" },
     { label: "الحضور", href: "/team/attendance", icon: Calendar, keywords: "attendance حضور انصراف" },
     { label: "المرتبات", href: "/team/payroll", icon: Wallet, keywords: "payroll salary payslip مرتبات مرتب قسيمة سلفة خصم بونص" },
+    { label: "تارجت المودريتورز", hint: "كشف كل شيفت والخصم", href: "/team/targets", icon: Users, keywords: "targets kpi تارجت مودريتور خصم كشف شيفت تأكيد متابعة" },
     { label: "حضوري", hint: "My HR", href: "/my-hr", icon: Calendar, keywords: "my hr حضوري بصمة" },
     { label: "سجل العمليات", href: "/actions-log", icon: History, keywords: "log audit سجل عمليات" },
     { label: "دليل النظام", href: "/guide", icon: BookOpen, keywords: "guide help دليل شرح مساعدة" },
