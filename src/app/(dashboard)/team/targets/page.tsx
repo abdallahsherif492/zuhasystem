@@ -1,80 +1,96 @@
 "use client";
 
 import Link from "next/link";
-import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
-import { ChevronDown, Loader2, RefreshCw, Settings } from "lucide-react";
+import { ChevronLeft, ChevronRight, Loader2, RefreshCw, Settings } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useBusiness } from "@/contexts/BusinessContext";
 import { cn, formatCurrency } from "@/lib/utils";
-import { cairoDate } from "@/lib/cairo-day";
+import { cairoDate, nextDay } from "@/lib/cairo-day";
 import { Button } from "@/components/ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { LiveShifts, MetricRow } from "@/components/hr/daily-targets";
+import { Input } from "@/components/ui/input";
+import { MetricRow } from "@/components/hr/daily-targets";
 import {
-    DAILY_TARGETS_MIGRATION, METRIC_LABEL, settingsOf,
-    type MetricKey, type MetricResult, type TargetSettings,
+    ATTENDANCE_LABEL, DAILY_TARGETS_MIGRATION, dataSince, loadTargetData, scoreDay, settingsOf,
+    type Attendance, type MetricKey, type MetricResult, type Scorecard, type TargetSettings,
 } from "@/lib/hr/daily-targets";
 
-interface Row {
-    id: string;
+/**
+ * Team → Daily targets: every moderator's report for one day the manager
+ * picks. A day already scored shows its scorecard as recorded (with what was
+ * booked in payroll); any other day — today, or one before the targets
+ * started — is worked out now from the same rules, and says so.
+ */
+
+interface Stored {
     user_email: string;
     work_date: string;
     shift_start: string;
     shift_end: string;
-    status: "evaluated" | "absent" | "leave";
+    status: Scorecard["status"];
     share: number;
     metrics: MetricResult[];
     missed: MetricKey[];
     deduction: number;
+    attendance: Attendance | null;
     adjustment_id: string | null;
     payroll_note: string | null;
 }
 
+type Report = (Scorecard | Stored) & { source: "recorded" | "live" | "computed" };
+
 const KEYS: MetricKey[] = ["confirm", "messages", "followups", "rate"];
-
-function periodRange(p: string): [string, string] {
-    const today = cairoDate();
-    if (p === "7") return [cairoDate(new Date(Date.now() - 6 * 86_400_000)), today];
-    if (p === "last") {
-        const [y, m] = today.split("-").map(Number);
-        const first = new Date(Date.UTC(y, m - 2, 1)).toISOString().slice(0, 10);
-        const last = new Date(Date.UTC(y, m - 1, 0)).toISOString().slice(0, 10);
-        return [first, last];
-    }
-    return [today.slice(0, 8) + "01", today];
-}
-
-const dayLabel = (d: string) => new Date(`${d}T12:00:00Z`).toLocaleDateString("ar-EG", { weekday: "short", day: "numeric", month: "short" });
+const prevDay = (ymd: string) => new Date(Date.UTC(+ymd.slice(0, 4), +ymd.slice(5, 7) - 1, +ymd.slice(8, 10) - 1)).toISOString().slice(0, 10);
+const fmtDay = (ymd: string) => new Date(`${ymd}T12:00:00Z`).toLocaleDateString("ar-EG", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+const fmtTime = (iso: string) => new Date(iso).toLocaleTimeString("ar-EG", { hour: "numeric", minute: "2-digit", timeZone: "Africa/Cairo" });
 const who = (email: string) => email.split("@")[0];
 
 export default function DailyTargetsPage() {
     const { activeBusiness } = useBusiness();
     const businessId = activeBusiness?.id;
-    const [period, setPeriod] = useState("month");
+    const today = cairoDate();
+    const [day, setDay] = useState(today);
     const [settings, setSettings] = useState<TargetSettings | null>(null);
-    const [rows, setRows] = useState<Row[] | null>(null);
+    const [reports, setReports] = useState<Report[] | null>(null);
     const [missing, setMissing] = useState(false);
-    const [open, setOpen] = useState<string | null>(null);
     const [scoring, setScoring] = useState(false);
     const [reload, setReload] = useState(0);
+    const [loadedKey, setLoadedKey] = useState("");
 
+    const key = `${businessId}|${day}|${reload}`;
     useEffect(() => {
         if (!businessId) return;
         let gone = false;
-        const [from, to] = periodRange(period);
-        Promise.all([
-            supabase.from("moderator_target_settings").select("*").eq("business_id", businessId).maybeSingle(),
-            supabase.from("moderator_scorecards").select("*").eq("business_id", businessId)
-                .gte("work_date", from).lte("work_date", to).order("work_date", { ascending: false }).order("user_email"),
-        ]).then(([s, r]) => {
+        (async () => {
+            const [s, recorded] = await Promise.all([
+                supabase.from("moderator_target_settings").select("*").eq("business_id", businessId).maybeSingle(),
+                supabase.from("moderator_scorecards").select("*").eq("business_id", businessId).eq("work_date", day).order("user_email"),
+            ]);
             if (gone) return;
-            setMissing(!!s.error || !!r.error);
-            setSettings(settingsOf(s.data));
-            setRows((r.data || []) as Row[]);
-        });
+            const st = settingsOf(s.data);
+            const stored = new Map(((recorded.data || []) as Stored[]).map(r => [r.user_email.toLowerCase(), r]));
+            let computed: Scorecard[] = [];
+            if (!s.error && st.members.length) {
+                const data = await loadTargetData(supabase, businessId, dataSince([day], st)).catch(() => null);
+                if (data) computed = scoreDay(day, st, data);
+            }
+            if (gone) return;
+            const now = Date.now();
+            const out: Report[] = computed.map(c => {
+                const rec = stored.get(c.user_email);
+                if (rec) { stored.delete(c.user_email); return { ...rec, source: "recorded" as const }; }
+                return { ...c, source: Date.parse(c.shift_end) > now ? "live" as const : "computed" as const };
+            });
+            // Scored people no longer in the list.
+            stored.forEach(r => out.push({ ...r, source: "recorded" }));
+            setSettings(st);
+            setMissing(!!s.error || !!recorded.error);
+            setReports(out.sort((a, b) => Date.parse(a.shift_start) - Date.parse(b.shift_start)));
+            setLoadedKey(key);
+        })();
         return () => { gone = true; };
-    }, [businessId, period, reload]);
+    }, [businessId, day, reload, key]);
 
     const scoreNow = useCallback(async () => {
         setScoring(true);
@@ -92,46 +108,19 @@ export default function DailyTargetsPage() {
         }
     }, [businessId]);
 
-    const people = useMemo(() => {
-        const map = new Map<string, { days: number; clean: number; absent: number; misses: Record<MetricKey, number>; deducted: number }>();
-        for (const r of rows || []) {
-            const p = map.get(r.user_email) || { days: 0, clean: 0, absent: 0, misses: { confirm: 0, messages: 0, followups: 0, rate: 0 }, deducted: 0 };
-            if (r.status === "absent") p.absent++;
-            if (r.status === "evaluated") {
-                p.days++;
-                if (!r.missed.length) p.clean++;
-                r.missed.forEach(k => { p.misses[k]++; });
-            }
-            if (r.adjustment_id) p.deducted += Number(r.deduction) || 0;
-            map.set(r.user_email, p);
-        }
-        return [...map.entries()].sort((a, b) => b[1].deducted - a[1].deducted);
-    }, [rows]);
-
-    if (!businessId || !settings || rows === null) {
-        return <div className="flex h-64 items-center justify-center"><Loader2 className="h-6 w-6 animate-spin" /></div>;
-    }
+    const loading = loadedKey !== key || !settings || reports === null;
+    const total = (reports || []).reduce((s, r) => s + (r.source === "recorded" ? ((r as Stored).adjustment_id ? Number(r.deduction) || 0 : 0) : Number(r.deduction) || 0), 0);
 
     return (
-        <div className="mx-auto max-w-6xl space-y-8" dir="rtl">
+        <div className="mx-auto max-w-6xl space-y-6" dir="rtl">
             <div className="flex flex-wrap items-end justify-between gap-4">
                 <div>
-                    <h1 className="text-2xl font-bold">تارجت المودريتورز اليومي</h1>
-                    <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-                        كل شيفت مطلوب منه اللي البيزنس محتاجه، والكشف بيتعمل بعد ما الشيفت يخلص بنص ساعة. الخصم بيتسجل في المرتبات، وتقدر تلغيه من هناك.
-                    </p>
+                    <h1 className="text-2xl font-bold">تقرير المودريتورز</h1>
+                    <p className="mt-1 text-sm text-muted-foreground">اختار يوم وشوف كل مودريتور عمل إيه في شيفته، والمطلوب منه، والخصم.</p>
                 </div>
-                <div className="flex flex-wrap gap-2">
-                    <Select value={period} onValueChange={setPeriod}>
-                        <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="7">آخر 7 أيام</SelectItem>
-                            <SelectItem value="month">الشهر ده</SelectItem>
-                            <SelectItem value="last">الشهر اللي فات</SelectItem>
-                        </SelectContent>
-                    </Select>
-                    <Button variant="outline" onClick={scoreNow} disabled={scoring || !settings.enabled} className="gap-1.5">
-                        {scoring ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}اعمل كشف الشيفتات اللي خلصت
+                <div className="flex flex-wrap items-center gap-2">
+                    <Button variant="outline" onClick={scoreNow} disabled={scoring || !settings?.enabled} className="gap-1.5">
+                        {scoring ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}سجّل كشف الشيفتات اللي خلصت
                     </Button>
                     <Button asChild variant="ghost" size="icon" aria-label="إعدادات التارجت">
                         <Link href="/settings?tab=targets"><Settings className="h-4 w-4" /></Link>
@@ -139,119 +128,132 @@ export default function DailyTargetsPage() {
                 </div>
             </div>
 
+            {/* The day */}
+            <div className="flex flex-wrap items-center gap-2 rounded-xl border bg-card p-3">
+                <Button variant="ghost" size="icon" aria-label="اليوم اللي قبله" onClick={() => setDay(prevDay(day))}><ChevronRight className="h-5 w-5" /></Button>
+                <Input type="date" value={day} max={today} onChange={e => e.target.value && setDay(e.target.value)} className="w-auto" />
+                <Button variant="ghost" size="icon" aria-label="اليوم اللي بعده" disabled={day >= today} onClick={() => setDay(nextDay(day))}><ChevronLeft className="h-5 w-5" /></Button>
+                <span className="font-medium">{fmtDay(day)}</span>
+                <span className="ms-auto flex gap-1">
+                    <Button variant={day === today ? "secondary" : "ghost"} size="sm" onClick={() => setDay(today)}>النهارده</Button>
+                    <Button variant={day === prevDay(today) ? "secondary" : "ghost"} size="sm" onClick={() => setDay(prevDay(today))}>امبارح</Button>
+                </span>
+            </div>
+
             {missing && (
                 <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
                     شغّل الملف <code className="font-mono">{DAILY_TARGETS_MIGRATION}</code> في Supabase الأول.
                 </div>
             )}
-            {!missing && !settings.enabled && (
+            {!missing && settings && !settings.enabled && (
                 <div className="rounded-lg border p-4 text-sm">
-                    الكشف اليومي مقفول. شغّله واختار المودريتورز وحدد قيمة الخصم من <Link href="/settings?tab=targets" className="text-primary underline-offset-4 hover:underline">الإعدادات</Link>.
+                    الكشف اليومي مقفول، فمفيش خصم بيتسجل. التقرير بيتحسب برضه. شغّله من <Link href="/settings?tab=targets" className="text-primary underline-offset-4 hover:underline">الإعدادات</Link>.
                 </div>
             )}
 
-            {settings.enabled && <LiveShifts businessId={businessId} title="الشيفتات الشغالة دلوقتي" />}
-
-            {/* The period, per moderator */}
-            {people.length > 0 && (
-                <section className="space-y-3">
-                    <h2 className="text-lg font-semibold">في الفترة دي</h2>
-                    <div className="overflow-x-auto rounded-xl border">
-                        <table className="w-full min-w-[640px] text-sm">
-                            <thead className="bg-muted/50 text-xs text-muted-foreground">
-                                <tr>
-                                    <th className="p-3 text-start font-medium">المودريتور</th>
-                                    <th className="p-3 text-start font-medium">شيفتات حققت كل حاجة</th>
-                                    {KEYS.map(k => <th key={k} className="p-3 text-start font-medium">فاته: {METRIC_LABEL[k]}</th>)}
-                                    <th className="p-3 text-start font-medium">غياب من غير نشاط</th>
-                                    <th className="p-3 text-start font-medium">اتخصم</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y">
-                                {people.map(([email, p]) => (
-                                    <tr key={email}>
-                                        <td className="p-3 font-medium">{who(email)}</td>
-                                        <td className="p-3 tabular-nums">{p.clean} من {p.days}</td>
-                                        {KEYS.map(k => <td key={k} className={cn("p-3 tabular-nums", p.misses[k] > 0 && "text-rose-700 dark:text-rose-400")}>{p.misses[k]}</td>)}
-                                        <td className="p-3 tabular-nums">{p.absent}</td>
-                                        <td className="p-3 font-semibold tabular-nums">{formatCurrency(p.deducted)}</td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
+            {loading ? (
+                <div className="flex h-48 items-center justify-center"><Loader2 className="h-6 w-6 animate-spin" /></div>
+            ) : !settings!.members.length ? (
+                <p className="rounded-xl border p-6 text-center text-sm text-muted-foreground">اختار المودريتورز اللي بيتقاسوا من الإعدادات الأول.</p>
+            ) : reports!.length === 0 ? (
+                <p className="rounded-xl border p-6 text-center text-sm text-muted-foreground">مفيش شيفتات في اليوم ده (أجازات أو لسه مابدأتش).</p>
+            ) : (
+                <>
+                    <SummaryStrip reports={reports!} total={total} />
+                    <div className="grid gap-4 lg:grid-cols-2">
+                        {reports!.map(r => <DayReport key={r.user_email} r={r} settings={settings!} />)}
                     </div>
-                </section>
+                </>
+            )}
+        </div>
+    );
+}
+
+function SummaryStrip({ reports, total }: { reports: Report[]; total: number }) {
+    const evaluated = reports.filter(r => r.status === "evaluated");
+    const clean = evaluated.filter(r => !r.missed.length && !(r.attendance?.items.length)).length;
+    return (
+        <div className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border bg-border sm:grid-cols-4">
+            <Cell label="شيفتات" value={String(reports.length)} />
+            <Cell label="حققوا كل حاجة" value={`${clean} من ${evaluated.length}`} tone={clean === evaluated.length && evaluated.length ? "text-emerald-700 dark:text-emerald-400" : ""} />
+            <Cell label="من غير نشاط" value={String(reports.filter(r => r.status === "absent").length)} />
+            <Cell label="الخصومات" value={formatCurrency(total)} tone={total > 0 ? "text-rose-700 dark:text-rose-400" : ""} />
+        </div>
+    );
+}
+
+function Cell({ label, value, tone }: { label: string; value: string; tone?: string }) {
+    return (
+        <div className="bg-card p-3">
+            <p className="text-xs text-muted-foreground">{label}</p>
+            <p className={cn("mt-1 text-lg font-semibold tabular-nums", tone)}>{value}</p>
+        </div>
+    );
+}
+
+function DayReport({ r, settings }: { r: Report; settings: TargetSettings }) {
+    const live = r.source === "live";
+    const recorded = r.source === "recorded" ? (r as Stored) : null;
+    const byKey = Object.fromEntries((r.metrics || []).map(m => [m.key, m])) as Record<MetricKey, MetricResult>;
+    const attendance = r.attendance;
+    const deduction = Number(r.deduction) || 0;
+    const waived = recorded && deduction > 0 && !recorded.adjustment_id && !recorded.payroll_note;
+
+    return (
+        <section className="space-y-4 rounded-xl border bg-card p-4">
+            <header className="flex flex-wrap items-start justify-between gap-2">
+                <div>
+                    <h2 className="font-semibold">{who(r.user_email)}</h2>
+                    <p className="text-xs text-muted-foreground">
+                        الشيفت {fmtTime(r.shift_start)} – {fmtTime(r.shift_end)}
+                        {r.status === "evaluated" && <> · نصيبه من الشغل {Math.round(r.share * 100)}%</>}
+                    </p>
+                </div>
+                <span className={cn("rounded-full px-2.5 py-0.5 text-xs",
+                    live ? "bg-sky-50 text-sky-800 dark:bg-sky-950/50 dark:text-sky-300"
+                        : recorded ? "bg-muted text-muted-foreground"
+                        : "bg-amber-50 text-amber-800 dark:bg-amber-950/50 dark:text-amber-300")}>
+                    {live ? "الشيفت لسه شغال" : recorded ? "كشف متسجل" : "محسوب دلوقتي، مش متسجل"}
+                </span>
+            </header>
+
+            {r.status === "leave" && <p className="text-sm text-muted-foreground">إجازة معتمدة.</p>}
+            {r.status === "absent" && <p className="text-sm text-muted-foreground">يوم شغل من غير أي نشاط ولا تسجيل حضور. اتأكد إذا كان غياب.</p>}
+
+            {r.status === "evaluated" && (
+                <ul className="space-y-4">
+                    {KEYS.map(k => byKey[k] && <MetricRow key={k} m={byKey[k]} settings={settings} live={live} />)}
+                </ul>
             )}
 
-            {/* Every shift */}
-            <section className="space-y-3">
-                <h2 className="text-lg font-semibold">كشف كل شيفت</h2>
-                {rows.length === 0 ? (
-                    <p className="rounded-xl border p-6 text-center text-sm text-muted-foreground">
-                        مفيش كشوف في الفترة دي لسه. أول كشف بيتعمل بعد أول شيفت يخلص من ساعة ما الكشف اليومي يشتغل.
+            {attendance && (
+                <div className="space-y-1.5 rounded-lg bg-muted/40 p-3 text-xs">
+                    <p className="font-medium text-foreground">الحضور</p>
+                    <p className="text-muted-foreground">
+                        {attendance.clock_in ? `حضور ${fmtTime(attendance.clock_in)}` : "مسجلش حضور"}
+                        {" · "}
+                        {attendance.clock_out ? `انصراف ${fmtTime(attendance.clock_out)}` : "مسجلش انصراف"}
                     </p>
-                ) : (
-                    <div className="overflow-x-auto rounded-xl border">
-                        <table className="w-full min-w-[720px] text-sm">
-                            <thead className="bg-muted/50 text-xs text-muted-foreground">
-                                <tr>
-                                    <th className="p-3 text-start font-medium">اليوم</th>
-                                    <th className="p-3 text-start font-medium">المودريتور</th>
-                                    {KEYS.map(k => <th key={k} className="p-3 text-start font-medium">{METRIC_LABEL[k]}</th>)}
-                                    <th className="p-3 text-start font-medium">الخصم</th>
-                                    <th className="w-8" />
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y">
-                                {rows.map(r => {
-                                    const isOpen = open === r.id;
-                                    const byKey = Object.fromEntries((r.metrics || []).map(m => [m.key, m])) as Record<MetricKey, MetricResult>;
-                                    const waived = r.deduction > 0 && !r.adjustment_id && !r.payroll_note;
-                                    return (
-                                        <Fragment key={r.id}>
-                                            <tr className={cn("cursor-pointer hover:bg-muted/30", isOpen && "bg-muted/30")} onClick={() => setOpen(isOpen ? null : r.id)}>
-                                                <td className="whitespace-nowrap p-3">{dayLabel(r.work_date)}</td>
-                                                <td className="p-3 font-medium">{who(r.user_email)}</td>
-                                                {r.status !== "evaluated" ? (
-                                                    <td colSpan={4} className="p-3 text-muted-foreground">
-                                                        {r.status === "leave" ? "إجازة معتمدة" : "يوم شغل من غير أي نشاط ولا حضور. اتأكد إذا كان غياب."}
-                                                    </td>
-                                                ) : KEYS.map(k => {
-                                                    const m = byKey[k];
-                                                    if (!m) return <td key={k} className="p-3">—</td>;
-                                                    return (
-                                                        <td key={k} className={cn("p-3 tabular-nums", m.target === null ? "text-muted-foreground" : m.met ? "text-emerald-700 dark:text-emerald-400" : "font-semibold text-rose-700 dark:text-rose-400")}>
-                                                            {k === "rate" ? `${m.done}%` : m.done}
-                                                            {m.target !== null && <span className="font-normal text-muted-foreground"> / {k === "rate" ? `${m.target}%` : m.target}</span>}
-                                                        </td>
-                                                    );
-                                                })}
-                                                <td className="p-3">
-                                                    {r.deduction > 0 ? (
-                                                        <span className={cn("tabular-nums", waived && "text-muted-foreground line-through")}>{formatCurrency(r.deduction)}</span>
-                                                    ) : <span className="text-muted-foreground">—</span>}
-                                                    {waived && <span className="block text-[11px] text-muted-foreground">اتلغى من المرتبات</span>}
-                                                    {r.payroll_note && <span className="block text-[11px] text-amber-700 dark:text-amber-400">{r.payroll_note}</span>}
-                                                </td>
-                                                <td className="p-3"><ChevronDown className={cn("h-4 w-4 text-muted-foreground transition-transform", isOpen && "rotate-180")} /></td>
-                                            </tr>
-                                            {isOpen && r.status === "evaluated" && (
-                                                <tr className="bg-muted/20">
-                                                    <td colSpan={7} className="p-4">
-                                                        <ul className="grid gap-4 md:grid-cols-2">
-                                                            {KEYS.map(k => byKey[k] && <MetricRow key={k} m={byKey[k]} settings={settings} />)}
-                                                        </ul>
-                                                    </td>
-                                                </tr>
-                                            )}
-                                        </Fragment>
-                                    );
-                                })}
-                            </tbody>
-                        </table>
-                    </div>
-                )}
-            </section>
-        </div>
+                    {attendance.items.map(i => (
+                        <p key={i.key} className="text-rose-700 dark:text-rose-400">
+                            {ATTENDANCE_LABEL[i.key]}: {i.detail}{i.amount > 0 && ` خصم ${formatCurrency(i.amount)}.`}
+                        </p>
+                    ))}
+                </div>
+            )}
+
+            <footer className="flex flex-wrap items-baseline justify-between gap-2 border-t pt-3 text-sm">
+                <span className="text-muted-foreground">{live ? "الخصم لو الشيفت خلص كده" : "الخصم"}</span>
+                <span className="text-end">
+                    <span className={cn("font-semibold tabular-nums", deduction > 0 ? "text-rose-700 dark:text-rose-400" : "text-emerald-700 dark:text-emerald-400", waived && "text-muted-foreground line-through")}>
+                        {deduction > 0 ? formatCurrency(deduction) : "مفيش"}
+                    </span>
+                    {recorded?.adjustment_id && <span className="block text-[11px] text-muted-foreground">اتسجل في المرتبات</span>}
+                    {waived && <span className="block text-[11px] text-muted-foreground">اتلغى من المرتبات</span>}
+                    {recorded?.payroll_note && <span className="block text-[11px] text-amber-700 dark:text-amber-400">{recorded.payroll_note}</span>}
+                    {!recorded && !live && deduction > 0 && <span className="block text-[11px] text-muted-foreground">مش متسجل في المرتبات</span>}
+                </span>
+            </footer>
+        </section>
     );
 }

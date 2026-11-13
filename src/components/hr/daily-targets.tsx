@@ -33,6 +33,13 @@ export function MetricRow({ m, settings, live }: { m: MetricResult; settings: Ta
             <div className="h-1.5 overflow-hidden rounded-full bg-muted">
                 <div className={cn("h-full rounded-full transition-[width]", bar)} style={{ width: `${pct}%` }} />
             </div>
+            {m.parts && (
+                <div className="flex flex-wrap gap-1.5 text-[11px]">
+                    <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300">اتأكد {m.parts.confirmed}</span>
+                    <span className="rounded-full bg-rose-50 px-2 py-0.5 text-rose-800 dark:bg-rose-950/50 dark:text-rose-300">اتلغى {m.parts.cancelled}</span>
+                    <span className="rounded-full bg-sky-50 px-2 py-0.5 text-sky-800 dark:bg-sky-950/50 dark:text-sky-300">محاولة متسجلة {m.parts.attempted}</span>
+                </div>
+            )}
             <p className="text-xs leading-relaxed text-muted-foreground">
                 {m.detail}
                 {asked && !m.met && cost > 0 && <span className="text-foreground"> {live ? "لو فضل كده: خصم" : "خصم"} {formatCurrency(cost)}.</span>}
