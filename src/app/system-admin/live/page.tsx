@@ -17,7 +17,7 @@ import { cn } from "@/lib/utils";
 /** A session counts as live while it has checked in within this window. */
 // Tabs report every 60s while visible, so "live" is anything seen in the
 // last two and a half minutes.
-const LIVE_WINDOW_MS = 150_000;
+const LIVE_WINDOW_MS = 270_000; // two missed-by-a-little heartbeats (every 120s)
 const REFRESH_MS = 30_000;
 
 interface LiveSession {

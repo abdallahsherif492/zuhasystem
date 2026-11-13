@@ -110,10 +110,14 @@ export function FloatingChatWidget() {
 
         loadChatData();
 
-        // 3. Polling fallback every 3 seconds
+        // 3. A safety net for a dropped realtime connection, not the delivery
+        // path. It polled every 3 seconds from every open tab of every staff
+        // member, hidden ones included: about 20 requests a minute per tab for
+        // a chat that gets a message a month. Realtime (below) delivers new
+        // messages; this checks once a minute, only on a visible tab.
         intervalId = setInterval(() => {
-            fetchLatestMessages();
-        }, 3000);
+            if (document.visibilityState === "visible") fetchLatestMessages();
+        }, 60_000);
 
         // 4. Supabase Realtime Subscription
         const channel = supabase

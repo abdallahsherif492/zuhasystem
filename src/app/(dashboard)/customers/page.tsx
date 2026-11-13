@@ -61,7 +61,26 @@ export default function CustomersPage() {
             const { data: pData } = await supabase.from('products').select('id, name').eq('business_id', activeBusiness.id);
             if (pData) setProducts(pData);
 
-            // Fetch Customers from orders
+            // Every customer, grouped by phone in the database
+            // (20261116_customer_summary.sql), a thousand at a time.
+            type Summary = { phone: string; name: string | null; governorate: string | null; first_order_at: string; total_orders: number; product_ids: string[] | null };
+            const summary: Summary[] = [];
+            let rpcMissing = false;
+            for (let from = 0; ; from += 1000) {
+                const { data, error: rpcError } = await supabase.rpc("get_customer_summary", { p_business_id: activeBusiness.id }).range(from, from + 999);
+                if (rpcError) { rpcMissing = true; break; }
+                summary.push(...((data || []) as Summary[]));
+                if (!data || data.length < 1000) break;
+            }
+            if (!rpcMissing) {
+                setCustomers(summary.map(c => ({
+                    id: c.phone, created_at: c.first_order_at, name: c.name, phone: c.phone, email: "",
+                    governorate: c.governorate, total_orders: c.total_orders, ordered_products: c.product_ids || [],
+                })));
+                return;
+            }
+
+            // Before that migration: from the orders (only the first thousand come back).
             const { data: orders, error } = await supabase
                 .from('orders')
                 .select(`

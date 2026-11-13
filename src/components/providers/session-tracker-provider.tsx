@@ -24,7 +24,9 @@ import {
  * woke every open admin "Live" page through Realtime. A hidden tab now reports
  * once when it is hidden and again when it comes back.
  */
-const HEARTBEAT_MS = 60_000;
+// Every two minutes: the live view only needs to know who is around, and
+// each beat is a database write from every open tab.
+const HEARTBEAT_MS = 120_000;
 
 /**
  * Reports this tab's presence into `live_sessions` so System Admin > Live
