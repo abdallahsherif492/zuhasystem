@@ -1,5 +1,6 @@
 "use client";
 
+import { activeCatalog } from "@/lib/products";
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
@@ -144,7 +145,7 @@ export default function OrderDetailsPage() {
             .select("*, variants(*)")
             .eq("business_id", activeBusiness.id)
             .order("name");
-        setProducts(data || []);
+        setProducts(activeCatalog(data || []));
     }
 
     async function fetchAccounts() {

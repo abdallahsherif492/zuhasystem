@@ -1,5 +1,6 @@
 "use client";
 
+import { activeCatalog } from "@/lib/products";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
@@ -54,7 +55,7 @@ export default function BundleEditorPage() {
         (async () => {
             const [{ data: products }, result] = await Promise.all([
                 supabase.from("products")
-                    .select("id, name, variants(id, title, sku, sale_price, cost_price, stock_qty, track_inventory)")
+                    .select("*, variants(*)")
                     .eq("business_id", businessId).order("name"),
                 loadBundles(supabase, businessId),
             ]);
@@ -309,7 +310,7 @@ export default function BundleEditorPage() {
                                 </div>
                             )}
 
-                            <ProductVariantPicker catalog={catalog} onPick={id => addProduct(v.key, id)} />
+                            <ProductVariantPicker catalog={activeCatalog(catalog)} onPick={id => addProduct(v.key, id)} />
 
                             {lines.length > 0 && (
                                 <dl className="grid grid-cols-2 gap-x-6 gap-y-1 rounded-lg bg-muted/40 p-3 text-sm sm:grid-cols-4">

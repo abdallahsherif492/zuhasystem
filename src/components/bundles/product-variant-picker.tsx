@@ -11,7 +11,8 @@ import type { BundleProduct } from "@/lib/bundles";
 export interface CatalogProduct {
     id: string;
     name: string;
-    variants: Omit<BundleProduct, "product">[];
+    archived?: boolean;
+    variants: (Omit<BundleProduct, "product"> & { archived?: boolean })[];
 }
 
 /** One searchable list of product and variant, by name, variant or SKU. */

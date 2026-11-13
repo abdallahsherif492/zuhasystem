@@ -1,5 +1,6 @@
 "use client";
 
+import { activeCatalog } from "@/lib/products";
 import { useEffect, useState, useMemo, useRef, Suspense } from "react";
 
 import { supabase } from "@/lib/supabase";
@@ -225,11 +226,12 @@ function PlatformOrdersContent() {
         const { data, error } = await supabase
             .from('products')
             // sku is needed so the add-product search can match on it
-            .select('id, name, variants(id, title, sku, sale_price, cost_price, stock_qty, track_inventory)')
+            .select('*, variants(*)')
             .eq('business_id', activeBusiness.id)
             .order('name');
         if (error) console.error("Error fetching products:", error);
-        if (data) setProducts(data);
+        // Archived products are not offered (20261117_products_inventory.sql).
+        if (data) setProducts(activeCatalog(data));
     };
 
     const fetchOrders = async () => {

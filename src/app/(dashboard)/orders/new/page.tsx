@@ -1,5 +1,6 @@
 "use client";
 
+import { activeCatalog } from "@/lib/products";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
@@ -205,7 +206,8 @@ export default function NewOrderPage() {
                 .eq("business_id", activeBusiness.id)
                 .order("name");
             if (error) throw error;
-            setProducts(data || []);
+            // Archived products are not offered for new orders.
+            setProducts(activeCatalog(data || []));
         } catch (error) {
             console.error("Error fetching products:", error);
         } finally {

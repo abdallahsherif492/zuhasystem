@@ -1,575 +1,362 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { supabase } from "@/lib/supabase";
-import { formatCurrency, normalizeSearchText } from "@/lib/utils";
-import {
-    Card,
-    CardContent,
-    CardHeader,
-    CardTitle,
-    CardDescription,
-} from "@/components/ui/card";
-import {
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableHeader,
-    TableRow,
-} from "@/components/ui/table";
-import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Loader2, Search, ArrowUpRight, ArrowDownRight, Package, Box, Plus, Edit, AlertTriangle } from "lucide-react";
-import { format } from "date-fns";
+import Link from "next/link";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { toast } from "sonner";
-import {
-    Dialog,
-    DialogContent,
-    DialogDescription,
-    DialogFooter,
-    DialogHeader,
-    DialogTitle,
-    DialogTrigger,
-} from "@/components/ui/dialog";
-import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from "@/components/ui/select";
+import { Boxes, History, Loader2, Minus, Plus, Search, SlidersHorizontal } from "lucide-react";
+import { supabase, fetchAll } from "@/lib/supabase";
+import { useBusiness } from "@/contexts/BusinessContext";
+import { cn, normalizeSearchText } from "@/lib/utils";
+import { logBusinessAction } from "@/lib/logs/actions-logger";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { Button } from "@/components/ui/button";
-import { useBusiness } from "@/contexts/BusinessContext";
-import { logBusinessAction } from "@/lib/logs/actions-logger";
-import { useLanguage } from "@/contexts/LanguageContext";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { egp, isMissingRpc, productError } from "@/lib/products";
 
-export default function InventoryPage() {
+/**
+ * Stock: what is on the shelf, what it is worth, and changing it — add,
+ * reduce, or set to a count — through adjust_stock (20261117), which works
+ * against the number in the database at that moment and records the move.
+ */
+
+interface Item {
+    id: string;
+    title: string;
+    sku: string | null;
+    stock_qty: number;
+    cost_price: number;
+    sale_price: number;
+    track_inventory: boolean;
+    archived?: boolean;
+    product: { id: string; name: string; archived?: boolean } | null;
+}
+interface Move {
+    id: string;
+    variant_id: string;
+    quantity_change: number;
+    transaction_type: string;
+    note: string | null;
+    created_at: string;
+}
+
+type Filter = "all" | "low" | "out" | "untracked";
+type Mode = "add" | "reduce" | "set";
+const LOW = 5;
+
+const MOVE_LABEL: Record<string, string> = {
+    sale: "اتشحن في أوردر", return: "رجع من أوردر", restock: "إضافة", manual_deduction: "خصم يدوي",
+    manual_set: "جرد", manual_adjustment: "تعديل", damage: "تالف", initial: "رصيد أول المدة",
+};
+const REASONS: Record<Mode, string[]> = {
+    add: ["مشتريات من مورد", "مرتجع رجع المخزن", "تصحيح جرد", "أخرى"],
+    reduce: ["تالف", "جرد ناقص", "عينة أو هدية", "أخرى"],
+    set: ["جرد"],
+};
+
+function InventoryContent() {
     const { activeBusiness, currentUser } = useBusiness();
-    const { t } = useLanguage();
-    const [loading, setLoading] = useState(true);
-    const [stockItems, setStockItems] = useState<any[]>([]);
-    const [transactions, setTransactions] = useState<any[]>([]);
-    const [searchQuery, setSearchQuery] = useState("");
-    const [sortBy, setSortBy] = useState("stock_asc");
-    const [stockFilter, setStockFilter] = useState("all");
+    const businessId = activeBusiness?.id;
+    const params = useSearchParams();
+    const [items, setItems] = useState<{ key: string; rows: Item[] } | null>(null);
+    const [moves, setMoves] = useState<Move[]>([]);
+    const [q, setQ] = useState(params.get("q") || "");
+    const [filter, setFilter] = useState<Filter>("all");
+    const [sort, setSort] = useState<"stock" | "value" | "name">("stock");
+    const [tab, setTab] = useState<"stock" | "history">("stock");
+    const [adjusting, setAdjusting] = useState<Item | null>(null);
+    const [reload, setReload] = useState(0);
 
     useEffect(() => {
-        fetchData();
-    }, [activeBusiness]);
-
-    async function fetchData() {
-        if (!activeBusiness) return;
-        try {
-            setLoading(true);
-
-            // 1. Fetch Stock Levels (Variants joined with Products)
-            const { data: variants, error: varError } = await supabase
-                .from("variants")
-                .select(`
-                    id, title, stock_qty, cost_price, track_inventory,
-                    product:products!inner (name, business_id)
-                `)
-                .eq('products.business_id', activeBusiness.id)
-                .order("stock_qty", { ascending: true }); // Show low stock first
-
-            if (varError) throw varError;
-            setStockItems(variants || []);
-
-            // 2. Fetch Recent Transactions
-            const { data: trans, error: transError } = await supabase
-                .from("inventory_transactions")
-                .select(`
-                    *,
-                    variant:variants!inner (title, product:products!inner(name, business_id))
-                `)
-                .eq('variants.products.business_id', activeBusiness.id)
-                .order("created_at", { ascending: false })
-                .limit(50);
-
-            if (transError) {
-                // Ignore 404/missing table error initially if migration hasn't run,
-                // but generally we expect it to exist.
-                console.warn("Transactions fetch error", transError);
-            } else {
-                setTransactions(trans || []);
-            }
-
-        } catch (error) {
-            console.error("Error fetching inventory:", error);
-        } finally {
-            setLoading(false);
-        }
-    }
-
-    // --- Handlers ---
-
-    const [isRestockOpen, setIsRestockOpen] = useState(false);
-    const [selectedVariant, setSelectedVariant] = useState<any>(null);
-    const [restockForm, setRestockForm] = useState({
-        type: "add", // add, reduce, set
-        qty: 0,
-        costPrice: 0,
-        supplier: "",
-    });
-
-    const openRestock = (item: any) => {
-        setSelectedVariant(item);
-        setRestockForm({
-            type: "add",
-            qty: 0,
-            costPrice: item.cost_price || 0,
-            supplier: "",
+        if (!businessId) return;
+        let gone = false;
+        Promise.all([
+            fetchAll<Item>((a, b) => supabase.from("variants")
+                .select("*, product:products!inner(id, name, business_id, archived)")
+                .eq("products.business_id", businessId).range(a, b))
+                .catch(() => fetchAll<Item>((a, b) => supabase.from("variants")
+                    .select("*, product:products!inner(id, name, business_id)")
+                    .eq("products.business_id", businessId).range(a, b))),
+            supabase.from("inventory_transactions").select("id, variant_id, quantity_change, transaction_type, note, created_at")
+                .eq("business_id", businessId).order("created_at", { ascending: false }).limit(200),
+        ]).then(([rows, m]) => {
+            if (gone) return;
+            setItems({ key: businessId, rows: rows.filter(r => r.archived !== true && r.product?.archived !== true) });
+            setMoves((m.data || []) as Move[]);
         });
-        setIsRestockOpen(true);
-    };
+        return () => { gone = true; };
+    }, [businessId, reload]);
 
-    const handleRestockSubmit = async () => {
-        if (!selectedVariant) return;
-        if (restockForm.type !== 'set' && restockForm.qty <= 0) {
-            toast.error("Quantity must be greater than 0");
-            return;
-        }
-        if (restockForm.type === 'set' && restockForm.qty < 0) {
-            toast.error("Quantity cannot be negative");
-            return;
-        }
+    const byId = useMemo(() => new Map((items?.rows || []).map(i => [i.id, i])), [items]);
+    const label = (i: Item | undefined) => i ? `${i.product?.name || "منتج"}${i.title && i.title !== "Default" ? ` — ${i.title}` : ""}` : "منتج اتمسح";
 
-        try {
-            setLoading(true);
-
-            let changeAmount = 0;
-            let transactionType = 'manual_adjustment';
-
-            // Calculate Change
-            if (restockForm.type === 'add') {
-                changeAmount = restockForm.qty;
-                transactionType = 'restock';
-            } else if (restockForm.type === 'reduce') {
-                changeAmount = -restockForm.qty;
-                transactionType = 'manual_deduction';
-            } else if (restockForm.type === 'set') {
-                changeAmount = restockForm.qty - selectedVariant.stock_qty;
-                transactionType = 'manual_set';
-            }
-
-            if (changeAmount === 0 && restockForm.type === 'set') {
-                toast.info("No change in quantity");
-                setIsRestockOpen(false);
-                return;
-            }
-
-            // 1. Update Stock
-            if (changeAmount > 0) {
-                const { error } = await supabase.rpc('increment_stock', {
-                    row_id: selectedVariant.id,
-                    amount: changeAmount
-                });
-                if (error) throw error;
-            } else if (changeAmount < 0) {
-                const { error } = await supabase.rpc('decrement_stock', {
-                    row_id: selectedVariant.id,
-                    amount: Math.abs(changeAmount)
-                });
-                if (error) throw error;
-            }
-
-            // 2. Update Cost Price (if changed & adding/setting)
-            if (restockForm.costPrice !== selectedVariant.cost_price && restockForm.type !== 'reduce') {
-                await supabase.from('variants')
-                    .update({ cost_price: restockForm.costPrice })
-                    .eq('id', selectedVariant.id);
-            }
-
-            // 3. Log Transaction — the error must be checked. This insert
-            //    silently failed for months (it referenced a business_id column
-            //    that did not exist), so the counter moved while the audit
-            //    ledger recorded nothing, which is what let stock drift unseen.
-            const { error: logError } = await supabase.from('inventory_transactions').insert({
-                business_id: activeBusiness!.id,
-                variant_id: selectedVariant.id,
-                quantity_change: changeAmount,
-                transaction_type: transactionType,
-                reference_id: null,
-                note: `Action: ${restockForm.type}. Note: ${restockForm.supplier || 'N/A'}`
-            });
-            if (logError) throw logError;
-
-            // Also to the actions log. inventory_transactions is the stock
-            // ledger and answers "how did this number get here"; the actions
-            // log answers "who touched what today", and a manual recount is
-            // exactly the kind of thing someone goes looking for there. No
-            // trigger does this for us — variants move on every order status
-            // change, so auditing that table would bury everything else.
-            logBusinessAction({
-                businessId: activeBusiness!.id,
-                userEmail: currentUser?.email || "Staff",
-                actionType: "stock_adjust",
-                entityType: "inventory",
-                entityId: selectedVariant.id,
-                entityName: `${selectedVariant.product?.name || "Product"} — ${selectedVariant.title || ""}`.trim(),
-                changes: [
-                    {
-                        field: "Stock",
-                        old_value: selectedVariant.stock_qty,
-                        new_value: selectedVariant.stock_qty + changeAmount,
-                    },
-                    // The same dialog can change the unit cost, which moves the
-                    // value of everything already on the shelf. Recorded only
-                    // when it actually moved.
-                    ...(restockForm.costPrice !== selectedVariant.cost_price && restockForm.type !== 'reduce'
-                        ? [{
-                            field: "Unit cost",
-                            old_value: `${selectedVariant.cost_price ?? 0} EGP`,
-                            new_value: `${restockForm.costPrice} EGP`,
-                        }]
-                        : []),
-                ],
-                metadata: {
-                    adjustment: restockForm.type,
-                    change: changeAmount,
-                    note: restockForm.supplier || null,
-                },
-            });
-
-            toast.success("Stock updated successfully");
-            setIsRestockOpen(false);
-            fetchData(); // Refresh list
-        } catch (error: any) {
-            console.error(error);
-            toast.error("Failed to update stock");
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const toggleTracking = async (item: any) => {
-        try {
-            const newValue = !item.track_inventory;
-            const { error } = await supabase
-                .from('variants')
-                .update({ track_inventory: newValue })
-                .eq('id', item.id);
-
-            if (error) throw error;
-
-            // Optimistic update
-            setStockItems(prev => prev.map(i => i.id === item.id ? { ...i, track_inventory: newValue } : i));
-
-            // Turning tracking off stops stock moving on this variant at all,
-            // which is exactly the kind of change someone later cannot explain.
-            logBusinessAction({
-                businessId: activeBusiness!.id,
-                userEmail: currentUser?.email || "Staff",
-                actionType: "edit",
-                entityType: "inventory",
-                entityId: item.id,
-                entityName: `${item.product?.name || "Product"} — ${item.title || ""}`.trim(),
-                changes: [{ field: "Track inventory", old_value: !newValue, new_value: newValue }],
-            });
-
-            toast.success(`Inventory tracking ${newValue ? 'enabled' : 'disabled'}`);
-        } catch (error) {
-            toast.error("Failed to update tracking");
-        }
-    };
-
-    // Search folds Arabic the way people type it — without this, "احمر" never
-    // finds "أحمر" and the box looks broken on a product that plainly exists.
-    const filteredStock = (() => {
-        const q = normalizeSearchText(searchQuery);
-        let rows = stockItems.filter(item => {
-            if (q) {
-                const hay = normalizeSearchText(
-                    `${item.product?.name || ""} ${item.title || ""} ${item.sku || ""}`);
-                if (!hay.includes(q)) return false;
-            }
-            const qty = Number(item.stock_qty) || 0;
-            if (stockFilter === "out") return qty <= 0;
-            if (stockFilter === "low") return item.track_inventory && qty > 0 && qty <= 5;
-            if (stockFilter === "in") return qty > 0;
-            if (stockFilter === "untracked") return !item.track_inventory;
-            return true;
-        });
-
-        const name = (i: any) => `${i.product?.name || ""} ${i.title || ""}`.trim();
-        const value = (i: any) => (Number(i.stock_qty) || 0) * (Number(i.cost_price) || 0);
-        const cmp: Record<string, (a: any, b: any) => number> = {
-            stock_asc:  (a, b) => (a.stock_qty || 0) - (b.stock_qty || 0),
-            stock_desc: (a, b) => (b.stock_qty || 0) - (a.stock_qty || 0),
-            name_asc:   (a, b) => name(a).localeCompare(name(b), "ar"),
-            name_desc:  (a, b) => name(b).localeCompare(name(a), "ar"),
-            value_desc: (a, b) => value(b) - value(a),
-            value_asc:  (a, b) => value(a) - value(b),
-            cost_desc:  (a, b) => (b.cost_price || 0) - (a.cost_price || 0),
-            cost_asc:   (a, b) => (a.cost_price || 0) - (b.cost_price || 0),
+    const view = useMemo(() => {
+        const rows = items?.rows || [];
+        const tracked = rows.filter(r => r.track_inventory);
+        const kpi = {
+            value: tracked.reduce((s, r) => s + Math.max(0, Number(r.stock_qty) || 0) * (Number(r.cost_price) || 0), 0),
+            units: tracked.reduce((s, r) => s + Math.max(0, Number(r.stock_qty) || 0), 0),
+            low: tracked.filter(r => r.stock_qty > 0 && r.stock_qty <= LOW).length,
+            out: tracked.filter(r => r.stock_qty <= 0).length,
+            untracked: rows.length - tracked.length,
         };
-        return [...rows].sort(cmp[sortBy] || cmp.stock_asc);
-    })();
+        const needle = normalizeSearchText(q);
+        let list = rows.filter(r =>
+            filter === "low" ? r.track_inventory && r.stock_qty > 0 && r.stock_qty <= LOW
+                : filter === "out" ? r.track_inventory && r.stock_qty <= 0
+                : filter === "untracked" ? !r.track_inventory
+                : true);
+        if (needle) list = list.filter(r => normalizeSearchText(`${r.product?.name || ""} ${r.title} ${r.sku || ""}`).includes(needle));
+        list = [...list].sort((a, b) =>
+            sort === "value" ? b.stock_qty * b.cost_price - a.stock_qty * a.cost_price
+                : sort === "name" ? label(a).localeCompare(label(b), "ar")
+                : (a.track_inventory === b.track_inventory ? a.stock_qty - b.stock_qty : a.track_inventory ? -1 : 1));
+        return { list, kpi };
+    }, [items, q, filter, sort]);
 
-    const totalStockValue = filteredStock.reduce((acc, item) => acc + (item.stock_qty * item.cost_price), 0);
-    const totalItems = filteredStock.reduce((acc, item) => acc + item.stock_qty, 0);
-    const lowStockCount = filteredStock.filter(item => item.track_inventory && item.stock_qty <= 5).length;
+    const toggleTracking = async (item: Item) => {
+        const next = !item.track_inventory;
+        const { error } = await supabase.from("variants").update({ track_inventory: next }).eq("id", item.id);
+        if (error) { toast.error(productError(error)); return; }
+        setItems(prev => prev ? { ...prev, rows: prev.rows.map(r => (r.id === item.id ? { ...r, track_inventory: next } : r)) } : prev);
+        logBusinessAction({ businessId: businessId!, userEmail: currentUser?.email || "Staff", actionType: "edit", entityType: "inventory", entityId: item.id, entityName: label(item), changes: [{ field: "Track inventory", old_value: !next, new_value: next }] });
+        toast.success(next ? "بقى متتبّع: هيتخصم مع الأوردرات." : "مش متتبّع: مش هيتخصم مع الأوردرات.");
+    };
 
-    if (loading) return <div className="flex justify-center p-20"><Loader2 className="h-8 w-8 animate-spin" /></div>;
+    const loading = !items || items.key !== businessId;
 
     return (
-        <div className="space-y-6">
-            <h1 className="text-3xl font-bold tracking-tight">{t("Inventory")}</h1>
-
-            {/* KPIs */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">{t("Total Stock Value")}</CardTitle>
-                        <Box className="h-4 w-4 text-muted-foreground" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold text-green-600">{formatCurrency(totalStockValue)}</div>
-                        <p className="text-xs text-muted-foreground">{totalItems} {t("Total Units")}</p>
-                    </CardContent>
-                </Card>
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">{t("Low Stock Alerts")}</CardTitle>
-                        <ArrowDownRight className="h-4 w-4 text-red-500" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold text-red-600">{lowStockCount}</div>
-                        <p className="text-xs text-muted-foreground">{t("Variants with ≤ 5 units")}</p>
-                    </CardContent>
-                </Card>
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">{t("Recent Moves")}</CardTitle>
-                        <Package className="h-4 w-4 text-primary" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold">{transactions.length}</div>
-                        <p className="text-xs text-muted-foreground">{t("Transactions (Last 50)")}</p>
-                    </CardContent>
-                </Card>
+        <div className="mx-auto max-w-6xl space-y-5" dir="rtl">
+            <div className="flex flex-wrap items-end justify-between gap-3">
+                <h1 className="text-2xl font-bold">المخزون</h1>
+                <div className="flex gap-2">
+                    <Button asChild variant="outline" size="sm"><Link href="/inventory/damages">التوالف</Link></Button>
+                    <Button asChild variant="outline" size="sm"><Link href="/products">المنتجات</Link></Button>
+                </div>
             </div>
 
-            <Tabs defaultValue="stock">
-                <TabsList>
-                    <TabsTrigger value="stock">{t("Current Stock")}</TabsTrigger>
-                    <TabsTrigger value="transactions">{t("History Log")}</TabsTrigger>
-                </TabsList>
+            <div className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border bg-border sm:grid-cols-4">
+                <Kpi label="قيمة المخزون (بالتكلفة)" value={loading ? "…" : egp(view.kpi.value)} />
+                <Kpi label="قطع في المخزن" value={loading ? "…" : new Intl.NumberFormat("en-US").format(view.kpi.units)} />
+                <Kpi label="قرب يخلص" value={loading ? "…" : String(view.kpi.low)} tone={view.kpi.low ? "text-amber-700 dark:text-amber-400" : ""} onClick={() => { setFilter("low"); setTab("stock"); }} />
+                <Kpi label="خلص" value={loading ? "…" : String(view.kpi.out)} tone={view.kpi.out ? "text-rose-700 dark:text-rose-400" : ""} onClick={() => { setFilter("out"); setTab("stock"); }} />
+            </div>
 
-                <TabsContent value="stock" className="space-y-4">
-                    <div className="flex items-center gap-2">
-                        <div className="relative flex-1 max-w-sm">
-                            <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-                            <Input
-                                placeholder={t("Search products...")}
-                                value={searchQuery}
-                                onChange={(e) => setSearchQuery(e.target.value)}
-                                className="pl-8"
-                            />
+            <div className="flex gap-1 rounded-lg bg-muted p-1 sm:w-fit" role="tablist">
+                {([["stock", "المخزون", Boxes], ["history", "حركة المخزون", History]] as const).map(([key, text, Icon]) => (
+                    <button key={key} role="tab" aria-selected={tab === key} onClick={() => setTab(key)}
+                        className={cn("flex flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-md px-4 py-1.5 text-sm transition-colors", tab === key ? "bg-background font-medium shadow-sm" : "text-muted-foreground hover:text-foreground")}>
+                        <Icon className="h-4 w-4" />{text}
+                    </button>
+                ))}
+            </div>
+
+            {tab === "stock" ? (
+                <>
+                    <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+                        <div className="relative flex-1">
+                            <Search className="absolute start-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                            <Input className="ps-9" placeholder="دوّر بالاسم أو الكود…" value={q} onChange={e => setQ(e.target.value)} />
                         </div>
-
-                        <Select value={stockFilter} onValueChange={setStockFilter}>
-                            <SelectTrigger className="w-[170px]">
-                                <SelectValue placeholder={t("Show")} />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="all">{t("All variants")}</SelectItem>
-                                <SelectItem value="in">{t("In stock")}</SelectItem>
-                                <SelectItem value="low">{t("Low stock (5 or less)")}</SelectItem>
-                                <SelectItem value="out">{t("Out of stock")}</SelectItem>
-                                <SelectItem value="untracked">{t("Not tracked")}</SelectItem>
-                            </SelectContent>
-                        </Select>
-
-                        <Select value={sortBy} onValueChange={setSortBy}>
-                            <SelectTrigger className="w-[190px]">
-                                <SelectValue placeholder={t("Sort by")} />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="stock_asc">{t("Quantity: low to high")}</SelectItem>
-                                <SelectItem value="stock_desc">{t("Quantity: high to low")}</SelectItem>
-                                <SelectItem value="value_desc">{t("Stock value: high to low")}</SelectItem>
-                                <SelectItem value="value_asc">{t("Stock value: low to high")}</SelectItem>
-                                <SelectItem value="cost_desc">{t("Unit cost: high to low")}</SelectItem>
-                                <SelectItem value="cost_asc">{t("Unit cost: low to high")}</SelectItem>
-                                <SelectItem value="name_asc">{t("Name: A to Z")}</SelectItem>
-                                <SelectItem value="name_desc">{t("Name: Z to A")}</SelectItem>
-                            </SelectContent>
-                        </Select>
-
-                        <span className="text-xs text-muted-foreground whitespace-nowrap">
-                            {filteredStock.length} / {stockItems.length}
-                        </span>
+                        <div className="flex flex-wrap gap-1.5">
+                            {([["all", "الكل"], ["low", "قرب يخلص"], ["out", "خلص"], ["untracked", `مش متتبّع (${view.kpi.untracked})`]] as [Filter, string][]).map(([key, text]) => (
+                                <button key={key} type="button" onClick={() => setFilter(key)} aria-pressed={filter === key}
+                                    className={cn("rounded-full border px-3 py-1 text-sm transition-colors", filter === key ? "border-foreground bg-foreground text-background" : "hover:bg-muted")}>{text}</button>
+                            ))}
+                            <select value={sort} onChange={e => setSort(e.target.value as typeof sort)} className="h-8 rounded-md border bg-background px-2 text-sm" aria-label="الترتيب">
+                                <option value="stock">الأقل الأول</option>
+                                <option value="value">القيمة الأعلى</option>
+                                <option value="name">الاسم</option>
+                            </select>
+                        </div>
                     </div>
 
-                    <Card>
-                        <CardContent className="p-0">
-                            <Table>
-                                <TableHeader>
-                                    <TableRow>
-                                        <TableHead>{t("Product")}</TableHead>
-                                        <TableHead>{t("Variant")}</TableHead>
-                                        <TableHead>{t("Tracking")}</TableHead>
-                                        <TableHead className="text-right">{t("Quantity")}</TableHead>
-                                        <TableHead className="text-right">{t("Unit Cost")}</TableHead>
-                                        <TableHead className="text-right">{t("Total Value")}</TableHead>
-                                        <TableHead className="text-right">{t("Actions")}</TableHead>
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {filteredStock.map((item) => (
-                                        <TableRow key={item.id}>
-                                            <TableCell className="font-medium">{item.product?.name}</TableCell>
-                                            <TableCell>{item.title}</TableCell>
-                                            <TableCell>
-                                                <div className="flex items-center gap-2">
-                                                    <Switch
-                                                        checked={item.track_inventory}
-                                                        onCheckedChange={() => toggleTracking(item)}
-                                                    />
-                                                    <span className="text-xs text-muted-foreground">
-                                                        {item.track_inventory ? 'On' : 'Off'}
-                                                    </span>
-                                                </div>
-                                            </TableCell>
-                                            <TableCell className="text-right">
-                                                <span className={item.stock_qty <= 0 ? "text-red-500 font-bold" : ""}>
-                                                    {item.stock_qty}
-                                                </span>
-                                            </TableCell>
-                                            <TableCell className="text-right">{formatCurrency(item.cost_price)}</TableCell>
-                                            <TableCell className="text-right font-bold">{formatCurrency(item.stock_qty * item.cost_price)}</TableCell>
-                                            <TableCell className="text-right">
-                                                <Button size="sm" variant="outline" onClick={() => openRestock(item)}>
-                                                    <Edit className="h-4 w-4 mr-1" /> {t("Adjust")}
+                    <div className="overflow-hidden rounded-xl border bg-card">
+                        {loading ? (
+                            <div className="flex h-40 items-center justify-center"><Loader2 className="h-6 w-6 animate-spin" /></div>
+                        ) : view.list.length === 0 ? (
+                            <p className="p-10 text-center text-sm text-muted-foreground">مفيش منتجات بالبحث أو الفلتر ده.</p>
+                        ) : (
+                            <ul className="divide-y">
+                                {view.list.map(i => {
+                                    const qty = Number(i.stock_qty) || 0;
+                                    return (
+                                        <li key={i.id} className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:gap-3">
+                                            <div className="min-w-0 sm:flex-1">
+                                                <Link href={i.product ? `/products/${i.product.id}` : "/products"} className="font-medium hover:underline">{label(i)}</Link>
+                                                <p className="text-xs text-muted-foreground">
+                                                    <span className="font-mono" dir="ltr">{i.sku || "بدون كود"}</span> · تكلفة {egp(Number(i.cost_price) || 0)}
+                                                    {i.track_inventory && qty > 0 && <> · قيمة {egp(qty * (Number(i.cost_price) || 0))}</>}
+                                                </p>
+                                            </div>
+                                            <div className="flex items-center justify-between gap-3 sm:justify-end">
+                                            <div className="text-end sm:w-24">
+                                                {i.track_inventory ? (
+                                                    <span className={cn("text-xl font-bold tabular-nums", qty <= 0 ? "text-rose-700 dark:text-rose-400" : qty <= LOW ? "text-amber-700 dark:text-amber-400" : "")}>{qty}</span>
+                                                ) : <span className="text-xs text-muted-foreground">مش متتبّع</span>}
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <Switch checked={i.track_inventory} onCheckedChange={() => toggleTracking(i)} aria-label="تتبّع المخزون" />
+                                                <Button size="sm" variant="outline" className="gap-1.5" onClick={() => setAdjusting(i)} disabled={!i.track_inventory}>
+                                                    <SlidersHorizontal className="h-3.5 w-3.5" />عدّل
                                                 </Button>
-                                            </TableCell>
-                                        </TableRow>
-                                    ))}
-                                </TableBody>
-                            </Table>
-                        </CardContent>
-                    </Card>
-
-                    <Dialog open={isRestockOpen} onOpenChange={setIsRestockOpen}>
-                        <DialogContent>
-                            <DialogHeader>
-                                <DialogTitle>Adjust Stock: {selectedVariant?.product?.name} - {selectedVariant?.title}</DialogTitle>
-                                <DialogDescription>
-                                    Enter quantity received and supplier details.
-                                </DialogDescription>
-                            </DialogHeader>
-                            <div className="grid gap-4 py-4">
-                                <div className="grid grid-cols-4 items-center gap-4">
-                                    <Label className="text-right">Action</Label>
-                                    <Select
-                                        value={restockForm.type}
-                                        onValueChange={(v) => setRestockForm({ ...restockForm, type: v })}
-                                    >
-                                        <SelectTrigger className="col-span-3">
-                                            <SelectValue />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="add">Add Stock (+)</SelectItem>
-                                            <SelectItem value="reduce">Remove Stock (-)</SelectItem>
-                                            <SelectItem value="set">Set Exact Quantity (=)</SelectItem>
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-                                <div className="grid grid-cols-4 items-center gap-4">
-                                    <Label className="text-right">
-                                        {restockForm.type === 'set' ? 'New Quantity' : 'Quantity'}
-                                    </Label>
-                                    <Input
-                                        type="number"
-                                        className="col-span-3"
-                                        value={restockForm.qty}
-                                        onChange={(e) => setRestockForm({ ...restockForm, qty: parseInt(e.target.value) || 0 })}
-                                    />
-                                </div>
-                                {restockForm.type !== 'reduce' && (
-                                    <div className="grid grid-cols-4 items-center gap-4">
-                                        <Label className="text-right">Unit Cost</Label>
-                                        <Input
-                                            type="number"
-                                            className="col-span-3"
-                                            value={restockForm.costPrice}
-                                            onChange={(e) => setRestockForm({ ...restockForm, costPrice: parseFloat(e.target.value) || 0 })}
-                                        />
+                                            </div>
+                                            </div>
+                                        </li>
+                                    );
+                                })}
+                            </ul>
+                        )}
+                    </div>
+                </>
+            ) : (
+                <div className="overflow-hidden rounded-xl border bg-card">
+                    {moves.length === 0 ? (
+                        <p className="p-10 text-center text-sm text-muted-foreground">مفيش حركة متسجلة.</p>
+                    ) : (
+                        <ul className="divide-y">
+                            {moves.map(m => (
+                                <li key={m.id} className="flex items-center gap-3 px-4 py-2.5 text-sm">
+                                    <span className={cn("w-14 shrink-0 text-end font-semibold tabular-nums", m.quantity_change < 0 ? "text-rose-700 dark:text-rose-400" : "text-emerald-700 dark:text-emerald-400")} dir="ltr">
+                                        {m.quantity_change > 0 ? "+" : ""}{m.quantity_change}
+                                    </span>
+                                    <div className="min-w-0 flex-1">
+                                        <p className="truncate">{label(byId.get(m.variant_id))}</p>
+                                        <p className="truncate text-xs text-muted-foreground">{MOVE_LABEL[m.transaction_type] || m.transaction_type}{m.note ? ` · ${m.note}` : ""}</p>
                                     </div>
-                                )}
-                                <div className="grid grid-cols-4 items-center gap-4">
-                                    <Label className="text-right">Note/Reason</Label>
-                                    <Input
-                                        className="col-span-3"
-                                        placeholder={restockForm.type === 'add' ? "Supplier Name" : "Reason for adjustment"}
-                                        value={restockForm.supplier}
-                                        onChange={(e) => setRestockForm({ ...restockForm, supplier: e.target.value })}
-                                    />
-                                </div>
-                            </div>
-                            <DialogFooter>
-                                <Button onClick={handleRestockSubmit}>Confirm Update</Button>
-                            </DialogFooter>
-                        </DialogContent>
-                    </Dialog>
-                </TabsContent>
+                                    <span className="shrink-0 text-xs text-muted-foreground">{new Date(m.created_at).toLocaleString("ar-EG", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit", timeZone: "Africa/Cairo" })}</span>
+                                </li>
+                            ))}
+                        </ul>
+                    )}
+                </div>
+            )}
 
-                <TabsContent value="transactions">
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>Stock History</CardTitle>
-                            <CardDescription>Recent inventory movements</CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                            <Table>
-                                <TableHeader>
-                                    <TableRow>
-                                        <TableHead>{t("Date")}</TableHead>
-                                        <TableHead>{t("Product")}</TableHead>
-                                        <TableHead>{t("Type")}</TableHead>
-                                        <TableHead className="text-right">{t("Change")}</TableHead>
-                                        <TableHead>{t("Note")}</TableHead>
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {transactions.map((t) => (
-                                        <TableRow key={t.id}>
-                                            <TableCell className="whitespace-nowrap">
-                                                {format(new Date(t.created_at), "MMM d, p")}
-                                            </TableCell>
-                                            <TableCell>
-                                                <div className="font-medium">{t.variant?.product?.name}</div>
-                                                <div className="text-xs text-muted-foreground">{t.variant?.title}</div>
-                                            </TableCell>
-                                            <TableCell>
-                                                <Badge variant={t.transaction_type === "return" || t.transaction_type === "restock" ? "default" : "secondary"}>
-                                                    {t.transaction_type}
-                                                </Badge>
-                                            </TableCell>
-                                            <TableCell className={cn("text-right font-bold", t.quantity_change > 0 ? "text-green-600" : "text-red-600")}>
-                                                {t.quantity_change > 0 ? "+" : ""}{t.quantity_change}
-                                            </TableCell>
-                                            <TableCell className="max-w-[200px] truncate text-muted-foreground">
-                                                {t.note || "-"}
-                                            </TableCell>
-                                        </TableRow>
-                                    ))}
-                                </TableBody>
-                            </Table>
-                        </CardContent>
-                    </Card>
-                </TabsContent>
-            </Tabs>
+            {adjusting && (
+                <AdjustDialog item={adjusting} title={label(adjusting)} onClose={() => setAdjusting(null)}
+                    onDone={() => { setAdjusting(null); setReload(n => n + 1); }} businessId={businessId!} userEmail={currentUser?.email || "Staff"} />
+            )}
         </div>
     );
 }
 
-// Helper for dynamic class names if not imported
-function cn(...classes: (string | undefined | null | false)[]) {
-    return classes.filter(Boolean).join(" ");
+function Kpi({ label, value, tone, onClick }: { label: string; value: string; tone?: string; onClick?: () => void }) {
+    const Tag = onClick ? "button" : "div";
+    return (
+        <Tag onClick={onClick} className={cn("bg-card p-4 text-start", onClick && "transition-colors hover:bg-muted/50")}>
+            <p className="text-xs text-muted-foreground">{label}</p>
+            <p className={cn("mt-1 text-xl font-semibold tabular-nums", tone)}>{value}</p>
+        </Tag>
+    );
+}
+
+function AdjustDialog({ item, title, onClose, onDone, businessId, userEmail }: {
+    item: Item; title: string; onClose: () => void; onDone: () => void; businessId: string; userEmail: string;
+}) {
+    const [mode, setMode] = useState<Mode>("add");
+    const [qty, setQty] = useState("");
+    const [cost, setCost] = useState(String(item.cost_price ?? ""));
+    const [reason, setReason] = useState(REASONS.add[0]);
+    const [note, setNote] = useState("");
+    const [saving, setSaving] = useState(false);
+    const current = Number(item.stock_qty) || 0;
+    const n = qty === "" ? NaN : Math.floor(Number(qty));
+    const next = Number.isFinite(n) ? (mode === "add" ? current + n : mode === "reduce" ? current - n : n) : null;
+    const valid = Number.isFinite(n) && n >= 0 && (mode === "set" || n > 0) && next !== current;
+
+    const pick = (m: Mode) => { setMode(m); setReason(REASONS[m][0]); };
+
+    const save = useCallback(async () => {
+        if (!valid) return;
+        setSaving(true);
+        const costNum = cost === "" ? null : Number(cost);
+        const costArg = mode !== "reduce" && costNum !== null && costNum !== Number(item.cost_price) ? costNum : null;
+        let result: { old: number; new: number } | null = null;
+        const { data, error } = await supabase.rpc("adjust_stock", { p_variant_id: item.id, p_mode: mode, p_qty: n, p_cost: costArg, p_reason: reason, p_note: note || null });
+        if (error && isMissingRpc(error, "adjust_stock")) {
+            // Before 20261117: read the number now, write the new one, record it.
+            const { data: fresh } = await supabase.from("variants").select("stock_qty").eq("id", item.id).single();
+            const old = Number(fresh?.stock_qty) || 0;
+            const target = mode === "add" ? old + n : mode === "reduce" ? old - n : n;
+            const { error: e2 } = await supabase.from("variants").update({ stock_qty: target, ...(costArg !== null ? { cost_price: costArg } : {}) }).eq("id", item.id);
+            if (e2) { setSaving(false); toast.error(productError(e2)); return; }
+            await supabase.from("inventory_transactions").insert({ business_id: businessId, variant_id: item.id, quantity_change: target - old, transaction_type: mode === "add" ? "restock" : mode === "reduce" ? "manual_deduction" : "manual_set", note: [reason, note].filter(Boolean).join(" — ") });
+            result = { old, new: target };
+        } else if (error) {
+            setSaving(false); toast.error(productError(error)); return;
+        } else result = data as { old: number; new: number };
+        setSaving(false);
+        logBusinessAction({
+            businessId, userEmail, actionType: "stock_adjust", entityType: "inventory", entityId: item.id, entityName: title,
+            changes: [
+                { field: "Stock", old_value: result.old, new_value: result.new },
+                ...(costArg !== null ? [{ field: "Unit cost", old_value: `${item.cost_price} EGP`, new_value: `${costArg} EGP` }] : []),
+            ],
+            metadata: { adjustment: mode, reason, note: note || null },
+        });
+        toast.success(`${title}: ${result.old} ← ${result.new}`);
+        onDone();
+    }, [valid, cost, mode, item, n, reason, note, businessId, userEmail, title, onDone]);
+
+    return (
+        <Dialog open onOpenChange={o => !o && onClose()}>
+            <DialogContent className="sm:max-w-md" dir="rtl">
+                <DialogHeader className="pr-6 text-start">
+                    <DialogTitle>{title}</DialogTitle>
+                    <DialogDescription>في المخزن دلوقتي <span className="font-semibold text-foreground">{current}</span></DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4">
+                    <div className="grid grid-cols-3 gap-1 rounded-lg bg-muted p-1" role="radiogroup" aria-label="نوع التعديل">
+                        {([["add", "زوّد", Plus], ["reduce", "نقّص", Minus], ["set", "حط رقم (جرد)", SlidersHorizontal]] as const).map(([m, text, Icon]) => (
+                            <button key={m} type="button" role="radio" aria-checked={mode === m} onClick={() => pick(m)}
+                                className={cn("flex items-center justify-center gap-1 rounded-md px-2 py-2 text-sm transition-colors", mode === m ? "bg-background font-medium shadow-sm" : "text-muted-foreground")}>
+                                <Icon className="h-3.5 w-3.5" />{text}
+                            </button>
+                        ))}
+                    </div>
+                    <div className="space-y-1.5">
+                        <Label htmlFor="adj-qty">{mode === "set" ? "العدد الفعلي في المخزن" : "الكمية"}</Label>
+                        <Input id="adj-qty" type="number" inputMode="numeric" min={0} autoFocus value={qty} onChange={e => setQty(e.target.value)} className="h-12 text-xl font-semibold" placeholder="0" />
+                        {next !== null && (
+                            <p className={cn("text-sm", next < 0 ? "text-destructive" : "text-muted-foreground")}>
+                                هيبقى <span className="font-semibold text-foreground tabular-nums">{next}</span> بدل {current}
+                                {next < 0 && " (بالسالب)"}
+                            </p>
+                        )}
+                    </div>
+                    {mode !== "reduce" && (
+                        <div className="space-y-1.5">
+                            <Label htmlFor="adj-cost">تكلفة القطعة</Label>
+                            <Input id="adj-cost" type="number" inputMode="decimal" min={0} value={cost} onChange={e => setCost(e.target.value)} />
+                            <p className="text-xs text-muted-foreground">لو اتغيرت، هتتحدّث للمنتج كله وقيمة المخزون هتتحسب بيها.</p>
+                        </div>
+                    )}
+                    <div className="space-y-1.5">
+                        <Label>السبب</Label>
+                        <div className="flex flex-wrap gap-1.5">
+                            {REASONS[mode].map(r => (
+                                <button key={r} type="button" onClick={() => setReason(r)} aria-pressed={reason === r}
+                                    className={cn("rounded-full border px-3 py-1 text-sm", reason === r ? "border-foreground bg-foreground text-background" : "hover:bg-muted")}>{r}</button>
+                            ))}
+                        </div>
+                        <Input value={note} onChange={e => setNote(e.target.value)} placeholder="ملاحظة (اختياري): اسم المورد، رقم الفاتورة..." />
+                    </div>
+                </div>
+                <DialogFooter className="gap-2 sm:justify-between">
+                    <Button variant="ghost" onClick={onClose}>رجوع</Button>
+                    <Button onClick={save} disabled={!valid || saving}>{saving && <Loader2 className="me-2 h-4 w-4 animate-spin" />}احفظ</Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    );
+}
+
+export default function InventoryPage() {
+    return (
+        <Suspense fallback={<div className="flex justify-center p-8"><Loader2 className="h-8 w-8 animate-spin" /></div>}>
+            <InventoryContent />
+        </Suspense>
+    );
 }
