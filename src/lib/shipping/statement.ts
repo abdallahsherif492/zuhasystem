@@ -257,3 +257,71 @@ export function reconcile(
         },
     };
 }
+
+/**
+ * Where a statement leaves the account, read from the file itself: the
+ * closing balance (from its "الرصيد الختامي" row, or else the running balance
+ * on its last line) and when its first and last movements happened.
+ *
+ * The balance is read from the second debit/credit pair, the running balance,
+ * as credit − debit: positive means the courier owes us.
+ */
+export function statementBounds(grid: unknown[][]): {
+    closing: number | null;
+    firstAt: string | null;
+    lastAt: string | null;
+} {
+    let header = -1;
+    let dateCol = -1;
+    const debitCols: number[] = [];
+    const creditCols: number[] = [];
+    for (let r = 0; r < Math.min(grid.length, 25) && header < 0; r++) {
+        const cells = ((grid[r] || []) as unknown[]).map(clean);
+        const d = cells.flatMap((c, i) => (HEADERS.debit.some(n => c === n || c.includes(n)) ? [i] : []));
+        const c = cells.flatMap((x, i) => (HEADERS.credit.some(n => x === n || x.includes(n)) ? [i] : []));
+        if (d.length && c.length) {
+            header = r;
+            debitCols.push(...d);
+            creditCols.push(...c);
+            dateCol = cells.findIndex(x => HEADERS.date.some(n => x === n || x.includes(n)));
+        }
+    }
+    if (header < 0) return { closing: null, firstAt: null, lastAt: null };
+    const balDebit = debitCols.length > 1 ? debitCols[debitCols.length - 1] : -1;
+    const balCredit = creditCols.length > 1 ? creditCols[creditCols.length - 1] : -1;
+    const balanceOf = (row: unknown[]) => (balCredit >= 0 ? toNumber(row[balCredit]) : 0) - (balDebit >= 0 ? toNumber(row[balDebit]) : 0);
+
+    let closing: number | null = null;
+    let lastBalance: number | null = null;
+    let firstAt: string | null = null;
+    let lastAt: string | null = null;
+    for (let r = header + 1; r < grid.length; r++) {
+        const row = (grid[r] || []) as unknown[];
+        const first = clean(row[0]);
+        if (first.includes("ختامي") || first.includes("closing")) {
+            if (balCredit >= 0 || balDebit >= 0) closing = balanceOf(row);
+            continue;
+        }
+        if (first.includes("رصيد") || first.includes("balance")) continue;
+        const at = dateCol >= 0 ? excelDate(row[dateCol]) : null;
+        if (!at) continue;
+        if (!firstAt) firstAt = at;
+        lastAt = at;
+        if (balCredit >= 0 || balDebit >= 0) lastBalance = balanceOf(row);
+    }
+    return { closing: closing ?? lastBalance, firstAt, lastAt };
+}
+
+/** "2026-11-12 15:24:02", a Date or an Excel serial, as "yyyy-MM-dd HH:mm:ss" (the courier's local time). */
+function excelDate(v: unknown): string | null {
+    if (v === null || v === undefined || v === "") return null;
+    if (typeof v === "number" && isFinite(v) && v > 20000) {
+        const ms = Math.round((v - 25569) * 86_400_000);
+        return new Date(ms).toISOString().slice(0, 19).replace("T", " ");
+    }
+    if (v instanceof Date) return v.toISOString().slice(0, 19).replace("T", " ");
+    const s = String(v).trim();
+    const m = s.match(/^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2})(?::(\d{2}))?)?/);
+    if (!m) return null;
+    return `${m[1]}-${m[2]}-${m[3]} ${m[4] || "00"}:${m[5] || "00"}:${m[6] || "00"}`;
+}
