@@ -12,7 +12,7 @@ import { DateRangePicker } from "@/components/date-range-picker";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { ContactActions } from "@/components/orders/contact-actions";
 import { RepeatOrdersAlert } from "@/components/orders/repeat-orders";
 import { useRepeatOrders } from "@/hooks/use-repeat-orders";
@@ -20,17 +20,17 @@ import { Input } from "@/components/ui/input";
 import { AutosaveField } from "@/components/ui/autosave-field";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Check, X, AlertTriangle, Search, PackageSearch, ChevronsUpDown, Repeat, PhoneMissed } from "lucide-react";
+import { Loader2, Check, X, AlertTriangle, Search, PackageSearch, ChevronsUpDown, Repeat, PhoneCall, ChevronDown } from "lucide-react";
 import { toast } from "sonner";
-import { format } from "date-fns";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import {
-    AttemptBadge, AttemptHistory, ConfirmTabs, FailedAttemptDialog, LastAttempt, RETRY_AFTER_MIN, minutesSince, stageOf,
-    type AttemptSummary, type ConfirmStage,
+    AttemptHistory, FailedAttemptDialog, LastAttempt, claimOrder, recordAttempt, type AttemptReason, type AttemptSummary,
 } from "@/components/orders/confirmation-attempts";
+import { QueueStatus, QueueTabs, QuickActions } from "@/components/orders/confirm-queue";
+import { byDue, claimedByOther, clockLabel, isMine, nextTryToast, queueStateOf, shortName, type QueueState } from "@/lib/orders/confirm-queue";
 import { DeliveryRateAdvice, DeliveryRateBadge } from "@/components/orders/delivery-rate";
 import { deliveryRateOf } from "@/lib/easyorders-delivery-rate";
 import { fetchDeliveryRatesAction } from "./delivery-rate-actions";
@@ -85,7 +85,6 @@ import {
     AlertDialogFooter,
     AlertDialogHeader,
     AlertDialogTitle,
-    AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 
 interface OrderItem {
@@ -131,6 +130,10 @@ interface Order {
     last_attempt_reason?: string | null;
     last_attempt_note?: string | null;
     last_attempt_by?: string | null;
+    // The queue (20261119_confirm_queue.sql)
+    next_attempt_at?: string | null;
+    claimed_by?: string | null;
+    claimed_at?: string | null;
 }
 
 interface Variant {
@@ -373,7 +376,9 @@ function PlatformOrdersContent() {
                 // With the attempt summary when the column exists; without it
                 // until 20261006_confirmation_attempts.sql has been run.
                 const query = (cols: string) => supabase.from('orders').select(cols).eq('business_id', businessId).ilike('status', 'waiting');
-                let res = await query('id, status, easyorders_id, tags, confirm_attempts, last_attempt_at, last_attempt_reason, last_attempt_note, last_attempt_by');
+                const attempts = 'id, status, easyorders_id, tags, confirm_attempts, last_attempt_at, last_attempt_reason, last_attempt_note, last_attempt_by';
+                let res = await query(`${attempts}, next_attempt_at, claimed_by, claimed_at`);
+                if (res.error) res = await query(attempts);
                 if (res.error) res = await query('id, status, easyorders_id, tags');
                 const data = res.data as unknown as (AttemptSummary & { id: string; status: string; easyorders_id: string | null; tags: unknown })[] | null;
                 if (res.error || !data) return;
@@ -381,11 +386,16 @@ function PlatformOrdersContent() {
                 if (data.some(o => o.confirm_attempts !== undefined)) {
                     setOrders(prev => {
                         let changed = false;
+                        const keys = ["confirm_attempts", "last_attempt_at", "last_attempt_reason", "last_attempt_note", "last_attempt_by", "next_attempt_at", "claimed_by", "claimed_at"] as const;
                         const next = prev.map(o => {
                             const a = attemptsById.get(o.id);
-                            if (!a || (a.confirm_attempts ?? 0) === (o.confirm_attempts ?? 0)) return o;
+                            // Only the columns the query brought back: before
+                            // the queue migration the claim stays unknown.
+                            if (!a || keys.every(k => a[k] === undefined || (a[k] ?? null) === (o[k] ?? null))) return o;
                             changed = true;
-                            return { ...o, confirm_attempts: a.confirm_attempts, last_attempt_at: a.last_attempt_at, last_attempt_reason: a.last_attempt_reason, last_attempt_note: a.last_attempt_note, last_attempt_by: a.last_attempt_by };
+                            const patch: Partial<Order> = {};
+                            for (const k of keys) if (a[k] !== undefined) (patch as Record<string, unknown>)[k] = a[k];
+                            return { ...o, ...patch };
                         });
                         return changed ? next : prev;
                     });
@@ -912,30 +922,47 @@ function PlatformOrdersContent() {
     const doubleRiskCount = filteredOrders.filter(o => repeats.get(o.id)?.doubleRisk).length;
     const listed = repeatOnly ? filteredOrders.filter(o => repeats.has(o.id)) : filteredOrders;
 
-    // New orders, orders to try again, or both. The order's status stays
-    // Waiting throughout; the tab is how far confirming it has got.
-    const [stageTab, setStageTab] = useState<ConfirmStage | "all">("new");
+    // The queue: every Waiting order sits in one state (lib/orders/confirm-queue.ts),
+    // worked out again each minute so an order whose time comes moves to
+    // "call now" on its own. The order's status stays Waiting throughout.
+    const [queueTab, setQueueTab] = useState<QueueState>("now");
+    const [shown, setShown] = useState(CARDS_PER_PAGE);
     const [failing, setFailing] = useState<Order | null>(null);
     const [cancelling, setCancelling] = useState<Order | null>(null);
-    const stageCounts = {
-        new: listed.filter(o => stageOf(o) === "new").length,
-        retry: listed.filter(o => stageOf(o) === "retry").length,
-        due: listed.filter(o => stageOf(o) === "retry" && (minutesSince(o.last_attempt_at) ?? 0) >= RETRY_AFTER_MIN).length,
-        all: listed.length,
+    const [approving, setApproving] = useState<Order | null>(null);
+    const [busy, setBusy] = useState<{ id: string; what: AttemptReason | "confirm" } | null>(null);
+    const [details, setDetails] = useState<Record<string, boolean>>({});
+    const [focusId, setFocusId] = useState<string | null>(null);
+    const [now, setNow] = useState(() => Date.now());
+    useEffect(() => {
+        const timer = setInterval(() => setNow(Date.now()), 60_000);
+        return () => clearInterval(timer);
+    }, []);
+    const me = currentUser?.email ?? null;
+
+    const byState = useMemo(() => {
+        const m: Record<QueueState, Order[]> = { now: [], scheduled: [], customer: [], decide: [], old: [] };
+        for (const o of listed) m[queueStateOf(o, now)].push(o);
+        // Whoever has waited longest first; old orders newest first.
+        (["now", "scheduled", "customer", "decide"] as const).forEach(k => m[k].sort(byDue));
+        return m;
+    }, [listed, now]);
+    const queueCounts = {
+        now: byState.now.length, scheduled: byState.scheduled.length, customer: byState.customer.length,
+        decide: byState.decide.length, old: byState.old.length,
     };
-    // The retry list starts with whoever has waited longest since their last
-    // try; everything else keeps the newest-first order it always had.
-    const visibleOrders = stageTab === "all" ? listed
-        : stageTab === "new" ? listed.filter(o => stageOf(o) === "new")
-        : listed.filter(o => stageOf(o) === "retry")
-            .sort((a, b) => String(a.last_attempt_at ?? "").localeCompare(String(b.last_attempt_at ?? "")));
+    const visibleOrders = byState[queueTab];
+
+    const patchOrder = (id: string, patch: Partial<Order>) =>
+        setOrders(prev => prev.map(o => o.id === id ? { ...o, ...patch } : o));
+    const dropOrder = (id: string) => setOrders(prev => prev.filter(o => o.id !== id));
 
     const onAttemptSaved = (order: Order, summary: AttemptSummary) => {
-        setOrders(prev => prev.map(o => o.id === order.id ? { ...o, ...summary } : o));
+        const merged = { ...order, ...summary, claimed_by: null, claimed_at: null };
+        patchOrder(order.id, { ...summary, claimed_by: null, claimed_at: null });
         setFailing(null);
-        toast.success(stageTab === "new"
-            ? "اتسجلت المحاولة، والأوردر اتنقل لتاب إعادة المحاولة."
-            : "اتسجلت المحاولة.");
+        if (focusId === order.id) setFocusId(null);
+        toast.success(nextTryToast(merged));
         if (activeBusiness) {
             logBusinessAction({
                 businessId: activeBusiness.id,
@@ -948,6 +975,78 @@ function PlatformOrdersContent() {
             });
         }
     };
+
+    /** One tap on "no answer", "phone off" or a "call me later" time. */
+    const quickAttempt = async (order: Order, reason: AttemptReason, nextAt?: number) => {
+        setBusy({ id: order.id, what: reason });
+        const note = reason === "call_later" && nextAt ? `نكلمه ${clockLabel(nextAt)}` : null;
+        const r = await recordAttempt(order.id, reason, note, nextAt);
+        setBusy(null);
+        if (!r.ok) { toast.error(r.message); return; }
+        if (r.gone) { toast.info("الأوردر ده اتنقل أو اتلغى قبل كده من زميلك."); dropOrder(order.id); return; }
+        onAttemptSaved(order, r.summary);
+    };
+
+    /**
+     * "I'm calling this one", as a number is dialled or WhatsApp opens. It
+     * never stops the call; if a colleague holds the order, the card says so.
+     */
+    const claim = async (order: Order) => {
+        const other = claimedByOther(order, me, Date.now());
+        if (other) toast.warning(`${shortName(other)} بيكلّم العميل ده دلوقتي.`);
+        patchOrder(order.id, other ? {} : { claimed_by: me, claimed_at: new Date().toISOString() });
+        const r = await claimOrder(order.id, { force: !!other });
+        if (r?.status === "done") patchOrder(order.id, { claimed_by: r.claimed_by, claimed_at: r.claimed_at });
+    };
+
+    /**
+     * The next order to call: the one that has waited longest among those
+     * due now and not held by someone else. It is claimed on the server
+     * first, so two moderators pressing at once get different orders.
+     */
+    const nextUp = byState.now.filter(o => o.id !== focusId && !claimedByOther(o, me, now) && !inFlight.current.has(o.id));
+    const [pickingNext, setPickingNext] = useState(false);
+    const takeNext = async () => {
+        setPickingNext(true);
+        try {
+            // Moving on without recording anything frees the one in hand.
+            const held = focusId ? orders.find(o => o.id === focusId) : null;
+            if (held && isMine(held, me, Date.now())) {
+                patchOrder(held.id, { claimed_by: null, claimed_at: null });
+                claimOrder(held.id, { release: true });
+            }
+            for (const o of nextUp.slice(0, 5)) {
+                const r = await claimOrder(o.id);
+                if (r?.status === "taken") { patchOrder(o.id, { claimed_by: r.claimed_by, claimed_at: r.claimed_at }); continue; }
+                if (r?.status === "gone") { dropOrder(o.id); continue; }
+                if (r?.status === "done") patchOrder(o.id, { claimed_by: r.claimed_by, claimed_at: r.claimed_at });
+                setQueueTab("now");
+                setFocusId(o.id);
+                const i = byState.now.findIndex(x => x.id === o.id);
+                if (i >= shown) setShown(i + CARDS_PER_PAGE);
+                return;
+            }
+            toast.info("كل الأوردرات اللي عليها الدور زمايلك بيكلّموها.");
+        } finally {
+            setPickingNext(false);
+        }
+    };
+    useEffect(() => {
+        if (!focusId) return;
+        const t = setTimeout(() => document.getElementById(`po-${focusId}`)?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
+        return () => clearTimeout(t);
+    }, [focusId]);
+
+    /** Confirm: map every product first, then a last look before it moves on. */
+    const askConfirm = (order: Order) => {
+        if (!order.order_items?.length || order.order_items.some(i => !i.variant_id)) {
+            setDetails(d => ({ ...d, [order.id]: true }));
+            toast.error("فيه منتج مش متربط — اربطه من التفاصيل الأول.");
+            return;
+        }
+        setApproving(order);
+    };
+
     // A twin that is itself a card on screen is linked by anchor; anything
     // else opens in a new tab.
     const onPageIds = new Set(visibleOrders.map(o => o.id));
@@ -956,8 +1055,7 @@ function PlatformOrdersContent() {
     // list passed 130 cards, all drawn at once and all drawn again on every
     // keystroke in any of them; the next page is drawn as the moderator
     // scrolls near the end of this one.
-    const [shown, setShown] = useState(CARDS_PER_PAGE);
-    useEffect(() => { setShown(CARDS_PER_PAGE); }, [stageTab, platformFilter, searchQuery, fromDate, toDate, repeatOnly]);
+    useEffect(() => { setShown(CARDS_PER_PAGE); }, [queueTab, platformFilter, searchQuery, fromDate, toDate, repeatOnly]);
     const drawnOrders = visibleOrders.slice(0, shown);
     const moreRef = useRef<HTMLDivElement>(null);
     useEffect(() => {
@@ -1000,18 +1098,18 @@ function PlatformOrdersContent() {
     }
 
     return (
-        <div className="flex-1 space-y-4 p-8 pt-6">
+        <div className="flex-1 space-y-4 p-4 pt-4 sm:p-8 sm:pt-6">
             <div className="flex items-center justify-between">
                 <div>
-                    <h2 className="text-3xl font-bold tracking-tight flex items-center">
+                    <h2 className="flex items-center text-2xl font-bold tracking-tight sm:text-3xl">
                         {t("Platform Synced Orders")}
                         {!loading && orders.length > 0 && (
-                            <Badge variant="secondary" className="ml-3 text-lg px-3 py-1 bg-primary/10 text-primary">
+                            <Badge variant="secondary" className="ms-3 bg-primary/10 px-3 py-1 text-base text-primary sm:text-lg">
                                 {orders.length} {t("Waiting")}
                             </Badge>
                         )}
                     </h2>
-                    <p className="text-muted-foreground">{t("Manage incoming orders from EasyOrders and Shopify waiting for review.")}</p>
+                    <p className="hidden text-muted-foreground sm:block">{t("Manage incoming orders from EasyOrders and Shopify waiting for review.")}</p>
                 </div>
                 {/* Missed orders are in the list above as orders; this is
                     the record behind them, bots included. */}
@@ -1020,8 +1118,8 @@ function PlatformOrdersContent() {
                 </Link>
             </div>
             
-            <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-3 py-4">
-                <div className="relative w-full sm:flex-1 sm:max-w-sm">
+            <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center sm:gap-3 sm:py-2">
+                <div className="relative col-span-2 w-full sm:flex-1 sm:max-w-sm">
                     <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                     <Input
                         type="search"
@@ -1051,7 +1149,7 @@ function PlatformOrdersContent() {
                         onClick={() => setRepeatOnly(v => !v)}
                         title={t("Show only orders whose number has other orders")}
                         className={cn(
-                            "h-10 w-full gap-1.5 sm:w-auto",
+                            "col-span-2 h-10 w-full gap-1.5 sm:w-auto",
                             !repeatOnly && (doubleRiskCount > 0
                                 ? "border-red-300 text-red-700 hover:bg-red-50 dark:border-red-900 dark:text-red-300"
                                 : "border-amber-300 text-amber-800 hover:bg-amber-50 dark:border-amber-900 dark:text-amber-300"),
@@ -1087,6 +1185,40 @@ function PlatformOrdersContent() {
                     }}
                 />
             )}
+
+            {/* One confirm dialog for the page, opened by a card's "confirm". */}
+            <AlertDialog open={!!approving} onOpenChange={o => { if (!o) setApproving(null); }}>
+                <AlertDialogContent dir="rtl">
+                    <AlertDialogHeader className="text-start sm:text-start">
+                        <AlertDialogTitle>تأكيد أوردر {approving?.customer_info?.name || ""}؟</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            {formatCurrency(approving?.total_amount || 0)} — هيروح Pending ويبدأ تجهيزه.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    {/* Said again at the one moment it can still be acted on:
+                        after this the order goes to fulfilment alongside the other one. */}
+                    {approving && repeats.get(approving.id)?.doubleRisk && (
+                        <div className="space-y-1 rounded-md border border-red-300 bg-red-50 p-3 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/30 dark:text-red-300">
+                            <p className="font-semibold">الرقم ده عليه أوردر مفتوح تاني:</p>
+                            <p className="font-mono">
+                                {repeats.get(approving.id)!.related.filter(r => r.open).map(r => `#${r.id.slice(0, 8)} (${r.status})`).join(" · ")}
+                            </p>
+                            <p>اتأكد مع العميل إن ده أوردر جديد مش نفس الأوردر مرتين.</p>
+                        </div>
+                    )}
+                    <AlertDialogFooter className="gap-2">
+                        <AlertDialogCancel className="h-12">رجوع</AlertDialogCancel>
+                        <AlertDialogAction className="h-12 bg-emerald-600 text-base font-semibold text-white hover:bg-emerald-700"
+                            onClick={() => {
+                                const o = approving;
+                                setApproving(null);
+                                if (o) { if (focusId === o.id) setFocusId(null); handleMoveToPending(o); }
+                            }}>
+                            <Check className="h-5 w-5" />أكّد
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
 
             {/* Treasury Transaction Modal */}
             <AlertDialog open={depositModalOpen} onOpenChange={setDepositModalOpen}>
@@ -1125,19 +1257,40 @@ function PlatformOrdersContent() {
             </AlertDialog>
 
             {orders.length > 0 && (
-                <ConfirmTabs value={stageTab} onChange={setStageTab} counts={stageCounts} />
+                <div className="space-y-3" dir="rtl">
+                    <QueueTabs value={queueTab} onChange={setQueueTab} counts={queueCounts} />
+                    {queueTab === "old" && (
+                        <p className="text-sm text-muted-foreground">أوردرات عدّى عليها أكتر من 3 أيام ومحدش كلّمها. مش داخلة في الدور.</p>
+                    )}
+                    {queueTab === "decide" && queueCounts.decide > 0 && (
+                        <p className="text-sm text-muted-foreground">اتحاول عليها 4 مرات أو الرقم غلط: جرّب الرقم التاني أو واتساب، أو الغيها.</p>
+                    )}
+                </div>
             )}
 
-            <div id="platform-orders-table">
+            {/* The one button a moderator needs to work the queue: it picks
+                and claims the order that has waited longest. On a phone it
+                stays at the bottom of the screen, under the thumb. */}
+            {orders.length > 0 && (
+                <div dir="rtl" className="fixed inset-x-0 bottom-0 z-30 border-t bg-background/95 p-3 backdrop-blur sm:static sm:border-0 sm:bg-transparent sm:p-0">
+                    <Button onClick={takeNext} disabled={pickingNext || nextUp.length === 0}
+                        className="h-14 w-full gap-2 text-base font-bold sm:h-12 sm:w-auto sm:px-8 [&_svg]:size-5">
+                        {pickingNext ? <Loader2 className="animate-spin" /> : <PhoneCall />}
+                        {nextUp.length ? `اللي عليه الدور (${nextUp.length})` : "مفيش حد عليه الدور دلوقتي"}
+                    </Button>
+                </div>
+            )}
+
+            <div id="platform-orders-table" className="pb-24 sm:pb-0">
             {visibleOrders.length === 0 && orders.length > 0 ? (
                 <div className="flex flex-col items-center justify-center rounded-lg border border-dashed bg-muted/20 p-14 text-center text-muted-foreground" dir="rtl">
                     <PackageSearch className="mb-3 h-10 w-10 opacity-20" />
                     <p className="font-medium">
-                        {stageTab === "new" ? "مفيش أوردرات جديدة 👌" : stageTab === "retry" ? "مفيش أوردرات محتاجة إعادة محاولة 👌" : "مفيش أوردرات بالفلتر ده"}
+                        {queueTab === "now" ? "مفيش حد عليه الدور دلوقتي 👌" : "مفيش أوردرات هنا"}
                     </p>
-                    {stageTab === "new" && stageCounts.retry > 0 && (
-                        <button className="mt-2 text-sm text-primary underline" onClick={() => setStageTab("retry")}>
-                            فيه {stageCounts.retry} في إعادة المحاولة
+                    {queueTab === "now" && queueCounts.scheduled > 0 && (
+                        <button className="mt-2 text-sm text-primary underline" onClick={() => setQueueTab("scheduled")}>
+                            {queueCounts.scheduled} ليهم ميعاد بعدين
                         </button>
                     )}
                 </div>
@@ -1150,82 +1303,99 @@ function PlatformOrdersContent() {
             ) : (
 
                 <div className="grid gap-6">
-                    {drawnOrders.map(order => (
+                    {drawnOrders.map(order => {
+                        const needsFix = !order.order_items?.length || order.order_items.some(i => !i.variant_id)
+                            || (Array.isArray(order.tags) && order.tags.includes('total-mismatch'));
+                        const open = details[order.id] ?? needsFix;
+                        const info = order.customer_info || {};
+                        return (
                         <Card
                             key={order.id}
                             id={`po-${order.id}`}
                             className={cn(
-                                "border-2 shadow-md scroll-mt-24",
+                                "gap-0 overflow-hidden border-2 py-0 shadow-sm scroll-mt-24",
+                                focusId === order.id && "ring-4 ring-emerald-500/40",
                                 repeats.get(order.id)?.doubleRisk
                                     ? "border-red-400 dark:border-red-800"
                                     : repeats.has(order.id)
                                         ? "border-amber-300 dark:border-amber-800"
-                                        : "border-primary/20",
+                                        : focusId === order.id ? "border-emerald-500" : "border-border",
                             )}
                         >
-                            <CardHeader className="bg-muted/30 pb-4 border-b space-y-3">
-                                {/* Stacks on a phone. Side by side, the name and
-                                    the total each got half a narrow screen and
-                                    both wrapped to three lines. */}
-                                <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-2">
+                            <div dir="rtl" className="space-y-3 p-4 sm:p-5">
+                                <div className="flex items-start justify-between gap-3">
                                     <div className="min-w-0">
-                                        <CardTitle className="flex flex-wrap items-center gap-x-2 gap-y-1 text-lg sm:text-xl">
-                                            <span className="break-words">{order.customer_info?.name || "Unknown"}</span>
-                                            <span className="font-mono text-xs font-normal text-muted-foreground">
-                                                #{order.id.slice(0, 8)}
-                                            </span>
+                                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                                            <h3 className="break-words text-lg font-bold leading-tight sm:text-xl">{info.name || "Unknown"}</h3>
                                             <DeliveryRateBadge rate={deliveryRateOf(order.customer_info)} />
                                             {isMissed(order) && <MissedOrderTag />}
                                             {JSON.stringify(order.tags || "").includes("reopened") && (
                                                 <Badge variant="outline" className="border-violet-300 bg-violet-50 text-violet-800 dark:border-violet-900 dark:bg-violet-950/40 dark:text-violet-200"
                                                        title="كان اتلغى ورجع عشان يتحاول عليه تاني: اتلغى بسرعة أو من غير محاولات اتصال كفاية">
-                                                    محاولة تانية بعد الإلغاء
+                                                    رجع بعد الإلغاء
                                                 </Badge>
                                             )}
-                                        </CardTitle>
-                                        <p className="text-xs sm:text-sm text-muted-foreground mt-1">
-                                            {format(new Date(order.created_at), "PPP p")}
+                                        </div>
+                                        <p className="mt-1 text-xs text-muted-foreground">
+                                            <span className="font-mono">#{order.id.slice(0, 8)}</span>
+                                            {info.governorate ? ` · ${info.governorate}` : ""}
                                         </p>
                                     </div>
-                                    <div className="flex items-center justify-between sm:flex-col sm:items-end gap-2 shrink-0">
-                                        <p className="text-xl font-bold text-primary">{formatCurrency(order.total_amount)}</p>
-                                        <AttemptBadge order={order} />
-                                    </div>
+                                    <p className="shrink-0 text-xl font-bold tabular-nums">{formatCurrency(order.total_amount)}</p>
                                 </div>
 
-                                {/* Above the call buttons, not below: the other
-                                    orders on this number are what the call has
-                                    to settle. */}
+                                <QueueStatus order={order} me={me} now={now} />
+
+                                {/* What was ordered, in one glance; editing is under the details. */}
+                                <ul className="space-y-0.5 text-sm">
+                                    {(order.order_items || []).map(item => {
+                                        const name = item.variants?.products?.name || item.unmapped_name || "منتج";
+                                        const title = item.variants?.title && !/^default/i.test(item.variants.title) ? ` · ${item.variants.title}` : "";
+                                        return (
+                                            <li key={item.id} className="flex items-baseline gap-1.5">
+                                                <span className="font-bold tabular-nums">{item.quantity}×</span>
+                                                <span className="min-w-0 truncate">{name}{title}</span>
+                                                {!item.variant_id && <span className="shrink-0 rounded bg-red-100 px-1.5 text-[11px] font-semibold text-red-700 dark:bg-red-950 dark:text-red-300">مش متربط</span>}
+                                            </li>
+                                        );
+                                    })}
+                                </ul>
+
+                                {/* Above the call buttons: the other orders on
+                                    this number are what the call has to settle,
+                                    and a customer who rarely takes their parcel
+                                    is asked for a deposit. */}
                                 {repeats.has(order.id) && (
                                     <RepeatOrdersAlert info={repeats.get(order.id)!} onPage={onPageIds} />
                                 )}
-                                {/* What the last person to call was told, before
-                                    the next one picks up the phone. */}
-                                {/* Before the call: a customer who rarely takes
-                                    their parcel is asked for a deposit. */}
                                 <DeliveryRateAdvice rate={deliveryRateOf(order.customer_info)} />
                                 {isMissed(order) && <MissedOrderNote info={order.customer_info} />}
-                                <LastAttempt order={order} />
-                                <AttemptHistory orderId={order.id} count={order.confirm_attempts ?? 0} />
-                                {/* Calling is the first thing that happens to one
-                                    of these orders, so it is the first thing on
-                                    the card rather than a field to select and
-                                    copy out of. */}
-                                <ContactActions order={order as any} storeName={storeName} />
-                                {/* Set by the webhook when our total from the items
-                                    disagrees with the total EasyOrders sent. Almost
-                                    always a quantity or a line we failed to read, so
-                                    the quantities below are what needs checking. */}
                                 {Array.isArray(order.tags) && order.tags.includes('total-mismatch') && (
-                                    <div className="mt-3 flex items-start gap-2 rounded-md border border-red-300 bg-red-50 dark:bg-red-950/20 p-2.5 text-xs text-red-700 dark:text-red-400">
-                                        <AlertTriangle className="h-4 w-4 shrink-0 mt-px" />
-                                        <span>
-                                            {t("This total does not match what the store sent. Check the quantities and prices below before moving the order on.")}
-                                        </span>
+                                    <div className="flex items-start gap-2 rounded-md border border-red-300 bg-red-50 p-2.5 text-xs text-red-700 dark:bg-red-950/20 dark:text-red-400">
+                                        <AlertTriangle className="mt-px h-4 w-4 shrink-0" />
+                                        <span>{t("This total does not match what the store sent. Check the quantities and prices below before moving the order on.")}</span>
                                     </div>
                                 )}
-                            </CardHeader>
-                            <CardContent className="pt-5 px-4 sm:px-6">
+                                <LastAttempt order={order} />
+                                <AttemptHistory orderId={order.id} count={order.confirm_attempts ?? 0} />
+
+                                <ContactActions order={order as any} storeName={storeName} size="default" big onContact={() => claim(order)} />
+                                <QuickActions
+                                    busy={busy?.id === order.id ? busy.what : null}
+                                    onConfirm={() => askConfirm(order)}
+                                    onAttempt={(reason, at) => quickAttempt(order, reason, at)}
+                                    onMore={() => setFailing(order)}
+                                    onCancel={() => setCancelling(order)}
+                                />
+
+                                <button type="button" onClick={() => setDetails(d => ({ ...d, [order.id]: !open }))}
+                                    className="flex min-h-11 w-full items-center justify-center gap-1.5 rounded-lg text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground">
+                                    {open ? "اخفي التفاصيل" : "التفاصيل والتعديل"}
+                                    <ChevronDown className={cn("h-4 w-4 transition-transform", open && "rotate-180")} />
+                                </button>
+                            </div>
+                            {open && (
+                            <CardContent className="border-t bg-muted/20 px-4 py-5 sm:px-6">
                                 <div className="grid gap-6 lg:grid-cols-2 lg:gap-8">
                                     {/* Customer Details */}
                                     <div className="space-y-4">
@@ -1708,66 +1878,10 @@ function PlatformOrdersContent() {
                                     </div>
                                 </div>
                             </CardContent>
-                            <CardFooter className="bg-muted/10 border-t p-4 flex flex-col-reverse sm:flex-row sm:justify-end gap-3">
-                                <Button variant="outline" className="w-full sm:w-auto text-destructive border-destructive hover:bg-destructive/10"
-                                        onClick={() => setCancelling(order)}>
-                                    <X className="mr-2 h-4 w-4" />
-                                    {t("Cancel Order")}
-                                </Button>
-
-                                <Button
-                                    variant="outline"
-                                    className="w-full sm:w-auto border-orange-300 text-orange-800 hover:bg-orange-50 dark:border-orange-900 dark:text-orange-300"
-                                    onClick={() => setFailing(order)}
-                                >
-                                    <PhoneMissed className="mr-2 h-4 w-4" />
-                                    ماتأكدش
-                                </Button>
-
-                                <AlertDialog>
-                                    <AlertDialogTrigger asChild>
-                                        <Button 
-                                            className="w-full sm:w-auto bg-primary text-primary-foreground hover:bg-primary/90"
-                                            disabled={!order.order_items?.length || order.order_items.some(item => !item.variant_id)}
-                                        >
-                                            {saving === order.id ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Check className="mr-2 h-4 w-4" />}
-                                            {t("Move to Pending")}
-                                        </Button>
-                                    </AlertDialogTrigger>
-                                    <AlertDialogContent>
-                                        <AlertDialogHeader>
-                                            <AlertDialogTitle>Approve and Move to Pending?</AlertDialogTitle>
-                                            <AlertDialogDescription>
-                                                This will make the order active in your system and it will appear in the main Orders tab.
-                                                Ensure all products are mapped correctly before proceeding.
-                                            </AlertDialogDescription>
-                                        </AlertDialogHeader>
-                                        {/* Said again at the one moment it can still be
-                                            acted on: after this click the order goes to
-                                            fulfilment alongside the other one. */}
-                                        {repeats.get(order.id)?.doubleRisk && (
-                                            <div className="space-y-1 rounded-md border border-red-300 bg-red-50 p-3 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/30 dark:text-red-300">
-                                                <p className="font-semibold">{t("This number already has an open order:")}</p>
-                                                <p className="font-mono">
-                                                    {repeats.get(order.id)!.related
-                                                        .filter(r => r.open)
-                                                        .map(r => `#${r.id.slice(0, 8)} (${r.status})`)
-                                                        .join(" · ")}
-                                                </p>
-                                                <p>{t("Check with the customer that this is a new order and not the same one twice.")}</p>
-                                            </div>
-                                        )}
-                                        <AlertDialogFooter>
-                                            <AlertDialogCancel>Review Again</AlertDialogCancel>
-                                            <AlertDialogAction onClick={() => handleMoveToPending(order)}>
-                                                Confirm & Approve
-                                            </AlertDialogAction>
-                                        </AlertDialogFooter>
-                                    </AlertDialogContent>
-                                </AlertDialog>
-                            </CardFooter>
+                            )}
                         </Card>
-                    ))}
+                        );
+                    })}
                     {visibleOrders.length > shown && (
                         <div ref={moreRef} className="flex justify-center" dir="rtl">
                             <Button variant="outline" onClick={() => setShown(n => n + CARDS_PER_PAGE)}>

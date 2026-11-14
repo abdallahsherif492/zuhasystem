@@ -8,6 +8,7 @@ import {
 } from "@/components/ui/dialog";
 import { Phone, MessageCircle, Copy, Send } from "lucide-react";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 import {
     phoneNumbers, whatsappLink, telLink, confirmationMessage, type ConfirmationOrder,
 } from "@/lib/orders/contact";
@@ -21,11 +22,15 @@ import {
  * so it is shown, editable, and only then handed to WhatsApp.
  */
 export function ContactActions({
-    order, storeName, size = "sm",
+    order, storeName, size = "sm", big = false, onContact,
 }: {
     order: ConfirmationOrder;
     storeName: string;
     size?: "sm" | "default";
+    /** Full-width, thumb-sized buttons for the confirmation queue. */
+    big?: boolean;
+    /** Called as a number is dialled or the WhatsApp composer opens. */
+    onContact?: () => void;
 }) {
     const info = order.customer_info || {};
     const numbers = [
@@ -45,6 +50,7 @@ export function ContactActions({
     const sendHref = target ? whatsappLink(target, text) : null;
 
     function openComposer() {
+        onContact?.();
         setText(confirmationMessage(order, storeName));
         setTarget(waNumber || null);
         setOpen(true);
@@ -68,14 +74,14 @@ export function ContactActions({
 
     return (
         <>
-            <div className="flex flex-wrap items-center gap-2">
+            <div className={big ? "grid grid-cols-2 gap-2 sm:flex sm:flex-wrap" : "flex flex-wrap items-center gap-2"}>
                 {numbers.map(n => (
                     <Button
                         key={n}
                         asChild
                         size={size}
                         variant="outline"
-                        className="gap-1.5 font-mono tabular-nums"
+                        className={cn("gap-1.5 font-mono tabular-nums", big && "h-12 text-base sm:min-w-44 [&_svg]:size-5")}
                     >
                         {/* One button per number: a single tel: built from
                             "0882232065 / 01159244278" dials neither.
@@ -85,7 +91,7 @@ export function ContactActions({
                             an extension — re-parents loose text, and React then
                             cannot remove it when this card goes. An element it
                             created itself is one it can always find again. */}
-                        <a href={telLink(n)}>
+                        <a href={telLink(n)} onClick={() => onContact?.()}>
                             <Phone className="h-3.5 w-3.5" />
                             <span>{n}</span>
                         </a>
@@ -98,10 +104,11 @@ export function ContactActions({
                     onClick={openComposer}
                     disabled={!waNumber}
                     title={waNumber ? undefined : "مفيش رقم موبايل مصري يقبل واتساب"}
-                    className="gap-1.5 border-emerald-500/40 text-emerald-700 hover:bg-emerald-500/10 dark:text-emerald-400"
+                    className={cn("gap-1.5 border-emerald-500/40 text-emerald-700 hover:bg-emerald-500/10 dark:text-emerald-400",
+                        big && "h-12 text-base sm:min-w-36 [&_svg]:size-5", big && numbers.length % 2 === 0 && "col-span-2")}
                 >
                     <MessageCircle className="h-3.5 w-3.5" />
-                    <span>رسالة تأكيد</span>
+                    <span>{big ? "واتساب" : "رسالة تأكيد"}</span>
                 </Button>
             </div>
 
