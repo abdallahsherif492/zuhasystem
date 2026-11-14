@@ -17,7 +17,7 @@ import { toast } from "sonner";
 import { format } from "date-fns";
 import { ago } from "@/components/orders/confirmation-attempts";
 import {
-    FOLLOW_TABS, FOLLOW_TONE, FollowupRecorder, byUrgency, dayLabel, followChip, followDueAt, followStateOf, isFailed, outcomeLabel,
+    FOLLOW_TABS, FOLLOW_TONE, FollowupRecorder, OrderBrief, byUrgency, loadOrderBriefs, type OrderBriefData, dayLabel, followChip, followDueAt, followStateOf, isFailed, outcomeLabel,
     phoneNumbers, quickFollowup, todayStr, waLink, type Followup, type FollowState, type Issue,
 } from "@/components/logistics/shipping-followup";
 
@@ -111,6 +111,22 @@ export default function ShippingIssuesPage() {
         };
     }, [load]);
 
+    // Each order's products and address, fetched once for the orders on the page.
+    const [briefs, setBriefs] = useState<Record<string, OrderBriefData>>({});
+    const missingBriefs = useMemo(() => rows.map(r => r.order_id).filter(id => !(id in briefs)), [rows, briefs]);
+    useEffect(() => {
+        if (!activeBusiness || missingBriefs.length === 0) return;
+        let live = true;
+        loadOrderBriefs(activeBusiness.id, missingBriefs).then(found => {
+            if (!live) return;
+            // An order with nothing found is marked too, so it is not asked for again.
+            const empty: OrderBriefData = { address: null, phone2: null, notes: null, shipping: 0, paid: 0, items: [] };
+            setBriefs(prev => ({ ...prev, ...Object.fromEntries(missingBriefs.map(id => [id, found[id] ?? empty])) }));
+        });
+        return () => { live = false; };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [activeBusiness?.id, missingBriefs.join(",")]);
+
     async function loadHistory(orderId: string) {
         if (history[orderId] || !activeBusiness) return;
         const { data } = await supabase
@@ -130,10 +146,10 @@ export default function ShippingIssuesPage() {
             if (courier !== "all" && (r.courier || NO_COURIER) !== courier) return false;
             if (!q) return true;
             const hay = normalizeSearchText(
-                `${r.reference} ${r.customer_name || ""} ${r.customer_phone || ""} ${r.governorate || ""} ${r.courier || ""}`);
+                `${r.reference} ${r.customer_name || ""} ${r.customer_phone || ""} ${r.governorate || ""} ${r.courier || ""} ${(briefs[r.order_id]?.items || []).map(i => i.name).join(" ")}`);
             return hay.includes(q);
         });
-    }, [rows, bucket, courier, query]);
+    }, [rows, bucket, courier, query, briefs]);
 
     const byState = useMemo(() => {
         const m: Record<FollowState, Issue[]> = { today: [], later: [], delivering: [], decide: [] };
@@ -446,6 +462,8 @@ export default function ShippingIssuesPage() {
                                         <span className={cn("rounded-full border px-2.5 py-0.5 text-xs font-semibold", FOLLOW_TONE[chip.state])}>{chip.text}</span>
                                     </div>
 
+                                    <OrderBrief brief={briefs[r.order_id]} total={Number(r.total_amount)} />
+
                                     {n > 0 && (
                                         <p className="text-sm">
                                             <span className="font-semibold">{outcomeLabel(r.last_outcome)}</span>
@@ -535,6 +553,7 @@ export default function ShippingIssuesPage() {
             {activeBusiness && (
                 <FollowupRecorder
                     issue={recording}
+                    brief={recording ? briefs[recording.order_id] : undefined}
                     history={recording ? history[recording.order_id] : undefined}
                     businessId={activeBusiness.id}
                     userEmail={currentUser?.email ?? null}

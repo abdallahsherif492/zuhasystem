@@ -41,6 +41,85 @@ export interface Issue {
     next_action_at: string | null;
 }
 
+/** What was ordered and where it goes — what a customer on the phone asks about. */
+export interface OrderBriefData {
+    address: string | null;
+    phone2: string | null;
+    notes: string | null;
+    shipping: number;
+    paid: number;
+    items: { name: string; variant: string | null; qty: number; price: number }[];
+}
+
+/**
+ * The orders' items and address, read for the orders on the page (the issues
+ * RPC does not carry them). In chunks: a few hundred ids in one filter
+ * overflows the request URL.
+ */
+export async function loadOrderBriefs(businessId: string, ids: string[]): Promise<Record<string, OrderBriefData>> {
+    const out: Record<string, OrderBriefData> = {};
+    for (let i = 0; i < ids.length; i += 100) {
+        const { data, error } = await supabase
+            .from("orders")
+            .select("id, customer_info, notes, shipping_cost, paid_amount, payment_status, order_items(quantity, price_at_sale, unmapped_name, variants(title, products(name)))")
+            .eq("business_id", businessId)
+            .in("id", ids.slice(i, i + 100));
+        if (error) { console.error("Order details failed to load:", error); continue; }
+        for (const o of (data || []) as unknown as {
+            id: string; customer_info: { address?: string; phone2?: string } | null; notes: string | null;
+            shipping_cost: number | null; paid_amount: number | null;
+            order_items: { quantity: number; price_at_sale: number; unmapped_name: string | null; variants: { title: string | null; products: { name: string } | null } | null }[];
+        }[]) {
+            out[o.id] = {
+                address: o.customer_info?.address || null,
+                phone2: o.customer_info?.phone2 || null,
+                notes: o.notes,
+                shipping: Number(o.shipping_cost) || 0,
+                paid: Number(o.paid_amount) || 0,
+                items: (o.order_items || []).map(it => ({
+                    name: it.variants?.products?.name || it.unmapped_name || "منتج",
+                    variant: it.variants?.title && !/^default/i.test(it.variants.title) ? it.variants.title : null,
+                    qty: Number(it.quantity) || 0,
+                    price: Number(it.price_at_sale) || 0,
+                })),
+            };
+        }
+    }
+    return out;
+}
+
+/** The products, address and money of one order, read at a glance. */
+export function OrderBrief({ brief, total }: { brief: OrderBriefData | undefined; total: number }) {
+    if (!brief) return <div className="h-16 animate-pulse rounded-xl bg-muted/50" />;
+    const pieces = brief.items.reduce((n, i) => n + i.qty, 0);
+    return (
+        <div className="space-y-2 rounded-xl border bg-muted/30 p-3 text-sm">
+            <ul className="space-y-1">
+                {brief.items.map((it, i) => (
+                    <li key={i} className="flex items-baseline gap-1.5">
+                        <span className="font-bold tabular-nums">{it.qty}×</span>
+                        <span className="min-w-0 flex-1 font-medium">{it.name}{it.variant ? <span className="text-muted-foreground"> · {it.variant}</span> : null}</span>
+                        <span className="shrink-0 tabular-nums text-muted-foreground" dir="ltr">{formatCurrency(it.price * it.qty)}</span>
+                    </li>
+                ))}
+                <li className="flex items-baseline justify-between border-t pt-1.5 text-muted-foreground">
+                    <span>{pieces} {pieces === 1 ? "قطعة" : "قطع"} · شحن <span dir="ltr">{formatCurrency(brief.shipping)}</span></span>
+                    <span className="font-bold text-foreground" dir="ltr">{formatCurrency(total)}</span>
+                </li>
+                {brief.paid > 0 && (
+                    <li className="flex items-baseline justify-between text-emerald-700 dark:text-emerald-400">
+                        <span>مدفوع مقدّم</span><span dir="ltr">{formatCurrency(brief.paid)}</span>
+                    </li>
+                )}
+            </ul>
+            {brief.address && (
+                <p className="flex items-start gap-1.5 border-t pt-2"><MapPin className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />{brief.address}</p>
+            )}
+            {brief.notes && <p className="border-t pt-2"><span className="font-semibold">ملاحظة: </span>{brief.notes}</p>}
+        </div>
+    );
+}
+
 export interface Followup {
     id: string;
     outcome: string;
@@ -245,6 +324,7 @@ const who = (email: string | null | undefined) => (email ? email.split("@")[0] :
  */
 export function FollowupRecorder({ issue, onClose, ...rest }: {
     issue: Issue | null;
+    brief?: OrderBriefData;
     history: Followup[] | undefined;
     businessId: string;
     userEmail: string | null;
@@ -263,9 +343,10 @@ export function FollowupRecorder({ issue, onClose, ...rest }: {
 }
 
 function RecorderBody({
-    issue, history, businessId, userEmail, hasNext, onClose, onSaved,
+    issue, brief, history, businessId, userEmail, hasNext, onClose, onSaved,
 }: {
     issue: Issue;
+    brief?: OrderBriefData;
     history: Followup[] | undefined;
     businessId: string;
     userEmail: string | null;
@@ -392,6 +473,8 @@ function RecorderBody({
             </SheetHeader>
 
             <div className="flex-1 space-y-6 overflow-y-auto p-4">
+                {/* What the customer will ask about: the products. */}
+                <OrderBrief brief={brief} total={Number(issue.total_amount)} />
                 <PreviousCalls history={history} />
 
                 <Step n={1} title="المكالمة وصلت لإيه؟">
