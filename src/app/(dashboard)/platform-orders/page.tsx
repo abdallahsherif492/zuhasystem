@@ -20,7 +20,7 @@ import { Input } from "@/components/ui/input";
 import { AutosaveField } from "@/components/ui/autosave-field";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Check, X, AlertTriangle, Search, PackageSearch, ChevronsUpDown, Repeat, PhoneCall, ChevronDown } from "lucide-react";
+import { Loader2, Check, X, AlertTriangle, Search, PackageSearch, ChevronsUpDown, Repeat, PhoneCall } from "lucide-react";
 import { toast } from "sonner";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
@@ -931,7 +931,6 @@ function PlatformOrdersContent() {
     const [cancelling, setCancelling] = useState<Order | null>(null);
     const [approving, setApproving] = useState<Order | null>(null);
     const [busy, setBusy] = useState<{ id: string; what: AttemptReason | "confirm" } | null>(null);
-    const [details, setDetails] = useState<Record<string, boolean>>({});
     const [focusId, setFocusId] = useState<string | null>(null);
     const [now, setNow] = useState(() => Date.now());
     useEffect(() => {
@@ -1040,8 +1039,8 @@ function PlatformOrdersContent() {
     /** Confirm: map every product first, then a last look before it moves on. */
     const askConfirm = (order: Order) => {
         if (!order.order_items?.length || order.order_items.some(i => !i.variant_id)) {
-            setDetails(d => ({ ...d, [order.id]: true }));
-            toast.error("فيه منتج مش متربط — اربطه من التفاصيل الأول.");
+            document.getElementById(`po-${order.id}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+            toast.error("فيه منتج مش متربط — اربطه تحت الأول.");
             return;
         }
         setApproving(order);
@@ -1140,7 +1139,7 @@ function PlatformOrdersContent() {
                         {MISSED_ORDERS_IN_QUEUE && <SelectItem value="missed">طلبات ناقصة</SelectItem>}
                     </SelectContent>
                 </Select>
-                <DateRangePicker />
+                <DateRangePicker className="min-w-0" />
                 {/* Only there when something is flagged, and red when two
                     orders on one number could both still ship. */}
                 {(repeatCount > 0 || repeatOnly) && (
@@ -1304,9 +1303,6 @@ function PlatformOrdersContent() {
 
                 <div className="grid gap-6">
                     {drawnOrders.map(order => {
-                        const needsFix = !order.order_items?.length || order.order_items.some(i => !i.variant_id)
-                            || (Array.isArray(order.tags) && order.tags.includes('total-mismatch'));
-                        const open = details[order.id] ?? needsFix;
                         const info = order.customer_info || {};
                         return (
                         <Card
@@ -1346,21 +1342,6 @@ function PlatformOrdersContent() {
 
                                 <QueueStatus order={order} me={me} now={now} />
 
-                                {/* What was ordered, in one glance; editing is under the details. */}
-                                <ul className="space-y-0.5 text-sm">
-                                    {(order.order_items || []).map(item => {
-                                        const name = item.variants?.products?.name || item.unmapped_name || "منتج";
-                                        const title = item.variants?.title && !/^default/i.test(item.variants.title) ? ` · ${item.variants.title}` : "";
-                                        return (
-                                            <li key={item.id} className="flex items-baseline gap-1.5">
-                                                <span className="font-bold tabular-nums">{item.quantity}×</span>
-                                                <span className="min-w-0 truncate">{name}{title}</span>
-                                                {!item.variant_id && <span className="shrink-0 rounded bg-red-100 px-1.5 text-[11px] font-semibold text-red-700 dark:bg-red-950 dark:text-red-300">مش متربط</span>}
-                                            </li>
-                                        );
-                                    })}
-                                </ul>
-
                                 {/* Above the call buttons: the other orders on
                                     this number are what the call has to settle,
                                     and a customer who rarely takes their parcel
@@ -1380,23 +1361,9 @@ function PlatformOrdersContent() {
                                 <AttemptHistory orderId={order.id} count={order.confirm_attempts ?? 0} />
 
                                 <ContactActions order={order as any} storeName={storeName} size="default" big onContact={() => claim(order)} />
-                                <QuickActions
-                                    busy={busy?.id === order.id ? busy.what : null}
-                                    onConfirm={() => askConfirm(order)}
-                                    onAttempt={(reason, at) => quickAttempt(order, reason, at)}
-                                    onMore={() => setFailing(order)}
-                                    onCancel={() => setCancelling(order)}
-                                />
-
-                                <button type="button" onClick={() => setDetails(d => ({ ...d, [order.id]: !open }))}
-                                    className="flex min-h-11 w-full items-center justify-center gap-1.5 rounded-lg text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground">
-                                    {open ? "اخفي التفاصيل" : "التفاصيل والتعديل"}
-                                    <ChevronDown className={cn("h-4 w-4 transition-transform", open && "rotate-180")} />
-                                </button>
                             </div>
-                            {open && (
-                            <CardContent className="border-t bg-muted/20 px-4 py-5 sm:px-6">
-                                <div className="grid gap-6 lg:grid-cols-2 lg:gap-8">
+                            <CardContent className="border-t px-4 py-5 sm:px-6">
+                                <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 lg:gap-8">
                                     {/* Customer Details */}
                                     <div className="space-y-4">
                                         <h3 className="font-semibold text-lg flex items-center border-b pb-2">{t("Customer Details")}</h3>
@@ -1878,7 +1845,17 @@ function PlatformOrdersContent() {
                                     </div>
                                 </div>
                             </CardContent>
-                            )}
+                            {/* Under the details, as before: read the order with the
+                                customer, then confirm or record what happened. */}
+                            <div className="border-t bg-muted/20 p-4 sm:p-5">
+                                <QuickActions
+                                    busy={busy?.id === order.id ? busy.what : null}
+                                    onConfirm={() => askConfirm(order)}
+                                    onAttempt={(reason, at) => quickAttempt(order, reason, at)}
+                                    onMore={() => setFailing(order)}
+                                    onCancel={() => setCancelling(order)}
+                                />
+                            </div>
                         </Card>
                         );
                     })}
