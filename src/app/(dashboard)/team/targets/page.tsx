@@ -3,16 +3,15 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
-import { ChevronLeft, ChevronRight, Loader2, RefreshCw, Settings } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight, Loader2, RefreshCw, Settings } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useBusiness } from "@/contexts/BusinessContext";
-import { cn, formatCurrency } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import { cairoDate, nextDay } from "@/lib/cairo-day";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { MetricRow } from "@/components/hr/daily-targets";
 import {
-    ATTENDANCE_LABEL, DAILY_TARGETS_MIGRATION, dataSince, loadTargetData, scoreDay, settingsOf,
+    ATTENDANCE_LABEL, DAILY_TARGETS_MIGRATION, METRIC_LABEL, dataSince, deductionFor, loadTargetData, scoreDay, settingsOf,
     type Attendance, type MetricKey, type MetricResult, type Scorecard, type TargetSettings,
 } from "@/lib/hr/daily-targets";
 
@@ -177,7 +176,7 @@ function SummaryStrip({ reports, total }: { reports: Report[]; total: number }) 
             <Cell label="شيفتات" value={String(reports.length)} />
             <Cell label="حققوا كل حاجة" value={`${clean} من ${evaluated.length}`} tone={clean === evaluated.length && evaluated.length ? "text-emerald-700 dark:text-emerald-400" : ""} />
             <Cell label="من غير نشاط" value={String(reports.filter(r => r.status === "absent").length)} />
-            <Cell label="الخصومات" value={formatCurrency(total)} tone={total > 0 ? "text-rose-700 dark:text-rose-400" : ""} />
+            <Cell label="الخصومات" value={money(total)} tone={total > 0 ? "text-rose-700 dark:text-rose-400" : ""} />
         </div>
     );
 }
@@ -191,69 +190,139 @@ function Cell({ label, value, tone }: { label: string; value: string; tone?: str
     );
 }
 
+const money = (n: number) => `${new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(Math.round(n))} ج.م`;
+
+/**
+ * One moderator's day, readable at a glance: what it costs at the top, one
+ * line per target (done / needed, what is left, what it costs), attendance in
+ * one line. The long explanations sit behind "التفاصيل".
+ */
 function DayReport({ r, settings }: { r: Report; settings: TargetSettings }) {
+    const [open, setOpen] = useState(false);
     const live = r.source === "live";
     const recorded = r.source === "recorded" ? (r as Stored) : null;
     const byKey = Object.fromEntries((r.metrics || []).map(m => [m.key, m])) as Record<MetricKey, MetricResult>;
-    const attendance = r.attendance;
+    const att = r.attendance;
     const deduction = Number(r.deduction) || 0;
     const waived = recorded && deduction > 0 && !recorded.adjustment_id && !recorded.payroll_note;
+    const name = who(r.user_email);
 
     return (
-        <section className="space-y-4 rounded-xl border bg-card p-4">
-            <header className="flex flex-wrap items-start justify-between gap-2">
-                <div>
-                    <h2 className="font-semibold">{who(r.user_email)}</h2>
-                    <p className="text-xs text-muted-foreground">
-                        الشيفت {fmtTime(r.shift_start)} – {fmtTime(r.shift_end)}
-                        {r.status === "evaluated" && <> · نصيبه من الشغل {Math.round(r.share * 100)}%</>}
+        <section className="overflow-hidden rounded-xl border bg-card">
+            {/* Who, when, and the bottom line */}
+            <div className="flex items-start justify-between gap-3 p-4">
+                <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                        <h2 className="text-lg font-semibold">{name}</h2>
+                        <span className={cn("rounded-full px-2 py-0.5 text-[11px]",
+                            live ? "bg-sky-50 text-sky-800 dark:bg-sky-950/50 dark:text-sky-300"
+                                : recorded ? "bg-muted text-muted-foreground"
+                                : "bg-amber-50 text-amber-800 dark:bg-amber-950/50 dark:text-amber-300")}>
+                            {live ? "شغال دلوقتي" : recorded ? "متسجل" : "مش متسجل"}
+                        </span>
+                    </div>
+                    <p className="mt-0.5 text-xs tabular-nums text-muted-foreground">
+                        {fmtTime(r.shift_start)} – {fmtTime(r.shift_end)}
+                        {r.status === "evaluated" && <> · نصيبه {Math.round(r.share * 100)}%</>}
                     </p>
                 </div>
-                <span className={cn("rounded-full px-2.5 py-0.5 text-xs",
-                    live ? "bg-sky-50 text-sky-800 dark:bg-sky-950/50 dark:text-sky-300"
-                        : recorded ? "bg-muted text-muted-foreground"
-                        : "bg-amber-50 text-amber-800 dark:bg-amber-950/50 dark:text-amber-300")}>
-                    {live ? "الشيفت لسه شغال" : recorded ? "كشف متسجل" : "محسوب دلوقتي، مش متسجل"}
-                </span>
-            </header>
+                {r.status === "evaluated" && (
+                    <div className="shrink-0 text-end">
+                        <p className={cn("text-2xl font-bold tabular-nums leading-none",
+                            waived ? "text-muted-foreground line-through" : deduction > 0 ? "text-rose-600 dark:text-rose-400" : "text-emerald-600 dark:text-emerald-400")}>
+                            {deduction > 0 ? money(deduction) : "✓"}
+                        </p>
+                        <p className="mt-1 text-[11px] text-muted-foreground">
+                            {deduction === 0 ? "مفيش خصم" : waived ? "اتلغى" : recorded?.adjustment_id ? "اتخصم" : live ? "لو خلص كده" : recorded?.payroll_note || "خصم"}
+                        </p>
+                    </div>
+                )}
+            </div>
 
-            {r.status === "leave" && <p className="text-sm text-muted-foreground">إجازة معتمدة.</p>}
-            {r.status === "absent" && <p className="text-sm text-muted-foreground">يوم شغل من غير أي نشاط ولا تسجيل حضور. اتأكد إذا كان غياب.</p>}
+            {r.status === "leave" && <p className="border-t px-4 py-3 text-sm text-muted-foreground">إجازة معتمدة.</p>}
+            {r.status === "absent" && <p className="border-t px-4 py-3 text-sm text-amber-700 dark:text-amber-400">مفيش أي شغل ولا حضور في الشيفت. غياب؟</p>}
 
             {r.status === "evaluated" && (
-                <ul className="space-y-4">
-                    {KEYS.map(k => byKey[k] && <MetricRow key={k} m={byKey[k]} settings={settings} live={live} />)}
-                </ul>
+                <>
+                    <ul className="divide-y border-t">
+                        {KEYS.map(k => byKey[k] && <TargetLine key={k} m={byKey[k]} cost={deductionFor(settings, k)} live={live} />)}
+                        {att && <AttendanceLine att={att} live={live} />}
+                    </ul>
+                    <button type="button" onClick={() => setOpen(o => !o)} aria-expanded={open}
+                        className="flex w-full items-center justify-center gap-1 border-t py-2 text-xs text-muted-foreground hover:bg-muted/40">
+                        التفاصيل <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", open && "rotate-180")} />
+                    </button>
+                    {open && (
+                        <ul className="space-y-1.5 border-t bg-muted/30 p-4 text-xs leading-relaxed text-muted-foreground">
+                            {KEYS.map(k => byKey[k] && <li key={k}><span className="font-medium text-foreground">{METRIC_LABEL[k]}:</span> {byKey[k].detail}</li>)}
+                            {att?.items.map(i => <li key={i.key}><span className="font-medium text-foreground">{ATTENDANCE_LABEL[i.key]}:</span> {i.detail}</li>)}
+                        </ul>
+                    )}
+                </>
             )}
+        </section>
+    );
+}
 
-            {attendance && (
-                <div className="space-y-1.5 rounded-lg bg-muted/40 p-3 text-xs">
-                    <p className="font-medium text-foreground">الحضور</p>
-                    <p className="text-muted-foreground">
-                        {attendance.clock_in ? `حضور ${fmtTime(attendance.clock_in)}` : "مسجلش حضور"}
-                        {" · "}
-                        {attendance.clock_out ? `انصراف ${fmtTime(attendance.clock_out)}` : "مسجلش انصراف"}
-                    </p>
-                    {attendance.items.map(i => (
-                        <p key={i.key} className="text-rose-700 dark:text-rose-400">
-                            {ATTENDANCE_LABEL[i.key]}: {i.detail}{i.amount > 0 && ` خصم ${formatCurrency(i.amount)}.`}
-                        </p>
+function TargetLine({ m, cost, live }: { m: MetricResult; cost: number; live: boolean }) {
+    const asked = m.target !== null;
+    const missing = asked && !m.met;
+    const left = missing && m.key !== "rate" ? (m.target as number) - m.done : 0;
+    const tone = !asked ? "text-muted-foreground" : m.met ? "text-emerald-600 dark:text-emerald-400" : live ? "text-amber-600 dark:text-amber-400" : "text-rose-600 dark:text-rose-400";
+    const pct = !asked ? 0 : Math.min(100, (m.done / Math.max(1, m.target as number)) * 100);
+    return (
+        <li className="px-4 py-2.5">
+            <div className="flex items-center gap-3">
+                <span className={cn("h-2 w-2 shrink-0 rounded-full", !asked ? "bg-muted-foreground/30" : m.met ? "bg-emerald-500" : live ? "bg-amber-500" : "bg-rose-500")} aria-hidden />
+                <span className="min-w-0 flex-1 text-sm">{METRIC_LABEL[m.key]}</span>
+                <span className={cn("text-sm font-semibold tabular-nums", tone)}>
+                    {m.key === "rate" ? `${m.done}%` : m.done}
+                    {asked && <span className="font-normal text-muted-foreground"> / {m.key === "rate" ? `${m.target}%` : m.target}</span>}
+                </span>
+                <span className="w-24 shrink-0 text-end text-xs">
+                    {!asked ? <span className="text-muted-foreground">مش مطلوب</span>
+                        : m.met ? <span className="text-emerald-600 dark:text-emerald-400">تمام</span>
+                        : <span className={cn("font-medium", live ? "text-amber-700 dark:text-amber-400" : "text-rose-700 dark:text-rose-400")}>
+                            {m.key === "rate" ? "أقل" : `${live ? "فاضل" : "ناقص"} ${left}`}{cost > 0 && ` · ${money(cost)}`}
+                        </span>}
+                </span>
+            </div>
+            {asked && !m.met && (
+                <div className="ms-5 mt-1.5 h-1 overflow-hidden rounded-full bg-muted">
+                    <div className={cn("h-full rounded-full", live ? "bg-amber-500" : "bg-rose-500")} style={{ width: `${pct}%` }} />
+                </div>
+            )}
+            {m.key === "confirm" && m.parts && (
+                <p className="ms-5 mt-1 text-[11px] tabular-nums text-muted-foreground">
+                    اتأكد {m.parts.confirmed} · اتلغى {m.parts.cancelled} · محاولة {m.parts.attempted}
+                </p>
+            )}
+        </li>
+    );
+}
+
+function AttendanceLine({ att, live }: { att: Attendance; live: boolean }) {
+    return (
+        <li className="px-4 py-2.5">
+            <div className="flex items-center gap-3">
+                <span className={cn("h-2 w-2 shrink-0 rounded-full", att.items.length ? (live ? "bg-amber-500" : "bg-rose-500") : "bg-emerald-500")} aria-hidden />
+                <span className="flex-1 text-sm">الحضور</span>
+                <span className="text-sm tabular-nums">
+                    {att.clock_in ? fmtTime(att.clock_in) : <span className="text-rose-600 dark:text-rose-400">مسجلش حضور</span>}
+                    <span className="text-muted-foreground"> ← </span>
+                    {att.clock_out ? fmtTime(att.clock_out) : <span className="text-muted-foreground">{live ? "لسه" : "مسجلش انصراف"}</span>}
+                </span>
+            </div>
+            {att.items.length > 0 && (
+                <div className="ms-5 mt-1.5 flex flex-wrap gap-1.5">
+                    {att.items.map(i => (
+                        <span key={i.key} className="rounded-full bg-rose-50 px-2 py-0.5 text-[11px] font-medium text-rose-700 dark:bg-rose-950/50 dark:text-rose-300">
+                            {ATTENDANCE_LABEL[i.key]}{i.key === "late" && att.late_minutes ? ` ${att.late_minutes} د` : i.key === "early" && att.early_minutes ? ` ${att.early_minutes} د` : ""}
+                            {i.amount > 0 && ` · ${money(i.amount)}`}
+                        </span>
                     ))}
                 </div>
             )}
-
-            <footer className="flex flex-wrap items-baseline justify-between gap-2 border-t pt-3 text-sm">
-                <span className="text-muted-foreground">{live ? "الخصم لو الشيفت خلص كده" : "الخصم"}</span>
-                <span className="text-end">
-                    <span className={cn("font-semibold tabular-nums", deduction > 0 ? "text-rose-700 dark:text-rose-400" : "text-emerald-700 dark:text-emerald-400", waived && "text-muted-foreground line-through")}>
-                        {deduction > 0 ? formatCurrency(deduction) : "مفيش"}
-                    </span>
-                    {recorded?.adjustment_id && <span className="block text-[11px] text-muted-foreground">اتسجل في المرتبات</span>}
-                    {waived && <span className="block text-[11px] text-muted-foreground">اتلغى من المرتبات</span>}
-                    {recorded?.payroll_note && <span className="block text-[11px] text-amber-700 dark:text-amber-400">{recorded.payroll_note}</span>}
-                    {!recorded && !live && deduction > 0 && <span className="block text-[11px] text-muted-foreground">مش متسجل في المرتبات</span>}
-                </span>
-            </footer>
-        </section>
+        </li>
     );
 }
