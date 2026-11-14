@@ -5,25 +5,20 @@ import { supabase } from "@/lib/supabase";
 import { useBusiness } from "@/contexts/BusinessContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { formatCurrency, cn, normalizeSearchText } from "@/lib/utils";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-    Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from "@/components/ui/select";
 import {
     Loader2, LifeBuoy, Phone, MessageCircle, Search, RefreshCw,
-    ChevronDown, Clock, Download, Truck, PhoneCall,
+    ChevronDown, Clock, Download, PhoneCall, PhoneMissed, PhoneOff, ClipboardCheck,
 } from "lucide-react";
 import * as XLSX from "xlsx";
 import { toast } from "sonner";
 import { format } from "date-fns";
-import { minutesSince } from "@/components/orders/confirmation-attempts";
+import { ago } from "@/components/orders/confirmation-attempts";
 import {
-    FollowupRecorder, RETRY_AFTER_MIN, STEP_DOTS, STEP_TONES, dayLabel, isFailed, nextStep, outcomeLabel,
-    phoneNumbers, stageOf, todayStr, waLink, type Followup, type Issue, type Stage,
+    FOLLOW_TABS, FOLLOW_TONE, FollowupRecorder, byUrgency, dayLabel, followChip, followDueAt, followStateOf, isFailed, outcomeLabel,
+    phoneNumbers, quickFollowup, todayStr, waLink, type Followup, type FollowState, type Issue,
 } from "@/components/logistics/shipping-followup";
 
 const BUCKETS = [
@@ -56,7 +51,14 @@ export default function ShippingIssuesPage() {
     const [loading, setLoading] = useState(true);
     const [unavailable, setUnavailable] = useState(false);
     const [bucket, setBucket] = useState("all");
-    const [stage, setStage] = useState<Stage | "all">("new");
+    const [tab, setTab] = useState<FollowState>("today");
+    const [busy, setBusy] = useState<string | null>(null);
+    // Worked out again each minute, so a retry whose time comes moves to "today".
+    const [now, setNow] = useState(() => Date.now());
+    useEffect(() => {
+        const timer = setInterval(() => setNow(Date.now()), 60_000);
+        return () => clearInterval(timer);
+    }, []);
     // Courier by name — the RPC returns the name, and one courier's problems
     // are one conversation with one account manager.
     const [courier, setCourier] = useState("all");
@@ -133,25 +135,23 @@ export default function ShippingIssuesPage() {
         });
     }, [rows, bucket, courier, query]);
 
-    const stageCounts = useMemo(() => ({
-        new: base.filter(r => stageOf(r) === "new").length,
-        retry: base.filter(r => stageOf(r) === "retry").length,
-        due: base.filter(r => stageOf(r) === "retry" && (minutesSince(r.last_followup) ?? 0) >= RETRY_AFTER_MIN).length,
-        reached: base.filter(r => stageOf(r) === "reached").length,
-        overdue: base.filter(r => stageOf(r) === "reached" && r.next_action_at && r.next_action_at <= todayStr()).length,
-        all: base.length,
-    }), [base]);
-
-    // New keeps the longest-stuck first. Retry starts with whoever has waited
-    // longest since the last failed call; Reached with the follow-up date that
-    // comes first — today's and overdue ones at the top.
-    const filtered = useMemo(() => {
-        if (stage === "all") return base;
-        const list = base.filter(r => stageOf(r) === stage);
-        if (stage === "retry") return [...list].sort((a, b) => String(a.last_followup ?? "").localeCompare(String(b.last_followup ?? "")));
-        if (stage === "reached") return [...list].sort((a, b) => String(a.next_action_at ?? "9999").localeCompare(String(b.next_action_at ?? "9999")));
-        return list;
-    }, [base, stage]);
+    const byState = useMemo(() => {
+        const m: Record<FollowState, Issue[]> = { today: [], later: [], delivering: [], decide: [] };
+        for (const r of base) m[followStateOf(r, now)].push(r);
+        // Today: the parcel on its way back first, then the longest stuck.
+        // Later and delivering: whichever comes back first.
+        m.today.sort(byUrgency);
+        m.decide.sort(byUrgency);
+        const due = (r: Issue) => followDueAt(r) ?? Infinity;
+        m.later.sort((a, b) => due(a) - due(b));
+        m.delivering.sort((a, b) => due(a) - due(b));
+        return m;
+    }, [base, now]);
+    const counts = {
+        today: byState.today.length, later: byState.later.length,
+        delivering: byState.delivering.length, decide: byState.decide.length,
+    };
+    const filtered = byState[tab];
 
     /** Couriers present in the current bucket, with how many each is holding. */
     const couriers = useMemo(() => {
@@ -162,9 +162,9 @@ export default function ShippingIssuesPage() {
     }, [rows, bucket]);
 
     /**
-     * The sheet is exactly what is on screen — same bucket, same courier, same
-     * search — so filtering to one courier and exporting gives the file to send
-     * that courier.
+     * The sheet is every stuck order under the filters — same bucket, same
+     * courier, same search, whatever list it is in — so picking one courier and
+     * exporting gives the file to send that courier.
      *
      * The issues RPC carries what the cards need and no more, so the address,
      * second phone and payment are read for just these orders at export time.
@@ -173,10 +173,10 @@ export default function ShippingIssuesPage() {
      * chunks: a few hundred ids in one filter overflows the request URL.
      */
     async function exportSheet() {
-        if (!activeBusiness || filtered.length === 0) return;
+        if (!activeBusiness || base.length === 0) return;
         setExporting(true);
         try {
-            const ids = filtered.map(r => r.order_id);
+            const ids = base.map(r => r.order_id);
             const extra = new Map<string, any>();
             let partial = false;
             for (let i = 0; i < ids.length; i += 100) {
@@ -190,7 +190,7 @@ export default function ShippingIssuesPage() {
             }
 
             const bucketLabel = (b: string) => BUCKETS.find(x => x.key === b)?.label || b;
-            const sheetRows = filtered.map(r => {
+            const sheetRows = base.map(r => {
                 const o = extra.get(r.order_id) || {};
                 const info = o.customer_info || {};
                 const total = Number(r.total_amount) || 0;
@@ -265,6 +265,21 @@ export default function ShippingIssuesPage() {
     // Saved: forget the cached history, reload quietly, and either close the
     // panel or carry straight on to the next order — a moderator working
     // through the list should not have to find their place again.
+    /** One tap on a card: a call that got nowhere. */
+    async function quick(r: Issue, outcome: "no_answer" | "phone_off") {
+        if (!activeBusiness) return;
+        setBusy(`${r.order_id}:${outcome}`);
+        const error = await quickFollowup(activeBusiness.id, r.order_id, outcome, currentUser?.email ?? null);
+        setBusy(null);
+        if (error) { toast.error("ماتسجلتش، جرّب تاني."); return; }
+        const n = Number(r.followup_count) + 1;
+        const after = { ...r, followup_count: n, last_outcome: outcome, last_followup: new Date().toISOString(), next_action_at: null };
+        setRows(prev => prev.map(x => x.order_id === r.order_id ? after : x));
+        setHistory(prev => { const h = { ...prev }; delete h[r.order_id]; return h; });
+        const st = followStateOf(after);
+        toast.success(st === "decide" ? `اتسجلت. ${n} محاولات من غير نتيجة — في «محتاج قرار».` : `اتسجلت. هيرجعلك ${followChip(after).text.replace("نكلّمه ", "")}.`);
+    }
+
     function afterSave(openNext: boolean) {
         const done = recording;
         const following = openNext ? nextAfter(done) : null;
@@ -287,165 +302,197 @@ export default function ShippingIssuesPage() {
         );
     }
 
+    const selectedCourier = courier === "all" ? null : courier === NO_COURIER ? "بدون شركة شحن" : courier;
+
     return (
-        <div className="space-y-5" dir="rtl">
-            <div className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
-                <div>
-                    <h1 className="flex items-center gap-2 text-3xl font-bold tracking-tight">
-                        <LifeBuoy className="h-7 w-7 text-primary" />
+        <div className="space-y-4 pb-24 sm:pb-0" dir="rtl">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="min-w-0">
+                    <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight sm:text-3xl">
+                        <LifeBuoy className="h-6 w-6 text-primary sm:h-7 sm:w-7" />
                         {t("مشاكل الشحن")}
                     </h1>
-                    <p className="mt-1 text-sm text-muted-foreground">
-                        {loading ? "أوردرات عالقة عند شركات الشحن ولسه ممكن تتنقذ."
-                            : totals.count === 0 ? "مفيش أوردرات عالقة في الفلتر ده."
-                            : <>{totals.count} أوردر عالق عند شركات الشحن بقيمة <span dir="ltr" className="font-semibold text-foreground">{formatCurrency(totals.val)}</span>، ولسه ممكن يتنقذوا.</>}
-                    </p>
-                    <p className="mt-0.5 text-sm text-muted-foreground">
-                        اقرا السطر الملوّن فوق كل أوردر، اتصل، وبعد المكالمة دوس «سجّل متابعة» واختار اللي حصل.
-                    </p>
+                    {!loading && totals.count > 0 && (
+                        <p className="mt-1 text-sm text-muted-foreground">
+                            {totals.count} أوردر عالق بقيمة <span dir="ltr" className="font-semibold text-foreground">{formatCurrency(totals.val)}</span>
+                        </p>
+                    )}
                 </div>
-                <div className="flex flex-wrap gap-2">
-                    <Button
-                        variant="outline" onClick={exportSheet}
-                        disabled={exporting || loading || filtered.length === 0}
-                        className="gap-2 border-emerald-500/40 text-emerald-700 hover:bg-emerald-500/10 dark:text-emerald-400"
-                    >
+                <div className="flex gap-2">
+                    <Button variant="outline" onClick={exportSheet} disabled={exporting || loading || base.length === 0}
+                        className="h-11 gap-2 border-emerald-500/40 text-emerald-700 hover:bg-emerald-500/10 dark:text-emerald-400">
                         {exporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
                         {/* The count says what will be in the file, so a filter
                             left on by accident is noticed before sending it. */}
-                        تصدير Excel ({filtered.length})
+                        {selectedCourier ? `شيت ${selectedCourier}` : "Excel"} ({base.length})
                     </Button>
-                    <Button variant="outline" onClick={() => load()} className="gap-2">
+                    <Button variant="outline" size="icon" onClick={() => load()} className="h-11 w-11" aria-label={t("تحديث")}>
                         <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
-                        {t("تحديث")}
                     </Button>
                 </div>
             </div>
 
-            <FollowupTabs value={stage} onChange={setStage} counts={stageCounts} />
-
-            <div className="flex flex-wrap items-center gap-2 rounded-xl border bg-muted/30 p-3">
-                {BUCKETS.map(b => {
-                    const c = b.key === "all" ? rows.length : rows.filter(r => r.bucket === b.key).length;
+            {/* The lists: what to do today, what has a time, what waits on the courier, what needs a decision. */}
+            <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 sm:mx-0 sm:flex-wrap sm:px-0">
+                {FOLLOW_TABS.map(f => {
+                    const active = tab === f.key;
+                    const n = counts[f.key];
                     return (
-                        <Button key={b.key} size="sm" variant={bucket === b.key ? "default" : "outline"}
-                                onClick={() => setBucket(b.key)} className="gap-1.5">
-                            {b.label}
-                            <span className="text-[11px] opacity-70">({c})</span>
-                        </Button>
+                        <button key={f.key} type="button" onClick={() => setTab(f.key)}
+                            className={cn("flex min-h-12 shrink-0 items-center gap-2 rounded-xl border px-4 text-sm font-semibold transition-colors",
+                                active ? "border-foreground bg-foreground text-background" : "bg-background hover:bg-muted")}>
+                            {f.label}
+                            <span className={cn("min-w-7 rounded-full px-2 py-0.5 text-center text-sm font-bold tabular-nums",
+                                active ? "bg-background/20" : f.key === "today" && n ? "bg-emerald-600 text-white" : f.key === "decide" && n ? "bg-red-600 text-white" : "bg-muted")}>{n}</span>
+                        </button>
                     );
                 })}
-                <Select value={courier} onValueChange={setCourier}>
-                    <SelectTrigger className="h-9 w-[190px] bg-background">
-                        <Truck className="h-4 w-4 text-muted-foreground" />
-                        <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="all">كل شركات الشحن</SelectItem>
-                        {couriers.map(([name, n]) => (
-                            <SelectItem key={name} value={name}>
-                                {name === NO_COURIER ? "بدون شركة شحن" : name} ({n})
-                            </SelectItem>
-                        ))}
-                    </SelectContent>
-                </Select>
-                <div className="relative ms-auto min-w-[180px] max-w-sm flex-1">
-                    <Search className="absolute start-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                    <Input placeholder="رقم الأوردر أو العميل أو التليفون..." value={query}
-                           onChange={e => setQuery(e.target.value)} className="h-9 bg-background ps-8" />
+            </div>
+
+            {/* Filters: the kind of problem, the courier, a search. */}
+            <div className="space-y-2">
+                <div className="-mx-4 flex gap-1.5 overflow-x-auto px-4 sm:mx-0 sm:flex-wrap sm:px-0">
+                    {BUCKETS.map(b => {
+                        const c = b.key === "all" ? rows.length : rows.filter(r => r.bucket === b.key).length;
+                        return (
+                            <button key={b.key} type="button" onClick={() => setBucket(b.key)}
+                                className={cn("h-10 shrink-0 rounded-full border px-3.5 text-sm font-medium",
+                                    bucket === b.key ? "border-primary bg-primary text-primary-foreground" : "bg-background hover:bg-muted")}>
+                                {b.label} <span className="opacity-70">({c})</span>
+                            </button>
+                        );
+                    })}
                 </div>
-                <div className="flex items-center gap-1.5">
-                    <Label className="whitespace-nowrap text-xs text-muted-foreground">شحن متأخر بعد</Label>
-                    <Input type="number" min={1} max={60} value={staleDays}
-                           onChange={e => setStaleDays(Math.max(1, Number(e.target.value) || 5))}
-                           className="h-9 w-16 bg-background" />
-                    <span className="text-xs text-muted-foreground">يوم</span>
+                {couriers.length > 1 && (
+                    <div className="-mx-4 flex gap-1.5 overflow-x-auto px-4 sm:mx-0 sm:flex-wrap sm:px-0">
+                        <button type="button" onClick={() => setCourier("all")}
+                            className={cn("h-10 shrink-0 rounded-full border px-3.5 text-sm font-medium",
+                                courier === "all" ? "border-primary bg-primary text-primary-foreground" : "bg-background hover:bg-muted")}>
+                            كل الشركات
+                        </button>
+                        {couriers.map(([name, n]) => (
+                            <button key={name} type="button" onClick={() => setCourier(name)}
+                                className={cn("h-10 shrink-0 rounded-full border px-3.5 text-sm font-medium",
+                                    courier === name ? "border-primary bg-primary text-primary-foreground" : "bg-background hover:bg-muted")}>
+                                {name === NO_COURIER ? "بدون شركة" : name} <span className="opacity-70">({n})</span>
+                            </button>
+                        ))}
+                    </div>
+                )}
+                <div className="flex gap-2">
+                    <div className="relative min-w-0 flex-1 sm:max-w-sm">
+                        <Search className="absolute start-2.5 top-3 h-4 w-4 text-muted-foreground" />
+                        <Input placeholder="رقم الأوردر أو العميل أو التليفون" value={query}
+                               onChange={e => setQuery(e.target.value)} className="h-10 bg-background ps-8" />
+                    </div>
+                    <label className="flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground" title="الشحن يعتبر متأخر بعد كام يوم">
+                        متأخر بعد
+                        <Input type="number" min={1} max={60} value={staleDays}
+                               onChange={e => setStaleDays(Math.max(1, Number(e.target.value) || 5))}
+                               className="h-10 w-14 bg-background" />
+                        يوم
+                    </label>
                 </div>
             </div>
+
+            {/* The one button for working the list: the most urgent order
+                due today, opened with its panel. On a phone, under the thumb. */}
+            {counts.today > 0 && (
+                <div className="fixed inset-x-0 bottom-0 z-30 border-t bg-background/95 p-3 backdrop-blur sm:static sm:border-0 sm:bg-transparent sm:p-0">
+                    <Button onClick={() => { setTab("today"); openRecorder(byState.today[0]); }}
+                        className="h-14 w-full gap-2 text-base font-bold sm:h-12 sm:w-auto sm:px-8 [&_svg]:size-5">
+                        <PhoneCall />اللي عليه الدور ({counts.today})
+                    </Button>
+                </div>
+            )}
 
             {loading ? (
                 <div className="flex justify-center p-16"><Loader2 className="h-7 w-7 animate-spin text-muted-foreground" /></div>
             ) : filtered.length === 0 ? (
-                <Card><CardContent className="p-16 text-center text-sm text-muted-foreground">
-                    {stage === "new" ? "كل الأوردرات العالقة اتكلّمت مرة على الأقل."
-                        : stage === "retry" ? "مفيش أوردرات مستنية مكالمة تانية."
-                        : stage === "reached" ? "لسه مااتوصلناش لحد في الأوردرات دي."
-                        : "مفيش أوردرات عالقة في الفلتر ده."}
-                    {stage === "new" && stageCounts.retry > 0 && (
-                        <button className="mt-2 block w-full text-primary underline" onClick={() => setStage("retry")}>
-                            روح لإعادة المحاولة ({stageCounts.retry})
-                        </button>
-                    )}
-                </CardContent></Card>
+                <div className="rounded-xl border border-dashed p-12 text-center text-sm text-muted-foreground">
+                    {tab === "today" ? "مفيش حاجة عليها الدور النهارده 👌" : "مفيش أوردرات هنا"}
+                </div>
             ) : (
                 <div className="space-y-3">
                     {filtered.map(r => {
                         const open = expanded === r.order_id;
-                        const step = nextStep(r);
+                        const chip = followChip(r, now);
                         const phones = phoneNumbers(r.customer_phone);
+                        const n = Number(r.followup_count) || 0;
                         return (
-                            <article key={r.order_id} className="overflow-hidden rounded-xl border bg-card shadow-sm">
-                                {/* What to do about this order now — read before anything else. */}
-                                <div className={cn("flex flex-wrap items-center gap-x-3 gap-y-2 border-b px-4 py-2.5", STEP_TONES[step.tone])}>
-                                    <span className={cn("h-2.5 w-2.5 shrink-0 rounded-full", STEP_DOTS[step.tone])} aria-hidden />
-                                    <span className="min-w-[12rem] flex-1 text-sm font-semibold">{step.text}</span>
-                                    <Button size="sm" className="h-8 gap-1.5" onClick={() => openRecorder(r)}>
-                                        <PhoneCall className="h-4 w-4" /> سجّل متابعة
-                                    </Button>
-                                </div>
-
-                                <div className="flex flex-wrap items-start justify-between gap-3 px-4 pt-3">
-                                    <div className="min-w-0">
-                                        {/* The same 8 characters printed on the waybill, so the
-                                            number on the parcel matches the screen. */}
-                                        <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-                                            <span className="font-mono text-xl font-black tracking-wider" dir="ltr">#{r.reference}</span>
-                                            <span className="truncate text-base font-semibold">{r.customer_name || "—"}</span>
+                            <article key={r.order_id} className="overflow-hidden rounded-xl border-2 bg-card shadow-sm">
+                                <div className="space-y-3 p-4">
+                                    <div className="flex items-start justify-between gap-3">
+                                        <div className="min-w-0">
+                                            {/* The same 8 characters printed on the waybill. */}
+                                            <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
+                                                <span className="font-mono text-lg font-black tracking-wider" dir="ltr">#{r.reference}</span>
+                                                <span className="truncate text-base font-semibold">{r.customer_name || "—"}</span>
+                                            </div>
+                                            <p className="mt-0.5 text-sm text-muted-foreground">
+                                                {[r.courier, r.governorate].filter(Boolean).join(" · ") || "—"}
+                                            </p>
                                         </div>
-                                        <div className="mt-0.5 text-sm text-muted-foreground">
-                                            {[r.governorate, r.courier, r.closed_by ? `أكده ${r.closed_by.split("@")[0]}` : null].filter(Boolean).join("، ") || "—"}
-                                        </div>
+                                        <span className="shrink-0 text-lg font-bold tabular-nums" dir="ltr">{formatCurrency(Number(r.total_amount))}</span>
                                     </div>
-                                    <div className="flex flex-wrap items-center gap-2">
-                                        <Badge variant="outline" className={cn("px-2.5",
-                                            r.bucket === "returning" && "border-red-500/25 bg-red-500/10 text-red-600",
-                                            r.bucket === "hold" && "border-amber-500/25 bg-amber-500/10 text-amber-600",
-                                            r.bucket === "stale" && "border-blue-500/25 bg-blue-500/10 text-blue-600",
-                                        )}>
-                                            {r.status}
-                                        </Badge>
-                                        <span className={cn("text-sm font-semibold",
-                                            r.days_stuck >= 14 ? "text-red-600" : r.days_stuck >= 7 ? "text-amber-600" : "text-muted-foreground")}>
-                                            عالق من {r.days_stuck} يوم
+
+                                    <div className="flex flex-wrap items-center gap-1.5">
+                                        <span className={cn("rounded-full border px-2.5 py-0.5 text-xs font-semibold",
+                                            r.bucket === "returning" ? "border-red-300 bg-red-50 text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300"
+                                                : r.bucket === "hold" ? "border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300"
+                                                : "border-blue-300 bg-blue-50 text-blue-700 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-300")}>
+                                            {BUCKETS.find(b => b.key === r.bucket)?.label ?? r.status} · {r.days_stuck} يوم
                                         </span>
-                                        <span className="text-lg font-bold tabular-nums" dir="ltr">{formatCurrency(Number(r.total_amount))}</span>
+                                        <span className={cn("rounded-full border px-2.5 py-0.5 text-xs font-semibold", FOLLOW_TONE[chip.state])}>{chip.text}</span>
                                     </div>
-                                </div>
 
-                                <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 pb-3 pt-2">
+                                    {n > 0 && (
+                                        <p className="text-sm">
+                                            <span className="font-semibold">{outcomeLabel(r.last_outcome)}</span>
+                                            <span className="text-muted-foreground"> · {ago(r.last_followup)}</span>
+                                        </p>
+                                    )}
+
                                     {phones.length === 0 ? (
-                                        <span className="text-sm text-muted-foreground">مفيش رقم مسجل</span>
-                                    ) : phones.map(num => (
-                                        <div key={num} className="flex items-center gap-1.5">
-                                            {/* Big and tappable — this screen exists to get someone on the phone. */}
-                                            <a href={`tel:${num}`} className="font-mono text-xl font-bold tracking-wide hover:underline">{num}</a>
-                                            <Button asChild size="icon" variant="outline" className="h-8 w-8" aria-label={`اتصل ${num}`}>
-                                                <a href={`tel:${num}`}><Phone className="h-4 w-4" /></a>
-                                            </Button>
-                                            {waLink(num) && (
-                                                <Button asChild size="icon" variant="outline" className="h-8 w-8 text-emerald-700 dark:text-emerald-400" aria-label={`واتساب ${num}`}>
-                                                    <a href={waLink(num)!} target="_blank" rel="noopener noreferrer"><MessageCircle className="h-4 w-4" /></a>
+                                        <p className="text-sm text-muted-foreground">مفيش رقم مسجل</p>
+                                    ) : (
+                                        <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
+                                            {phones.map(num => (
+                                                <Button key={num} asChild variant="outline" className="h-12 gap-1.5 font-mono text-base tabular-nums sm:min-w-44 [&_svg]:size-5">
+                                                    <a href={`tel:${num}`}><Phone /><span>{num}</span></a>
+                                                </Button>
+                                            ))}
+                                            {phones.map(waLink).find(Boolean) && (
+                                                <Button asChild variant="outline"
+                                                    className={cn("h-12 gap-1.5 border-emerald-500/40 text-base text-emerald-700 hover:bg-emerald-500/10 dark:text-emerald-400 sm:min-w-32 [&_svg]:size-5", phones.length % 2 === 0 && "col-span-2")}>
+                                                    <a href={phones.map(waLink).find(Boolean)!} target="_blank" rel="noopener noreferrer"><MessageCircle /><span>واتساب</span></a>
                                                 </Button>
                                             )}
                                         </div>
-                                    ))}
-                                    {Number(r.followup_count) > 0 && (
+                                    )}
+
+                                    <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
+                                        <Button onClick={() => openRecorder(r)} disabled={!!busy}
+                                            className="col-span-2 h-14 gap-2 text-base font-semibold sm:h-12 sm:min-w-44 sm:flex-1 [&_svg]:size-5">
+                                            <ClipboardCheck />سجّل اللي حصل
+                                        </Button>
+                                        <Button variant="outline" disabled={!!busy} onClick={() => quick(r, "no_answer")}
+                                            className="h-12 gap-2 border-orange-300 text-[15px] font-semibold text-orange-800 hover:bg-orange-50 dark:border-orange-900 dark:text-orange-300 sm:min-w-32 [&_svg]:size-5">
+                                            {busy === `${r.order_id}:no_answer` ? <Loader2 className="animate-spin" /> : <PhoneMissed />}مابيردش
+                                        </Button>
+                                        <Button variant="outline" disabled={!!busy} onClick={() => quick(r, "phone_off")}
+                                            className="h-12 gap-2 text-[15px] font-semibold sm:min-w-32 [&_svg]:size-5">
+                                            {busy === `${r.order_id}:phone_off` ? <Loader2 className="animate-spin" /> : <PhoneOff />}مقفول
+                                        </Button>
+                                    </div>
+
+                                    {n > 0 && (
                                         <button type="button"
-                                                className="ms-auto inline-flex items-center gap-1 rounded text-xs text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                                                onClick={() => { setExpanded(open ? null : r.order_id); if (!open) loadHistory(r.order_id); }}
-                                                aria-expanded={open}>
-                                            <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", open && "rotate-180")} />
-                                            {open ? "اخفي المتابعات" : `${r.followup_count} ${Number(r.followup_count) === 1 ? "متابعة" : "متابعات"} قبل كده`}
+                                            className="flex min-h-10 w-full items-center justify-center gap-1 rounded-lg text-sm text-muted-foreground hover:bg-muted hover:text-foreground"
+                                            onClick={() => { setExpanded(open ? null : r.order_id); if (!open) loadHistory(r.order_id); }}
+                                            aria-expanded={open}>
+                                            {open ? "اخفي المتابعات" : `المتابعات (${n})`}
+                                            <ChevronDown className={cn("h-4 w-4 transition-transform", open && "rotate-180")} />
                                         </button>
                                     )}
                                 </div>
@@ -496,35 +543,6 @@ export default function ShippingIssuesPage() {
                     onSaved={afterSave}
                 />
             )}
-        </div>
-    );
-}
-
-/** Tabs over the list: by how far following each order up has got. */
-function FollowupTabs({ value, onChange, counts }: {
-    value: Stage | "all";
-    onChange: (v: Stage | "all") => void;
-    counts: { new: number; retry: number; due: number; reached: number; overdue: number; all: number };
-}) {
-    const tabs: { key: Stage | "all"; label: string; sub: string; count: number; tone?: string }[] = [
-        { key: "new", label: "جديدة", sub: "محدش تابعها لسه", count: counts.new },
-        { key: "retry", label: "إعادة المحاولة", sub: counts.due ? `${counts.due} جاهزين تتصل تاني` : "آخر مكالمة ماوصلتش", count: counts.retry, tone: "bg-orange-100 text-orange-800 dark:bg-orange-900/50 dark:text-orange-200" },
-        { key: "reached", label: "اتوصلنا", sub: counts.overdue ? `${counts.overdue} ميعادهم النهارده أو فات` : "مستنيين التسليم", count: counts.reached, tone: counts.overdue ? "bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-200" : "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-200" },
-        { key: "all", label: "الكل", sub: "كل الأوردرات العالقة", count: counts.all },
-    ];
-    return (
-        <div dir="rtl" className="grid grid-cols-2 gap-1 rounded-xl border bg-muted/50 p-1 sm:grid-cols-4">
-            {tabs.map(tab => (
-                <button key={tab.key} type="button" onClick={() => onChange(tab.key)}
-                        className={cn("rounded-lg px-3 py-2 text-start transition-colors",
-                            value === tab.key ? "bg-background shadow-sm" : "text-muted-foreground hover:text-foreground")}>
-                    <div className="flex items-center gap-2">
-                        <span className="text-sm font-semibold">{tab.label}</span>
-                        <span className={cn("rounded-full px-2 text-xs font-bold tabular-nums", tab.count && tab.tone ? tab.tone : "bg-muted text-foreground")}>{tab.count}</span>
-                    </div>
-                    <div className="mt-0.5 truncate text-[11px]">{tab.sub}</div>
-                </button>
-            ))}
         </div>
     );
 }

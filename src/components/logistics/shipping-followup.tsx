@@ -14,7 +14,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { logBusinessAction } from "@/lib/logs/actions-logger";
-import { ago, minutesSince } from "@/components/orders/confirmation-attempts";
+import { ago } from "@/components/orders/confirmation-attempts";
 
 /**
  * Following up orders stuck with the courier: what a call can end in, where
@@ -109,21 +109,6 @@ const outcomeOf = (v: string | null) => OUTCOMES.find(o => o.value === v);
 export const outcomeLabel = (v: string | null) => outcomeOf(v)?.label || v || "—";
 export const isFailed = (v: string | null) => outcomeOf(v)?.kind === "failed";
 
-/**
- * How far following an order up has got — separate from its shipping status.
- *   new      nobody has called about it yet
- *   retry    the last call did not settle it: call again
- *   reached  the customer (or courier) was reached; waiting on the delivery
- */
-export type Stage = "new" | "retry" | "reached";
-export const stageOf = (r: { followup_count: number; last_outcome: string | null }): Stage =>
-    Number(r.followup_count) === 0 ? "new" : isFailed(r.last_outcome) ? "retry" : "reached";
-
-/** An hour after a failed call, the order is due to be tried again. */
-export const RETRY_AFTER_MIN = 60;
-/** From this many follow-ups that did not settle the order, a final return is suggested. */
-export const SUGGEST_RETURN_AT = 3;
-
 export const todayStr = () => format(new Date(), "yyyy-MM-dd");
 
 /** "النهارده", "بكرة", or the weekday and date — how people say a delivery day. */
@@ -135,48 +120,91 @@ export function dayLabel(d: string) {
     return new Date(`${d}T12:00:00`).toLocaleDateString("ar-EG-u-nu-latn", { weekday: "long", day: "numeric", month: "long" });
 }
 
-export type StepTone = "new" | "retry" | "wait" | "urgent" | "ok";
-
 /**
- * The one thing to do about an order now, in words — so a moderator opening
- * the list reads what is expected of them instead of decoding badges.
+ * Where an order stuck with the courier stands — one of four lists:
+ *   today       call today: never called, a retry that is due, or a day that came
+ *   later       a day is set, or the retry is not due yet
+ *   delivering  someone was reached; waiting for the delivery
+ *   decide      refused, a wrong number, or 4 calls that settled nothing:
+ *               talk to the courier or mark it returned
+ * A call that got nowhere comes back after 1 hour, then 3 hours, then the
+ * next day; a reached order with no day set comes back after 2 days.
  */
-export function nextStep(r: Issue): { tone: StepTone; text: string } {
-    const today = todayStr();
-    const st = stageOf(r);
-    const last = outcomeLabel(r.last_outcome);
-    if (st === "new") return { tone: "new", text: "محدش كلّمه لسه. اتصل بالعميل." };
-    if (r.last_outcome === "customer_refused")
-        return { tone: "urgent", text: "العميل رفض الاستلام. لو متأكد، سجّله مرتجع نهائي." };
-    if (st === "retry") {
-        if (r.next_action_at && r.next_action_at > today)
-            return { tone: "wait", text: `${last}. نكلمه ${dayLabel(r.next_action_at)}.` };
-        if (r.next_action_at)
-            return { tone: "retry", text: `${dayLabel(r.next_action_at)} ميعاد نكلمه. اتصل دلوقتي.` };
-        if (Number(r.followup_count) >= SUGGEST_RETURN_AT)
-            return { tone: "urgent", text: `${r.followup_count} محاولات ومفيش نتيجة. كلّم شركة الشحن أو رجّعه.` };
-        const mins = minutesSince(r.last_followup) ?? RETRY_AFTER_MIN;
-        if (mins < RETRY_AFTER_MIN)
-            return { tone: "wait", text: `آخر مرة: ${last} ${ago(r.last_followup)}. جرّب تاني بعد ${RETRY_AFTER_MIN - mins} دقيقة.` };
-        return { tone: "retry", text: `اتصل تاني. آخر مرة: ${last} ${ago(r.last_followup)}.` };
-    }
-    if (r.next_action_at && r.next_action_at <= today)
-        return { tone: "urgent", text: `ميعاده كان ${dayLabel(r.next_action_at)}. اتأكد إنه اتسلم.` };
-    if (r.next_action_at)
-        return { tone: "ok", text: `اتفقنا على التسليم ${dayLabel(r.next_action_at)}. مفيش مطلوب دلوقتي.` };
-    return { tone: "ok", text: `${last}. مستني التسليم.` };
+export type FollowState = "today" | "later" | "delivering" | "decide";
+
+const HOUR = 3_600_000;
+export const DECIDE_AFTER = 4;
+const RECHECK_REACHED_MS = 2 * 24 * HOUR;
+
+/** When the order needs someone again (ms), or null for "needs a decision". */
+export function followDueAt(r: Pick<Issue, "followup_count" | "last_outcome" | "last_followup" | "next_action_at">): number | null {
+    const n = Number(r.followup_count) || 0;
+    if (n === 0) return 0;
+    if (r.last_outcome === "customer_refused") return null;
+    const last = r.last_followup ? Date.parse(r.last_followup) : 0;
+    const day = r.next_action_at ? new Date(`${r.next_action_at}T00:00:00`).getTime() : null;
+    if (!isFailed(r.last_outcome)) return day ?? last + RECHECK_REACHED_MS;
+    if (day !== null) return day;
+    if (r.last_outcome === "wrong_number") return null;
+    if (n >= DECIDE_AFTER) return null;
+    return last + (n === 1 ? HOUR : n === 2 ? 3 * HOUR : 24 * HOUR);
 }
 
-export const STEP_TONES: Record<StepTone, string> = {
-    new: "bg-amber-50 text-amber-900 border-amber-200 dark:bg-amber-950/30 dark:text-amber-200 dark:border-amber-900",
-    retry: "bg-orange-50 text-orange-900 border-orange-200 dark:bg-orange-950/30 dark:text-orange-200 dark:border-orange-900",
-    wait: "bg-muted/50 text-muted-foreground border-border",
-    urgent: "bg-red-50 text-red-900 border-red-200 dark:bg-red-950/30 dark:text-red-200 dark:border-red-900",
-    ok: "bg-emerald-50 text-emerald-900 border-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-200 dark:border-emerald-900",
+export function followStateOf(r: Pick<Issue, "followup_count" | "last_outcome" | "last_followup" | "next_action_at">, now = Date.now()): FollowState {
+    const due = followDueAt(r);
+    if (due === null) return "decide";
+    if (due <= now) return "today";
+    return (Number(r.followup_count) || 0) > 0 && !isFailed(r.last_outcome) ? "delivering" : "later";
+}
+
+/** Returning first (the parcel is on its way back), then held, then late; longest stuck first. */
+const BUCKET_RANK: Record<Issue["bucket"], number> = { returning: 0, hold: 1, stale: 2 };
+export const byUrgency = (a: Issue, b: Issue) =>
+    BUCKET_RANK[a.bucket] - BUCKET_RANK[b.bucket] || Number(b.days_stuck) - Number(a.days_stuck);
+
+export const FOLLOW_TABS: { key: FollowState; label: string }[] = [
+    { key: "today", label: "النهارده" },
+    { key: "later", label: "ليهم ميعاد" },
+    { key: "delivering", label: "مستني التسليم" },
+    { key: "decide", label: "محتاج قرار" },
+];
+
+/** "بعد 40 دقيقة", "بعد 3 ساعات", "بكرة" — when the order comes back. */
+export function whenLabel(ms: number, now = Date.now()) {
+    const diff = ms - now;
+    if (diff <= 0) return "دلوقتي";
+    if (diff < HOUR) return `بعد ${Math.max(1, Math.round(diff / 60_000))} دقيقة`;
+    if (diff < 12 * HOUR) { const h = Math.round(diff / HOUR); return h === 1 ? "بعد ساعة" : h === 2 ? "بعد ساعتين" : `بعد ${h} ساعات`; }
+    return dayLabel(format(new Date(ms), "yyyy-MM-dd"));
+}
+
+/** The order's state in a few words, for the chip on its card. */
+export function followChip(r: Issue, now = Date.now()): { state: FollowState; text: string } {
+    const state = followStateOf(r, now);
+    const n = Number(r.followup_count) || 0;
+    const due = followDueAt(r);
+    const text =
+        state === "today" ? (n === 0 ? "محدش كلّمه" : !isFailed(r.last_outcome) ? (r.next_action_at ? `ميعاده ${dayLabel(r.next_action_at)} · اتأكد إنه اتسلم` : "لسه ماتسلمش؟ اتأكد") : `محاولة ${n + 1} · جاهز`) :
+        state === "later" ? `نكلّمه ${due ? whenLabel(due, now) : ""}` :
+        state === "delivering" ? (r.next_action_at ? `التسليم ${dayLabel(r.next_action_at)}` : "مستني التسليم") :
+        r.last_outcome === "customer_refused" ? "رفض الاستلام" : r.last_outcome === "wrong_number" ? "الرقم غلط" : `${n} محاولات من غير نتيجة`;
+    return { state, text };
+}
+
+export const FOLLOW_TONE: Record<FollowState, string> = {
+    today: "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-300",
+    later: "border-sky-200 bg-sky-50 text-sky-800 dark:border-sky-900 dark:bg-sky-950/40 dark:text-sky-300",
+    delivering: "border-violet-200 bg-violet-50 text-violet-800 dark:border-violet-900 dark:bg-violet-950/40 dark:text-violet-300",
+    decide: "border-red-200 bg-red-50 text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300",
 };
-export const STEP_DOTS: Record<StepTone, string> = {
-    new: "bg-amber-500", retry: "bg-orange-500", wait: "bg-muted-foreground/50", urgent: "bg-red-500", ok: "bg-emerald-500",
-};
+
+/** One tap from the card: a call that got nowhere. */
+export async function quickFollowup(businessId: string, orderId: string, outcome: "no_answer" | "phone_off", userEmail: string | null) {
+    const { error } = await supabase.from("shipping_followups").insert({
+        business_id: businessId, order_id: orderId, outcome, note: null, next_action_at: null, created_by: userEmail || "Staff",
+    }).select("id");
+    return error;
+}
 
 /**
  * A customer's phone field sometimes holds more than one number —
@@ -281,11 +309,12 @@ function RecorderBody({
 
     // Where the order goes once this is saved.
     const willLeave = newStatus === "Collected" || newStatus === "Returned";
+    const after = chosen ? { followup_count: Number(issue.followup_count) + 1, last_outcome: chosen.value, last_followup: new Date().toISOString(), next_action_at: next || null } : null;
+    const afterState = after ? followStateOf(after) : null;
+    const afterDue = after ? followDueAt(after) : null;
     const destination = !chosen ? null
-        : willLeave ? `الأوردر هيبقى «${statusLabel(newStatus)}» ويخرج من القايمة.`
-        : chosen.kind === "reached"
-            ? `هيروح لتاب «اتوصلنا»${next ? ` ويرجعلك ${dayLabel(next)}` : ""}.`
-            : `هيروح لتاب «إعادة المحاولة»${next ? ` ويرجعلك ${dayLabel(next)}` : " وتقدر تتصل تاني بعد ساعة"}.`;
+        : willLeave ? `هيبقى «${statusLabel(newStatus)}» ويخرج من القايمة.`
+        : `هيروح «${FOLLOW_TABS.find(t => t.key === afterState)?.label}»${afterState === "later" && afterDue ? ` ويرجعلك ${whenLabel(afterDue)}` : ""}.`;
 
     async function save(openNext: boolean) {
         if (!chosen) return;
