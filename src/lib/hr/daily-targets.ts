@@ -186,8 +186,10 @@ export function shiftOn(member: Member, day: string, clocking?: Clocking | null)
     if (clocking?.clock_in_time) {
         const start = Date.parse(clocking.clock_in_time);
         const length = scheduled ? scheduled.end - scheduled.start : 8 * HOUR;
-        // Not clocked out (yet, or forgotten): a shift of the usual length.
-        const end = clocking.clock_out_time ? Date.parse(clocking.clock_out_time) : start + length;
+        // Not clocked out (yet, or forgotten): a shift of the usual length, and
+        // never ending before the scheduled end (someone who came in early
+        // still works until then).
+        const end = clocking.clock_out_time ? Date.parse(clocking.clock_out_time) : Math.max(start + length, scheduled?.end ?? 0);
         if (end > start) return { email: member.user_email.toLowerCase(), day, start, end };
     }
     return scheduled;
