@@ -13,8 +13,12 @@ import { CANCEL_REASONS, type CancelReason } from "@/lib/orders/cancel-reasons";
  * The reason stays on the order, so the cancellations page can tell an order
  * the customer refused from one nobody tried hard enough on.
  */
-export function CancelOrderDialog({ customerName, open, onOpenChange, onConfirm }: {
+export function CancelOrderDialog({ customerName, open, onOpenChange, onConfirm, only, title, description }: {
     customerName: string;
+    /** The reasons to offer, in this order; all of them when left out. */
+    only?: CancelReason[];
+    title?: string;
+    description?: string;
     open: boolean;
     onOpenChange: (o: boolean) => void;
     onConfirm: (reason: CancelReason, note: string | null) => Promise<void> | void;
@@ -45,13 +49,13 @@ export function CancelOrderDialog({ customerName, open, onOpenChange, onConfirm 
         <Dialog open={open} onOpenChange={close}>
             <DialogContent dir="rtl" className="sm:max-w-md">
                 <DialogHeader>
-                    <DialogTitle>إلغاء أوردر {customerName}</DialogTitle>
+                    <DialogTitle>{title ?? `إلغاء أوردر ${customerName}`}</DialogTitle>
                     <DialogDescription>
-                        اختار ليه اتلغى. لو اتلغى عشان مابيردش من غير محاولات كفاية، ممكن يرجع تاني للتأكيد.
+                        {description ?? "اختار ليه اتلغى. لو اتلغى عشان مابيردش من غير محاولات كفاية، ممكن يرجع تاني للتأكيد."}
                     </DialogDescription>
                 </DialogHeader>
                 <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2" role="radiogroup" aria-label="سبب الإلغاء">
-                    {CANCEL_REASONS.map(r => (
+                    {(only ? only.map(k => CANCEL_REASONS.find(r => r.key === k)!).filter(Boolean) : CANCEL_REASONS).map(r => (
                         <button
                             key={r.key}
                             type="button"

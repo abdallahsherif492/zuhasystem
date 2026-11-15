@@ -29,14 +29,16 @@ import { cn } from "@/lib/utils";
 import {
     AttemptHistory, FailedAttemptDialog, LastAttempt, claimOrder, recordAttempt, type AttemptReason, type AttemptSummary,
 } from "@/components/orders/confirmation-attempts";
-import { QueueStatus, QueueTabs, QuickActions } from "@/components/orders/confirm-queue";
-import { byDue, claimedByOther, clockLabel, isMine, nextTryToast, queueStateOf, shortName, type QueueState } from "@/lib/orders/confirm-queue";
+import { FlowActions, FlowInstruction, QueueStatus, QueueTabs } from "@/components/orders/confirm-queue";
+import { DUE_STATES, byDue, claimedByOther, isMine, nextTryToast, queueStateOf, shortName, stepOf, whatsappFromOther, type QueueState } from "@/lib/orders/confirm-queue";
 import { DeliveryRateAdvice, DeliveryRateBadge } from "@/components/orders/delivery-rate";
 import { deliveryRateOf } from "@/lib/easyorders-delivery-rate";
 import { fetchDeliveryRatesAction } from "./delivery-rate-actions";
 import { MISSED_ORDERS_IN_QUEUE, MissedOrderNote, MissedOrderTag } from "@/components/orders/missed-order";
 import { CancelOrderDialog } from "@/components/orders/cancel-order-dialog";
-import { cancelReasonLabel, type CancelReason } from "@/lib/orders/cancel-reasons";
+import {
+    CANCEL_REASON_FALLBACK, FLOW_CANCEL_REASONS, LAST_STEP_CANCEL_REASONS, cancelReasonLabel, type CancelReason,
+} from "@/lib/orders/cancel-reasons";
 import { BundlePicker, BundleTag } from "@/components/bundles/bundle-picker";
 import { bundleLabel, bundleSkuIndex, bundleVariantIndex, expandBundle, loadBundles, skuKey, type Bundle, type BundleVariant } from "@/lib/bundles";
 
@@ -134,6 +136,10 @@ interface Order {
     next_attempt_at?: string | null;
     claimed_by?: string | null;
     claimed_at?: string | null;
+    // The confirmation flow (20261120_confirm_flow.sql)
+    confirm_rounds?: number | null;
+    whatsapp_sent_by?: string | null;
+    whatsapp_sent_at?: string | null;
 }
 
 interface Variant {
@@ -592,14 +598,31 @@ function PlatformOrdersContent() {
         const card = takeOut(orderId);
         try {
             let moved: "done" | "gone";
+            // Cancelled because they never answered: the last call is recorded
+            // first, so the daily review does not take it for a cancel nobody
+            // tried on, and bring it back.
+            if (reason === "no_answer") {
+                const r = await recordAttempt(orderId, "no_reply", "آخر محاولة قبل الإلغاء", null);
+                if (r.ok && r.gone) { card.settle(); toast.info("الأوردر ده اتنقل أو اتلغى قبل كده من زميلك."); return; }
+            }
             try {
                 moved = await leaveWaiting(orderId, { status: 'Cancelled', cancel_reason: reason, cancel_note: note });
             } catch (e) {
-                // Until 20261107_cancellation_review.sql has run there is
-                // nowhere to keep the reason; cancel without it.
                 const code = (e as { code?: string })?.code;
-                if (code !== "PGRST204" && code !== "42703") throw e;
-                moved = await leaveWaiting(orderId, { status: 'Cancelled' });
+                const older = CANCEL_REASON_FALLBACK[reason];
+                if (code === "23514" && older) {
+                    // A reason added by 20261120_confirm_flow.sql, before it has
+                    // run: the nearest old one, with the words in the note.
+                    moved = await leaveWaiting(orderId, {
+                        status: 'Cancelled', cancel_reason: older,
+                        cancel_note: [cancelReasonLabel(reason), note].filter(Boolean).join(" — "),
+                    });
+                } else {
+                    // Until 20261107_cancellation_review.sql has run there is
+                    // nowhere to keep the reason; cancel without it.
+                    if (code !== "PGRST204" && code !== "42703") throw e;
+                    moved = await leaveWaiting(orderId, { status: 'Cancelled' });
+                }
             }
             card.settle();
             if (moved === "gone") {
@@ -925,7 +948,7 @@ function PlatformOrdersContent() {
     // The queue: every Waiting order sits in one state (lib/orders/confirm-queue.ts),
     // worked out again each minute so an order whose time comes moves to
     // "call now" on its own. The order's status stays Waiting throughout.
-    const [queueTab, setQueueTab] = useState<QueueState>("now");
+    const [queueTab, setQueueTab] = useState<QueueState>("new");
     const [shown, setShown] = useState(CARDS_PER_PAGE);
     const [failing, setFailing] = useState<Order | null>(null);
     const [cancelling, setCancelling] = useState<Order | null>(null);
@@ -940,15 +963,20 @@ function PlatformOrdersContent() {
     const me = currentUser?.email ?? null;
 
     const byState = useMemo(() => {
-        const m: Record<QueueState, Order[]> = { now: [], scheduled: [], customer: [], decide: [], old: [] };
+        const m: Record<QueueState, Order[]> = { new: [], whatsapp: [], last: [], scheduled: [] };
         for (const o of listed) m[queueStateOf(o, now)].push(o);
-        // Whoever has waited longest first; old orders newest first.
-        (["now", "scheduled", "customer", "decide"] as const).forEach(k => m[k].sort(byDue));
+        // Whoever has waited longest first. A WhatsApp sent from my phone
+        // comes back to me first: only I can see whether they replied.
+        const sentByMe = (o: Order) => (o.whatsapp_sent_at && !whatsappFromOther(o, me) ? 1 : 0);
+        const mineFirst = (a: Order, b: Order) => sentByMe(b) - sentByMe(a) || byDue(a, b);
+        m.new.sort(byDue);
+        m.whatsapp.sort(mineFirst);
+        m.last.sort(mineFirst);
+        m.scheduled.sort(byDue);
         return m;
-    }, [listed, now]);
+    }, [listed, now, me]);
     const queueCounts = {
-        now: byState.now.length, scheduled: byState.scheduled.length, customer: byState.customer.length,
-        decide: byState.decide.length, old: byState.old.length,
+        new: byState.new.length, whatsapp: byState.whatsapp.length, last: byState.last.length, scheduled: byState.scheduled.length,
     };
     const visibleOrders = byState[queueTab];
 
@@ -975,11 +1003,10 @@ function PlatformOrdersContent() {
         }
     };
 
-    /** One tap on "no answer", "phone off" or a "call me later" time. */
-    const quickAttempt = async (order: Order, reason: AttemptReason, nextAt?: number) => {
+    /** One tap on "no answer, WhatsApp sent" or "no answer at all". */
+    const quickAttempt = async (order: Order, reason: AttemptReason) => {
         setBusy({ id: order.id, what: reason });
-        const note = reason === "call_later" && nextAt ? `نكلمه ${clockLabel(nextAt)}` : null;
-        const r = await recordAttempt(order.id, reason, note, nextAt);
+        const r = await recordAttempt(order.id, reason, null, null);
         setBusy(null);
         if (!r.ok) { toast.error(r.message); return; }
         if (r.gone) { toast.info("الأوردر ده اتنقل أو اتلغى قبل كده من زميلك."); dropOrder(order.id); return; }
@@ -1003,7 +1030,7 @@ function PlatformOrdersContent() {
      * due now and not held by someone else. It is claimed on the server
      * first, so two moderators pressing at once get different orders.
      */
-    const nextUp = byState.now.filter(o => o.id !== focusId && !claimedByOther(o, me, now) && !inFlight.current.has(o.id));
+    const nextUp = DUE_STATES.flatMap(k => byState[k]).filter(o => o.id !== focusId && !claimedByOther(o, me, now) && !inFlight.current.has(o.id));
     const [pickingNext, setPickingNext] = useState(false);
     const takeNext = async () => {
         setPickingNext(true);
@@ -1019,9 +1046,10 @@ function PlatformOrdersContent() {
                 if (r?.status === "taken") { patchOrder(o.id, { claimed_by: r.claimed_by, claimed_at: r.claimed_at }); continue; }
                 if (r?.status === "gone") { dropOrder(o.id); continue; }
                 if (r?.status === "done") patchOrder(o.id, { claimed_by: r.claimed_by, claimed_at: r.claimed_at });
-                setQueueTab("now");
+                const tab = queueStateOf(o, Date.now());
+                setQueueTab(tab);
                 setFocusId(o.id);
-                const i = byState.now.findIndex(x => x.id === o.id);
+                const i = byState[tab].findIndex(x => x.id === o.id);
                 if (i >= shown) setShown(i + CARDS_PER_PAGE);
                 return;
             }
@@ -1164,6 +1192,8 @@ function PlatformOrdersContent() {
             {cancelling && (
                 <CancelOrderDialog
                     customerName={cancelling.customer_info?.name || ""}
+                    only={stepOf(cancelling, now) === 3 ? LAST_STEP_CANCEL_REASONS : FLOW_CANCEL_REASONS}
+                    description={stepOf(cancelling, now) === 3 ? "اختار ليه اتلغى: لو مردش بعد كل المحاولات اختار «مابيردش»." : "العميل قال إيه؟"}
                     open={!!cancelling}
                     onOpenChange={o => { if (!o) setCancelling(null); }}
                     onConfirm={(reason, note) => { const id = cancelling.id; setCancelling(null); return handleCancelOrder(id, reason, note); }}
@@ -1258,11 +1288,14 @@ function PlatformOrdersContent() {
             {orders.length > 0 && (
                 <div className="space-y-3" dir="rtl">
                     <QueueTabs value={queueTab} onChange={setQueueTab} counts={queueCounts} />
-                    {queueTab === "old" && (
-                        <p className="text-sm text-muted-foreground">أوردرات عدّى عليها أكتر من 3 أيام ومحدش كلّمها. مش داخلة في الدور.</p>
+                    {queueTab === "whatsapp" && queueCounts.whatsapp > 0 && (
+                        <p className="text-sm text-muted-foreground">اتبعتلهم واتساب من 4 ساعات أو أكتر. اللي اتبعتلهم من موبايلك فوق.</p>
                     )}
-                    {queueTab === "decide" && queueCounts.decide > 0 && (
-                        <p className="text-sm text-muted-foreground">اتحاول عليها 4 مرات أو الرقم غلط: جرّب الرقم التاني أو واتساب، أو الغيها.</p>
+                    {queueTab === "last" && queueCounts.last > 0 && (
+                        <p className="text-sm text-muted-foreground">آخر محاولة: لو مفيش رد بعدها الغي الأوردر. فيها كمان الأوردرات اللي عدّى عليها أكتر من 3 أيام.</p>
+                    )}
+                    {queueTab === "scheduled" && queueCounts.scheduled > 0 && (
+                        <p className="text-sm text-muted-foreground">ليهم ميعاد لسه ماجاش. أول ما ييجي ميعادهم بيرجعوا لوحدهم في الخطوة بتاعتهم.</p>
                     )}
                 </div>
             )}
@@ -1285,9 +1318,14 @@ function PlatformOrdersContent() {
                 <div className="flex flex-col items-center justify-center rounded-lg border border-dashed bg-muted/20 p-14 text-center text-muted-foreground" dir="rtl">
                     <PackageSearch className="mb-3 h-10 w-10 opacity-20" />
                     <p className="font-medium">
-                        {queueTab === "now" ? "مفيش حد عليه الدور دلوقتي 👌" : "مفيش أوردرات هنا"}
+                        {queueTab === "scheduled" ? "مفيش أوردرات ليها ميعاد" : "مفيش أوردرات هنا دلوقتي 👌"}
                     </p>
-                    {queueTab === "now" && queueCounts.scheduled > 0 && (
+                    {queueTab !== "scheduled" && DUE_STATES.some(k => k !== queueTab && queueCounts[k] > 0) && (
+                        <button className="mt-2 text-sm text-primary underline" onClick={() => setQueueTab(DUE_STATES.find(k => k !== queueTab && queueCounts[k] > 0)!)}>
+                            فيه أوردرات عليها الدور في «{DUE_STATES.filter(k => k !== queueTab && queueCounts[k] > 0).map(k => ({ new: "جديد", whatsapp: "بعتلهم واتساب", last: "آخر فرصة", scheduled: "" })[k]).join("» و«")}»
+                        </button>
+                    )}
+                    {queueTab !== "scheduled" && queueCounts.scheduled > 0 && (
                         <button className="mt-2 text-sm text-primary underline" onClick={() => setQueueTab("scheduled")}>
                             {queueCounts.scheduled} ليهم ميعاد بعدين
                         </button>
@@ -1341,6 +1379,7 @@ function PlatformOrdersContent() {
                                 </div>
 
                                 <QueueStatus order={order} me={me} now={now} />
+                                {queueStateOf(order, now) !== "scheduled" && <FlowInstruction order={order} me={me} missed={isMissed(order)} now={now} />}
 
                                 {/* Above the call buttons: the other orders on
                                     this number are what the call has to settle,
@@ -1848,11 +1887,13 @@ function PlatformOrdersContent() {
                             {/* Under the details, as before: read the order with the
                                 customer, then confirm or record what happened. */}
                             <div className="border-t bg-muted/20 p-4 sm:p-5">
-                                <QuickActions
+                                <FlowActions
+                                    order={order}
+                                    now={now}
                                     busy={busy?.id === order.id ? busy.what : null}
                                     onConfirm={() => askConfirm(order)}
-                                    onAttempt={(reason, at) => quickAttempt(order, reason, at)}
-                                    onMore={() => setFailing(order)}
+                                    onAttempt={reason => quickAttempt(order, reason)}
+                                    onOther={() => setFailing(order)}
                                     onCancel={() => setCancelling(order)}
                                 />
                             </div>

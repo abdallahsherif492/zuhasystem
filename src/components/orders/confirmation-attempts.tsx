@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import {
-    Ban, CalendarClock, CircleHelp, History, Loader2, MessageCircle, PencilLine, PhoneMissed, PhoneOff, Tag, ThumbsDown,
+    Ban, CalendarClock, Wallet, CircleHelp, History, Loader2, MessageCircle, PencilLine, PhoneMissed, PhoneOff, Tag, ThumbsDown,
 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/lib/supabase";
@@ -21,19 +21,29 @@ import { callLaterChoices, clockLabel } from "@/lib/orders/confirm-queue";
 
 export type AttemptReason =
     | "no_answer" | "phone_off" | "wrong_number" | "call_later" | "thinking"
-    | "whatsapp_pending" | "wants_changes" | "price" | "other";
+    | "whatsapp_pending" | "wants_changes" | "price" | "other"
+    // 20261120_confirm_flow.sql
+    | "no_reply" | "deposit_pending";
 
 export const ATTEMPT_REASONS: { key: AttemptReason; label: string; icon: React.ComponentType<{ className?: string }>; hint?: string }[] = [
     { key: "no_answer", label: "مابيردش", icon: PhoneMissed },
     { key: "phone_off", label: "الموبايل مقفول / خارج الخدمة", icon: PhoneOff },
     { key: "wrong_number", label: "الرقم غلط", icon: Ban },
     { key: "call_later", label: "طلب نكلمه وقت تاني", icon: CalendarClock, hint: "اكتب الميعاد اللي قال عليه" },
-    { key: "whatsapp_pending", label: "بعتناله واتساب ومستنيين رده", icon: MessageCircle },
+    { key: "whatsapp_pending", label: "مردش، وبعتناله واتساب", icon: MessageCircle },
+    { key: "no_reply", label: "مردش ولا اتصال ولا واتساب", icon: PhoneMissed },
+    { key: "deposit_pending", label: "وافق وهيحوّل الديبوزت", icon: Wallet, hint: "هيحوّل إمتى وعلى أنهي حساب" },
     { key: "thinking", label: "لسه بيفكر / متردد", icon: CircleHelp },
     { key: "wants_changes", label: "عايز يغيّر في الطلب", icon: PencilLine, hint: "اكتب التعديل المطلوب" },
     { key: "price", label: "معترض على السعر أو الشحن", icon: Tag },
     { key: "other", label: "سبب تاني", icon: ThumbsDown, hint: "لازم تكتب السبب" },
 ];
+
+/** «حاجة تانية»: what can happen on a call besides confirm, no answer and cancel. */
+export const OTHER_OUTCOMES: AttemptReason[] = ["call_later", "deposit_pending", "thinking", "wants_changes", "price", "wrong_number", "other"];
+
+/** Before 20261120_confirm_flow.sql the new reasons are refused; the nearest old one. */
+const ATTEMPT_FALLBACK: Partial<Record<AttemptReason, AttemptReason>> = { no_reply: "no_answer", deposit_pending: "call_later" };
 
 export const reasonLabel = (r: string | null | undefined) => ATTEMPT_REASONS.find(x => x.key === r)?.label ?? "محاولة فشلت";
 
@@ -47,6 +57,10 @@ export interface AttemptSummary {
     next_attempt_at?: string | null;
     claimed_by?: string | null;
     claimed_at?: string | null;
+    // 20261120_confirm_flow.sql
+    confirm_rounds?: number | null;
+    whatsapp_sent_by?: string | null;
+    whatsapp_sent_at?: string | null;
 }
 
 export function minutesSince(iso: string | null | undefined) {
@@ -79,6 +93,13 @@ export async function recordAttempt(orderId: string, reason: AttemptReason, note
     const args = { p_order_id: orderId, p_reason: reason, p_note: note };
     let { data, error } = await supabase.rpc("record_confirmation_attempt", { ...args, p_next_at: nextAt ? new Date(nextAt).toISOString() : null });
     if (error && isMissingFn(error)) ({ data, error } = await supabase.rpc("record_confirmation_attempt", args));
+    const older = ATTEMPT_FALLBACK[reason];
+    if (error && older && (error.code === "23514" || /check constraint/i.test(error.message || ""))) {
+        const label = ATTEMPT_REASONS.find(r => r.key === reason)?.label;
+        ({ data, error } = await supabase.rpc("record_confirmation_attempt", {
+            ...args, p_reason: older, p_note: [label, note].filter(Boolean).join(" — "), p_next_at: nextAt ? new Date(nextAt).toISOString() : null,
+        }));
+    }
     if (error) {
         console.error("record_confirmation_attempt failed:", error);
         return { ok: false, message: isMissingFn(error) ? "محتاج تشغّل migration 20261119_confirm_queue.sql الأول." : /[؀-ۿ]/.test(error.message) ? error.message : "ماتسجلتش، جرّب تاني." };
@@ -150,8 +171,10 @@ export function AttemptHistory({ orderId, count }: { orderId: string; count: num
 }
 
 /**
- * Every reason a call can fail for, with a note. A reason must be picked —
- * and for "other", written — so whoever tries next knows what happened.
+ * «حاجة تانية»: what else can happen on a call — a time the customer asked
+ * for, a deposit on its way, a wrong number... One must be picked (and for
+ * "other", written) so whoever tries next knows what happened. None of them
+ * moves the order a step on; the time picked brings it back.
  */
 export function FailedAttemptDialog({ orderId, customerName, attempts, open, onOpenChange, onSaved, onGone }: {
     orderId: string;
@@ -174,8 +197,8 @@ export function FailedAttemptDialog({ orderId, customerName, attempts, open, onO
         if (!reason) { toast.error("اختار إيه اللي حصل"); return; }
         if (needsNote && !note.trim()) { toast.error("اكتب السبب"); return; }
         setSaving(true);
-        const at = reason === "call_later" ? laterAt : null;
-        const text = note.trim() || (at ? `نكلمه ${clockLabel(at)}` : null);
+        const at = reason === "call_later" || reason === "deposit_pending" ? laterAt : null;
+        const text = note.trim() || (at ? `${reason === "deposit_pending" ? "نشوف الديبوزت" : "نكلمه"} ${clockLabel(at)}` : null);
         const r = await recordAttempt(orderId, reason, text, at);
         setSaving(false);
         if (!r.ok) { toast.error(r.message); return; }
@@ -189,14 +212,14 @@ export function FailedAttemptDialog({ orderId, customerName, attempts, open, onO
             <DialogContent dir="rtl" className="sm:max-w-md">
                 <DialogHeader>
                     <DialogTitle>إيه اللي حصل؟ — {customerName}</DialogTitle>
-                    <DialogDescription>المحاولة رقم {attempts + 1}</DialogDescription>
+                    <DialogDescription>المحاولة رقم {attempts + 1}. اختار اللي حصل في المكالمة.</DialogDescription>
                 </DialogHeader>
                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                    {ATTEMPT_REASONS.map(r => (
+                    {OTHER_OUTCOMES.map(k => ATTEMPT_REASONS.find(r => r.key === k)!).map(r => (
                         <button
                             key={r.key}
                             type="button"
-                            onClick={() => setReason(r.key)}
+                            onClick={() => { setReason(r.key); setLaterAt(null); }}
                             className={cn(
                                 "flex min-h-12 items-center gap-2 rounded-lg border px-3 text-start text-sm transition-colors",
                                 reason === r.key ? "border-primary bg-primary/5 ring-1 ring-primary" : "hover:bg-muted/60",
@@ -207,7 +230,7 @@ export function FailedAttemptDialog({ orderId, customerName, attempts, open, onO
                         </button>
                     ))}
                 </div>
-                {reason === "call_later" && (
+                {(reason === "call_later" || reason === "deposit_pending") && (
                     <div className="grid grid-cols-2 gap-2">
                         {choices.map(c => (
                             <button key={c.at} type="button" onClick={() => setLaterAt(c.at)}

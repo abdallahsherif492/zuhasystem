@@ -1,82 +1,139 @@
 /**
- * Where each Waiting order stands in the confirmation queue, worked out from
- * its attempts (20261006_confirmation_attempts.sql) and the time it is due to
- * be called again (20261119_confirm_queue.sql).
+ * The confirmation flow: every Waiting store order is at one of three steps,
+ * each with what to do and what can happen (20261120_confirm_flow.sql).
  *
- *   now        call it now: new, or its next try is due
- *   scheduled  a time is set: "call me later", WhatsApp sent, or a retry not due yet
- *   customer   the customer is deciding (thinking, wants changes, price) — back in a day
- *   decide     4 tries without an answer, or a wrong number: cancel or one last try
- *   old        older than 3 days and never called — left alone for now
+ *   step 1, new            call twice; no answer -> send a WhatsApp
+ *   step 2, WhatsApp sent  4 hours later: check the WhatsApp, else call twice
+ *   step 3, last chance    the next morning: check, call twice, else cancel
  *
- * The rules match record_confirmation_attempt, so a page running before the
- * migration (no next_attempt_at yet) still sorts orders the same way.
+ * The step is the number of times the customer did not answer
+ * (orders.confirm_rounds): 0, 1, 2 or more. A wrong number, or an order older
+ * than 3 days, is at the last step whatever it had. Anything else the
+ * customer said ("call me at 8", "will send the deposit") keeps the step and
+ * sets the time.
+ *
+ * No order leaves the queue while it is Waiting: an order whose time has come
+ * stays in its step's list until someone calls, and one with a time to come is
+ * under "scheduled". The rules match record_confirmation_attempt, so a page
+ * running before the migration still sorts orders the same way.
  */
 
-export type QueueState = "now" | "scheduled" | "customer" | "decide" | "old";
+export type FlowStep = 1 | 2 | 3;
+export type QueueState = "new" | "whatsapp" | "last" | "scheduled";
 
 export interface QueueOrder {
     created_at: string;
     confirm_attempts?: number | null;
     last_attempt_at?: string | null;
     last_attempt_reason?: string | null;
+    last_attempt_note?: string | null;
     next_attempt_at?: string | null;
     claimed_by?: string | null;
     claimed_at?: string | null;
+    // 20261120_confirm_flow.sql
+    confirm_rounds?: number | null;
+    whatsapp_sent_by?: string | null;
+    whatsapp_sent_at?: string | null;
 }
 
 const HOUR = 3_600_000;
 const DAY = 24 * HOUR;
-/** Tries without an answer before the order needs a decision. */
-export const DECIDE_AT = 4;
-/** A new order no one called for this long is "old". */
-export const OLD_AFTER_MS = 3 * DAY;
+/** An order this old is at its last chance, however many tries it had. */
+export const LAST_CHANCE_AFTER_MS = 3 * DAY;
 /** A claim nobody refreshed is free again after this. */
 export const CLAIM_MS = 10 * 60_000;
 
+/** Attempts where the customer did not answer: each one moves the order a step on. */
+export const ROUND_REASONS = new Set(["no_answer", "phone_off", "whatsapp_pending", "no_reply"]);
 const WAITING_ON_CUSTOMER = new Set(["thinking", "wants_changes", "price"]);
 
-/** When the order is due again, by the same rules as the database. */
-export function nextAttemptAt(o: QueueOrder): number | null {
+/** Times the customer did not answer. Before the migration: every attempt but the last if it was not one. */
+export function roundsOf(o: QueueOrder): number {
+    if (o.confirm_rounds !== undefined && o.confirm_rounds !== null) return o.confirm_rounds;
     const n = o.confirm_attempts ?? 0;
-    if (n === 0) return Date.parse(o.created_at);
+    return o.last_attempt_reason && !ROUND_REASONS.has(o.last_attempt_reason) ? Math.max(0, n - 1) : n;
+}
+
+export function stepOf(o: QueueOrder, now = Date.now()): FlowStep {
+    const r = roundsOf(o);
+    if (r >= 2 || o.last_attempt_reason === "wrong_number") return 3;
+    if (now - Date.parse(o.created_at) > LAST_CHANCE_AFTER_MS) return 3;
+    return r === 1 ? 2 : 1;
+}
+
+/** When the order is due again; never null, so no order is left out. */
+export function nextAttemptAt(o: QueueOrder): number {
+    const n = o.confirm_attempts ?? 0;
+    const created = Date.parse(o.created_at);
+    if (n === 0) return created;
+    const last = o.last_attempt_at ? Date.parse(o.last_attempt_at) : created;
     // undefined: the column is not there yet (migration not run); compute it.
-    if (o.next_attempt_at !== undefined) return o.next_attempt_at ? Date.parse(o.next_attempt_at) : null;
-    const last = o.last_attempt_at ? Date.parse(o.last_attempt_at) : Date.parse(o.created_at);
+    if (o.next_attempt_at !== undefined) return o.next_attempt_at ? Date.parse(o.next_attempt_at) : last;
     const r = o.last_attempt_reason;
-    if (r === "wrong_number") return null;
-    if (r === "call_later") return last + 3 * HOUR;
+    if (r === "wrong_number") return last;
+    if (r === "call_later" || r === "deposit_pending") return last + 3 * HOUR;
     if (r === "whatsapp_pending") return last + 2 * HOUR;
     if (r && WAITING_ON_CUSTOMER.has(r)) return last + DAY;
     if (n === 1) return last + HOUR;
     if (n === 2) return last + 3 * HOUR;
     if (n === 3) return last + DAY;
-    return null;
+    return last;
 }
 
 export function queueStateOf(o: QueueOrder, now = Date.now()): QueueState {
-    const n = o.confirm_attempts ?? 0;
-    if (n === 0) return now - Date.parse(o.created_at) > OLD_AFTER_MS ? "old" : "now";
-    // No next time: a wrong number, or the 4th try without an answer. A
-    // customer who set a time, or was sent a WhatsApp, keeps theirs.
-    const at = nextAttemptAt(o);
-    if (at === null) return "decide";
-    if (at <= now) return "now";
-    return o.last_attempt_reason && WAITING_ON_CUSTOMER.has(o.last_attempt_reason) ? "customer" : "scheduled";
+    if (nextAttemptAt(o) > now) return "scheduled";
+    const step = stepOf(o, now);
+    return step === 1 ? "new" : step === 2 ? "whatsapp" : "last";
 }
 
 /** Oldest-due first: whoever has waited longest gets the next call. */
 export function byDue(a: QueueOrder, b: QueueOrder) {
-    return (nextAttemptAt(a) ?? Infinity) - (nextAttemptAt(b) ?? Infinity);
+    return nextAttemptAt(a) - nextAttemptAt(b);
 }
 
 export const QUEUE_TABS: { key: QueueState; label: string }[] = [
-    { key: "now", label: "اتصل دلوقتي" },
+    { key: "new", label: "جديد" },
+    { key: "whatsapp", label: "بعتلهم واتساب" },
+    { key: "last", label: "آخر فرصة" },
     { key: "scheduled", label: "ليهم ميعاد" },
-    { key: "customer", label: "مستني العميل" },
-    { key: "decide", label: "محتاج قرار" },
-    { key: "old", label: "قديم" },
 ];
+
+/** The order the "next" button works through the lists in. */
+export const DUE_STATES: QueueState[] = ["new", "whatsapp", "last"];
+
+/** Was a WhatsApp sent? Before the migration: only known if it was the last thing done. */
+export const whatsappSent = (o: QueueOrder) =>
+    !!o.whatsapp_sent_at || (o.whatsapp_sent_at === undefined && o.last_attempt_reason === "whatsapp_pending");
+
+/** Did the WhatsApp go from someone else's phone? Their email, if so. */
+export function whatsappFromOther(o: QueueOrder, me: string | null | undefined): string | null {
+    if (!o.whatsapp_sent_by) return null;
+    return me && o.whatsapp_sent_by.toLowerCase() === me.toLowerCase() ? null : o.whatsapp_sent_by;
+}
+
+/** What to do with the order now, in one or two sentences. */
+export function instructionFor(o: QueueOrder, me: string | null | undefined, opts: { missed?: boolean } = {}, now = Date.now()): string {
+    const step = stepOf(o, now);
+    const sent = whatsappSent(o);
+    const other = whatsappFromOther(o, me);
+    const checkWa = other
+        ? `الواتساب اتبعت من موبايل ${shortName(other)}، اسأله العميل ردّ ولا لأ.`
+        : "شوف العميل ردّ على الواتساب ولا لأ.";
+    if (step === 1) {
+        return opts.missed
+            ? "العميل ماكملش الطلب على الموقع. اتصل بيه مرتين واسأله لسه عايزه؟ ولو مردش ابعتله واتساب."
+            : "اتصل بالعميل مرتين دلوقتي، ولو مردش ابعتله واتساب.";
+    }
+    if (step === 2) {
+        return sent ? `${checkWa} لو مردش اتصل بيه مرتين.` : "اتصل بالعميل مرتين، ولو مردش ابعتله واتساب.";
+    }
+    if (o.last_attempt_reason === "wrong_number") {
+        return "الرقم متسجل غلط. جرّب أي رقم تاني في الأوردر أو ابعت واتساب، ولو مفيش فايدة الغي الأوردر.";
+    }
+    return sent
+        ? `آخر فرصة: ${checkWa} لو مردش اتصل بيه مرتين، ولو مفيش رد الغي الأوردر.`
+        : "آخر فرصة: اتصل بالعميل مرتين وابعتله واتساب. لو مفيش رد الغي الأوردر.";
+}
 
 /** Who holds the order, if it is someone else and the claim is fresh. */
 export function claimedByOther(o: QueueOrder, me: string | null | undefined, now = Date.now()): string | null {
@@ -137,12 +194,14 @@ export function callLaterChoices(now = Date.now()): { label: string; at: number 
     return out;
 }
 
-/** What the order's card says about the next try, after an attempt is saved. */
+/** What the moderator is told after an attempt is saved: where the order went. */
 export function nextTryToast(o: QueueOrder) {
-    const st = queueStateOf(o);
-    if (st === "decide") return o.last_attempt_reason === "wrong_number"
-        ? "اتسجلت. الرقم غلط — الأوردر في «محتاج قرار»."
-        : `اتسجلت. ${o.confirm_attempts} محاولات من غير رد — الأوردر في «محتاج قرار».`;
     const at = nextAttemptAt(o);
-    return at ? `اتسجلت. هيرجعلك ${dueLabel(at)}.` : "اتسجلت.";
+    const now = Date.now();
+    if (at <= now + 60_000) {
+        const step = stepOf(o, now);
+        return step === 3 ? "اتسجلت. الأوردر في «آخر فرصة»." : "اتسجلت.";
+    }
+    const where = stepOf(o, at) === 2 ? "«بعتلهم واتساب»" : stepOf(o, at) === 3 ? "«آخر فرصة»" : "الدور";
+    return `اتسجلت. هيرجع ${dueLabel(at, now)} في ${where}.`;
 }

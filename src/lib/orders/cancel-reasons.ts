@@ -15,9 +15,26 @@ export const CANCEL_REASONS = [
     { key: "fake", label: "طلب وهمي / هزار", settles: true },
     { key: "out_of_stock", label: "المنتج مش موجود عندنا", settles: true },
     { key: "other", label: "سبب تاني", settles: false },
+    // What the customer said on the phone (20261120_confirm_flow.sql).
+    { key: "deposit_refused", label: "مش راضي يدفع ديبوزت", settles: true },
+    { key: "didnt_order", label: "بيقول مطلبتش", settles: true },
+    { key: "changed_mind", label: "غيّر رأيه", settles: true },
+    { key: "found_cheaper", label: "لقاه أرخص", settles: true },
 ] as const;
 
 export type CancelReason = (typeof CANCEL_REASONS)[number]["key"];
+
+/**
+ * The reasons offered when cancelling from the confirmation flow: what the
+ * customer said, and at the last step, that they never answered.
+ */
+export const FLOW_CANCEL_REASONS: CancelReason[] = ["deposit_refused", "didnt_order", "changed_mind", "found_cheaper", "duplicate", "other"];
+export const LAST_STEP_CANCEL_REASONS: CancelReason[] = ["no_answer", "wrong_number", ...FLOW_CANCEL_REASONS];
+
+/** Before 20261120_confirm_flow.sql the new reasons are refused; the nearest old one, with the words in the note. */
+export const CANCEL_REASON_FALLBACK: Partial<Record<CancelReason, CancelReason>> = {
+    deposit_refused: "price", didnt_order: "fake", changed_mind: "customer_refused", found_cheaper: "price",
+};
 
 export const cancelReasonLabel = (key: string | null | undefined) =>
     CANCEL_REASONS.find(r => r.key === key)?.label ?? null;
@@ -28,4 +45,5 @@ export interface CancellationReviewSettings { auto: boolean }
 export const cancellationReviewOf = (themeConfig: { cancellation_review?: Partial<CancellationReviewSettings> } | null | undefined): CancellationReviewSettings =>
     ({ auto: themeConfig?.cancellation_review?.auto === true });
 
+export const CONFIRM_FLOW_MIGRATION = "supabase/migrations/20261120_confirm_flow.sql";
 export const CANCELLATION_REVIEW_MIGRATION = "supabase/migrations/20261107_cancellation_review.sql";
