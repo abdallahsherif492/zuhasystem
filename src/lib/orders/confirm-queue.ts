@@ -131,8 +131,8 @@ export function whatsappFromOther(o: QueueOrder, me: string | null | undefined):
  */
 export function instructionFor(o: QueueOrder, me: string | null | undefined, opts: { missed?: boolean } = {}, now = Date.now()): { title: string; detail: string } {
     const step = stepOf(o, now);
-    // Past step 1 a WhatsApp went out: the no-answer button there says so.
-    const sent = whatsappSent(o) || roundsOf(o) >= 1;
+    // Steps 2 and 3 always start from the WhatsApp: whoever sent it is asked
+    // first, or, when nobody is known to have, the moderator checks it.
     const sender = whatsappSender(o);
     const other = whatsappFromOther(o, me);
     const checkWa = other
@@ -141,7 +141,7 @@ export function instructionFor(o: QueueOrder, me: string | null | undefined, opt
             ? "شوف العميل ردّ على الواتساب اللي بعتهوله ولا لأ."
             : "شوف العميل ردّ على الواتساب ولا لأ.";
     const ifNot = step === 3
-        ? (sent ? "لو مردش، اتصل بيه مرتين. لو مفيش رد، الغي الأوردر." : "لو مفيش رد، الغي الأوردر.")
+        ? "لو مردش، اتصل بيه مرتين. لو مفيش رد، الغي الأوردر."
         : step === 2 ? "لو مردش، اتصل بيه مرتين واختار اللي حصل من الزراير تحت."
         : "لو مردش، ابعتله واتساب واختار «مردش، وبعتله واتساب».";
 
@@ -164,7 +164,6 @@ export function instructionFor(o: QueueOrder, me: string | null | undefined, opt
             ? { title: "العميل ماكملش الطلب على الموقع. اتصل بيه مرتين واسأله لسه عايزه؟", detail: ifNot }
             : { title: "اتصل بالعميل مرتين.", detail: ifNot };
     }
-    if (step === 3 && !sent) return { title: "اتصل بالعميل مرتين وابعتله واتساب.", detail: ifNot };
     return { title: checkWa, detail: ifNot };
 }
 
