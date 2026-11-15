@@ -29,7 +29,7 @@ export function ContactActions({
     size?: "sm" | "default";
     /** Full-width, thumb-sized buttons for the confirmation queue. */
     big?: boolean;
-    /** On a dark panel (the confirmation card's instruction): light buttons. */
+    /** Inside the confirmation card's instruction: the call is the panel's main button. */
     inverse?: boolean;
     /** Called as a number is dialled or the WhatsApp composer opens. */
     onContact?: () => void;
@@ -70,7 +70,7 @@ export function ContactActions({
 
     if (numbers.length === 0) {
         return (
-            <span className={cn("text-xs", inverse ? "text-background/70" : "text-muted-foreground")}>مفيش رقم موبايل على الأوردر</span>
+            <span className={cn("text-xs", inverse ? "text-indigo-700 dark:text-indigo-300" : "text-muted-foreground")}>مفيش رقم موبايل على الأوردر</span>
         );
     }
 
@@ -84,7 +84,7 @@ export function ContactActions({
                         size={size}
                         variant="outline"
                         className={cn("gap-1.5 font-mono tabular-nums", big && "h-12 text-base sm:min-w-44 [&_svg]:size-5",
-                            inverse && "border-0 bg-background text-foreground shadow-none hover:bg-background/90")}
+                            inverse && "border-0 bg-indigo-600 text-white shadow-none hover:bg-indigo-700 hover:text-white")}
                     >
                         {/* One button per number: a single tel: built from
                             "0882232065 / 01159244278" dials neither.
@@ -109,7 +109,7 @@ export function ContactActions({
                     title={waNumber ? undefined : "مفيش رقم موبايل مصري يقبل واتساب"}
                     className={cn("gap-1.5 border-emerald-500/40 text-emerald-700 hover:bg-emerald-500/10 dark:text-emerald-400",
                         big && "h-12 text-base sm:min-w-36 [&_svg]:size-5", big && numbers.length % 2 === 0 && "col-span-2",
-                        inverse && "border-background/40 bg-transparent text-background shadow-none hover:bg-background/10 hover:text-background dark:text-background")}
+                        inverse && "border-indigo-300 bg-white text-indigo-700 shadow-none hover:bg-indigo-50 hover:text-indigo-800 dark:border-indigo-700 dark:bg-transparent dark:text-indigo-200 dark:hover:bg-indigo-900/40")}
                 >
                     <MessageCircle className="h-3.5 w-3.5" />
                     <span>{big ? "واتساب" : "رسالة تأكيد"}</span>

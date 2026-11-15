@@ -135,7 +135,7 @@ export function instructionFor(o: QueueOrder, me: string | null | undefined, opt
         case "thinking": return { title: "العميل كان لسه بيفكر. كلّمه تاني.", detail: ifNot };
         case "wants_changes": return { title: "العميل كان عايز يعدّل في الطلب. كلّمه وعدّل وأكّد.", detail: ifNot };
         case "price": return { title: "العميل كان معترض على السعر أو الشحن. كلّمه تاني.", detail: ifNot };
-        case "wrong_number": return { title: "الرقم متسجل غلط.", detail: "جرّب أي رقم تاني في الأوردر أو ابعت واتساب. لو مفيش فايدة، الغي الأوردر." };
+        case "wrong_number": return { title: "الرقم متسجل غلط: جرّب أي رقم تاني في الأوردر أو ابعت واتساب.", detail: "لو مفيش فايدة، الغي الأوردر." };
     }
     if (step === 1) {
         return opts.missed
@@ -150,7 +150,7 @@ export function instructionFor(o: QueueOrder, me: string | null | undefined, opt
     return sent ? { title: checkWa, detail: ifNot } : { title: "اتصل بالعميل مرتين.", detail: ifNot };
 }
 
-export const STEP_NAME: Record<FlowStep, string> = { 1: "جديد", 2: "اتبعتله واتساب", 3: "آخر فرصة" };
+export const STEP_NAME: Record<FlowStep, string> = { 1: "أول اتصال", 2: "بعد الواتساب", 3: "آخر محاولة" };
 
 /** Who holds the order, if it is someone else and the claim is fresh. */
 export function claimedByOther(o: QueueOrder, me: string | null | undefined, now = Date.now()): string | null {

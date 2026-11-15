@@ -52,8 +52,8 @@ export function ClaimBadge({ order, me, now }: { order: QueueOrder; me?: string 
     const mine = isMine(order, me, now);
     if (!other && !mine) return null;
     return (
-        <span className={cn("inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-bold text-white", other ? "bg-amber-500" : "bg-emerald-600")}>
-            <PhoneCall className="h-3 w-3" />{other ? `${shortName(other)} بيكلّمه` : "انت بتكلّمه"}
+        <span className={cn("inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-sm font-bold text-white", other ? "bg-amber-600" : "bg-emerald-600")}>
+            <PhoneCall className="h-3.5 w-3.5" />{other ? `${shortName(other)} بيكلّمه` : "انت بتكلّمه"}
         </span>
     );
 }
@@ -76,15 +76,15 @@ export function FlowInstruction({ order, me, missed, now, children }: {
     if (scheduled) {
         return (
             <section dir="rtl" aria-label="ميعاد الأوردر" className="mx-3 space-y-3 rounded-2xl border border-dashed p-4 sm:mx-4">
-                <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
-                    <span>خطوة {step} من 3 · {STEP_NAME[step]}</span>
-                    <StepBar step={step} className="w-20" />
+                <div className="flex items-center justify-between gap-2 text-sm font-semibold text-muted-foreground">
+                    <span>الخطوة {step} من 3: {STEP_NAME[step]}</span>
+                    <StepBar step={step} className="w-20 opacity-60" />
                 </div>
-                <p className="flex items-center gap-2 text-base font-semibold">
+                <p className="flex items-center gap-2 text-lg font-bold">
                     <CalendarClock className="h-5 w-5 shrink-0 text-muted-foreground" />
                     {order.last_attempt_reason === "deposit_pending" ? "نشوف الديبوزت" : "يرجع"} {dueLabel(at, now)}
                 </p>
-                <p className="text-sm text-muted-foreground">لو العميل كلّمك قبلها، تقدر تأكد أو تسجّل اللي حصل من تحت.</p>
+                <p className="text-[15px] text-muted-foreground">لو العميل كلّمك قبل الميعاد، أكّد أو سجّل اللي حصل من الزراير تحت.</p>
                 {children}
             </section>
         );
@@ -92,29 +92,35 @@ export function FlowInstruction({ order, me, missed, now, children }: {
 
     const { title, detail } = instructionFor(order, me, { missed }, now);
     return (
-        <section dir="rtl" aria-label="المطلوب منك" className="mx-3 space-y-3 rounded-2xl bg-foreground p-4 text-background sm:mx-4 sm:p-5">
-            <div className="space-y-1.5">
-                <div className="flex items-center justify-between gap-2 text-xs font-medium text-background/70">
-                    <span>المطلوب منك · خطوة {step} من 3</span>
-                    <span>{STEP_NAME[step]}</span>
-                </div>
-                <StepBar step={step} inverse />
+        <section dir="rtl" aria-label="المطلوب منك"
+            className="mx-3 space-y-4 rounded-2xl border-2 border-indigo-200 bg-indigo-50/70 p-4 text-indigo-950 sm:mx-4 sm:p-5 dark:border-indigo-800 dark:bg-indigo-950/40 dark:text-indigo-50">
+            <div className="flex items-center gap-3">
+                <StepBar step={step} className="w-24 shrink-0" />
+                <span className="text-sm font-bold text-indigo-700 dark:text-indigo-300">الخطوة {step} من 3: {STEP_NAME[step]}</span>
             </div>
-            <div className="space-y-1">
-                <p className="text-lg font-bold leading-snug sm:text-xl">{title}</p>
-                <p className="text-[15px] leading-relaxed text-background/80">{detail}</p>
-            </div>
+            {/* What to do, then what to do if it does not work: a sequence, so numbered. */}
+            <ol className="max-w-2xl space-y-2.5">
+                {[title, detail].map((line, i) => (
+                    <li key={i} className="flex items-start gap-3">
+                        <span aria-hidden className={cn(
+                            "mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-sm font-bold tabular-nums",
+                            i === 0 ? "bg-indigo-600 text-white" : "border-2 border-indigo-300 text-indigo-700 dark:border-indigo-700 dark:text-indigo-300",
+                        )}>{i + 1}</span>
+                        <span className={i === 0 ? "text-xl font-bold leading-snug" : "pt-0.5 text-[17px] font-semibold leading-relaxed text-indigo-900 dark:text-indigo-100"}>{line}</span>
+                    </li>
+                ))}
+            </ol>
             {children}
         </section>
     );
 }
 
-function StepBar({ step, inverse, className }: { step: FlowStep; inverse?: boolean; className?: string }) {
+function StepBar({ step, className }: { step: FlowStep; className?: string }) {
     return (
         <div className={cn("flex gap-1", className)} aria-hidden>
             {[1, 2, 3].map(i => (
-                <span key={i} className={cn("h-1 flex-1 rounded-full",
-                    i <= step ? (inverse ? "bg-background" : "bg-foreground/60") : (inverse ? "bg-background/25" : "bg-muted"))} />
+                <span key={i} className={cn("h-1.5 flex-1 rounded-full",
+                    i <= step ? "bg-indigo-600 dark:bg-indigo-400" : "bg-indigo-200 dark:bg-indigo-900")} />
             ))}
         </div>
     );
@@ -142,12 +148,12 @@ export function HeadsUp({ items }: { items: HeadsUpItem[] }) {
     if (!items.length) return null;
     return (
         <section dir="rtl" aria-label="خد بالك" className="space-y-1 px-4 sm:px-5">
-            <p className="text-xs font-medium text-muted-foreground">خد بالك</p>
-            <ul className="space-y-1.5">
+            <h4 className="text-sm font-bold">خد بالك</h4>
+            <ul className="space-y-2">
                 {items.map(it => (
-                    <li key={it.key} className={cn("text-sm", HEADS_UP_TONE[it.tone])}>
+                    <li key={it.key} className={cn("text-[15px] font-medium", HEADS_UP_TONE[it.tone])}>
                         <div className="flex items-start gap-2">
-                            <it.icon className="mt-0.5 h-4 w-4 shrink-0" />
+                            <it.icon className="mt-0.5 h-5 w-5 shrink-0" />
                             <span className="min-w-0 flex-1 leading-relaxed">
                                 {it.text}
                                 {it.more && (
@@ -183,7 +189,7 @@ export function FlowActions({ order, now, busy, onConfirm, onAttempt, onCancel, 
     const scheduled = queueStateOf(order, now) === "scheduled";
     const step = stepOf(order, scheduled ? nextAttemptAt(order) : now);
     const spin = (k: AttemptReason | "confirm") => busy === k && <Loader2 className="h-4 w-4 animate-spin" />;
-    const big = "h-12 text-[15px] font-semibold [&_svg]:size-5";
+    const big = "h-12 text-base font-semibold [&_svg]:size-5";
     // Step 2 asks about the WhatsApp; if none was ever sent, this is the one.
     const noAnswer: { reason: AttemptReason; label: string } =
         step === 1 || !whatsappSent(order)
@@ -192,10 +198,10 @@ export function FlowActions({ order, now, busy, onConfirm, onAttempt, onCancel, 
 
     return (
         <div dir="rtl" className="space-y-2">
-            <p className="text-xs font-medium text-muted-foreground">إيه اللي حصل؟</p>
+            <h4 className="text-sm font-bold">إيه اللي حصل في المكالمة؟</h4>
             <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
                 <Button onClick={onConfirm} disabled={!!busy}
-                    className={cn(big, "col-span-2 h-14 bg-emerald-600 text-base text-white hover:bg-emerald-700 sm:h-12 sm:min-w-44 sm:flex-1")}>
+                    className={cn(big, "col-span-2 h-14 bg-emerald-600 text-lg text-white hover:bg-emerald-700 sm:min-w-44 sm:flex-1")}>
                     {spin("confirm") || <Check />}{step === 1 && !scheduled ? "العميل أكّد" : "أكّد الأوردر"}
                 </Button>
                 {step !== 3 && (

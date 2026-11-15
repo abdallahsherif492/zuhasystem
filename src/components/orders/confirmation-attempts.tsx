@@ -127,12 +127,12 @@ export function LastAttempt({ order }: { order: AttemptSummary }) {
     if (!n) return null;
     const R = ATTEMPT_REASONS.find(r => r.key === order.last_attempt_reason)?.icon ?? PhoneMissed;
     return (
-        <div className="flex items-start gap-2 text-sm" dir="rtl">
-            <R className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+        <div className="flex items-start gap-2 text-[15px]" dir="rtl">
+            <R className="mt-0.5 h-5 w-5 shrink-0 text-muted-foreground" />
             <p className="min-w-0">
                 <span className="font-semibold">{reasonLabel(order.last_attempt_reason)}</span>
                 {order.last_attempt_note && <span> — {order.last_attempt_note}</span>}
-                <span className="text-muted-foreground"> · {ago(order.last_attempt_at)}{order.last_attempt_by ? ` · ${who(order.last_attempt_by)}` : ""}</span>
+                <span className="text-muted-foreground"> ({[order.last_attempt_by ? who(order.last_attempt_by) : null, ago(order.last_attempt_at)].filter(Boolean).join("، ")})</span>
             </p>
         </div>
     );
@@ -152,9 +152,9 @@ export function AttemptHistory({ orderId, count }: { orderId: string; count: num
 
     if (count < 2) return null;
     return (
-        <div dir="rtl" className="text-xs">
-            <button type="button" onClick={() => setOpen(o => !o)} className="flex items-center gap-1 text-muted-foreground hover:text-foreground">
-                <History className="h-3.5 w-3.5" />{open ? "اخفي المحاولات" : `كل المحاولات (${count})`}
+        <div dir="rtl" className="text-sm">
+            <button type="button" onClick={() => setOpen(o => !o)} className="flex min-h-9 items-center gap-1.5 font-medium text-muted-foreground underline-offset-2 hover:text-foreground hover:underline">
+                <History className="h-4 w-4" />{open ? "اخفي المحاولات" : `كل المحاولات (${count})`}
             </button>
             {open && (
                 <div className="mt-1.5 space-y-1 border-s-2 ps-3">

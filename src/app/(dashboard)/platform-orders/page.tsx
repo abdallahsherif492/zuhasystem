@@ -22,7 +22,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import {
     Loader2, Check, X, AlertTriangle, Search, PackageSearch, ChevronsUpDown, Repeat, PhoneCall, HandCoins, ShoppingBasket,
-    Undo2, Link2Off, Pencil, ChevronUp,
+    Undo2, Link2Off,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -38,6 +38,8 @@ import { DUE_STATES, byDue, claimedByOther, isMine, nextTryToast, queueStateOf, 
 import { deliveryRateOf } from "@/lib/easyorders-delivery-rate";
 import { fetchDeliveryRatesAction } from "./delivery-rate-actions";
 import { MISSED_ORDERS_IN_QUEUE, MissedOrderNote } from "@/components/orders/missed-order";
+import { OrderSummary, egp } from "@/components/orders/order-summary";
+import { governorateArabic } from "@/lib/governorates";
 import { CancelOrderDialog } from "@/components/orders/cancel-order-dialog";
 import {
     CANCEL_REASON_FALLBACK, FLOW_CANCEL_REASONS, LAST_STEP_CANCEL_REASONS, cancelReasonLabel, type CancelReason,
@@ -1380,7 +1382,7 @@ function PlatformOrdersContent() {
                 </div>
             ) : (
 
-                <div className="grid gap-6">
+                <div className="mx-auto grid w-full max-w-3xl gap-6">
                     {drawnOrders.map(order => {
                         const info = order.customer_info || {};
                         return (
@@ -1393,20 +1395,20 @@ function PlatformOrdersContent() {
                             )}
                         >
                             {/* 1. Who and how much. */}
-                            <div dir="rtl" className="flex items-start justify-between gap-3 p-4 pb-3 sm:px-5">
-                                <div className="min-w-0">
+                            <div dir="rtl" className="flex items-start justify-between gap-3 p-4 pb-4 sm:px-5">
+                                <div className="min-w-0 space-y-1">
                                     <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                                        <h3 className="break-words text-lg font-bold leading-tight sm:text-xl">{info.name || "Unknown"}</h3>
+                                        <h3 className="break-words text-xl font-bold leading-tight">{info.name || "من غير اسم"}</h3>
                                         <ClaimBadge order={order} me={me} now={now} />
                                     </div>
-                                    <p className="mt-1 flex flex-wrap items-center gap-x-1.5 text-xs text-muted-foreground">
-                                        <span className="font-mono">#{order.id.slice(0, 8)}</span>
-                                        {info.governorate && <span>· {info.governorate}</span>}
-                                        <span>· وصل {ago(order.created_at)}</span>
-                                        {deliveryRateOf(order.customer_info) === "high" && <span className="text-emerald-700 dark:text-emerald-400">· استلامه عالي</span>}
+                                    <p className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-sm text-muted-foreground">
+                                        {info.governorate && <span>{governorateArabic(info.governorate) || info.governorate}</span>}
+                                        <span>وصل {ago(order.created_at)}</span>
+                                        <span className="font-mono text-xs" dir="ltr">#{order.id.slice(0, 8)}</span>
+                                        {deliveryRateOf(order.customer_info) === "high" && <span className="font-medium text-emerald-700 dark:text-emerald-400">بيستلم أوردراته</span>}
                                     </p>
                                 </div>
-                                <p className="shrink-0 text-xl font-bold tabular-nums">{formatCurrency(order.total_amount)}</p>
+                                <p className="shrink-0 text-xl font-bold tabular-nums">{egp(order.total_amount)}</p>
                             </div>
 
                             {/* 2. What to do now, with the buttons to do it. */}
@@ -1419,7 +1421,8 @@ function PlatformOrdersContent() {
                             <div dir="rtl" className="space-y-3 pt-4">
                                 <HeadsUp items={headsUpFor(order)} />
                                 {(order.confirm_attempts ?? 0) > 0 && (
-                                    <div className="space-y-1 px-4 text-muted-foreground sm:px-5">
+                                    <div className="space-y-1 px-4 sm:px-5">
+                                        <h4 className="text-sm font-bold">آخر محاولة</h4>
                                         <LastAttempt order={order} />
                                         <AttemptHistory orderId={order.id} count={order.confirm_attempts ?? 0} />
                                     </div>
@@ -1427,7 +1430,16 @@ function PlatformOrdersContent() {
                             </div>
 
                             {/* 4. The order, to read out; the fields open on «عدّل». */}
-                            <OrderSummary order={order} editing={isEditing(order)} onToggle={() => toggleEditing(order)} />
+                            <OrderSummary
+                                items={order.order_items || []}
+                                shipping={order.shipping_cost || 0}
+                                paid={order.paid_amount}
+                                place={[governorateArabic(info.governorate) || info.governorate, info.area || info.city, info.address].filter(Boolean).join("، ")}
+                                note={order.notes}
+                                internalNote={info.internal_workbench_notes}
+                                editing={isEditing(order)}
+                                onToggle={() => toggleEditing(order)}
+                            />
                             {isEditing(order) && <CardContent className="border-t px-4 py-5 sm:px-6">
                                 <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 lg:gap-8">
                                     {/* Customer Details */}
@@ -1937,49 +1949,6 @@ function PlatformOrdersContent() {
             )}
             </div>
         </div>
-    );
-}
-
-/**
- * The order as the moderator reads it out to the customer: what, how many,
- * how much, and where to. The fields to change any of it open on «عدّل».
- */
-function OrderSummary({ order, editing, onToggle }: { order: Order; editing: boolean; onToggle: () => void }) {
-    const info = order.customer_info || {};
-    const items = order.order_items || [];
-    const pieces = items.reduce((n, i) => n + (Number(i.quantity) || 0), 0);
-    const nameOf = (i: OrderItem) => i.variant_id
-        ? [i.variants?.products?.name, i.variants?.title && i.variants.title !== "Default Title" ? i.variants.title : null].filter(Boolean).join(" · ")
-        : i.unmapped_name || "منتج مش متربط";
-    const place = [info.governorate, info.area || info.city, info.address].filter(Boolean).join("، ");
-    return (
-        <section dir="rtl" aria-label="الأوردر" className="mt-4 space-y-2 border-t px-4 py-3 sm:px-5">
-            <div className="flex items-center justify-between gap-2">
-                <p className="text-sm font-semibold">الأوردر <span className="font-normal text-muted-foreground">· {pieces} {pieces === 1 ? "قطعة" : "قطع"}</span></p>
-                <Button variant="ghost" size="sm" onClick={onToggle} aria-expanded={editing} className="h-9 gap-1.5 text-primary">
-                    {editing ? <><ChevronUp className="h-4 w-4" />اقفل التعديل</> : <><Pencil className="h-4 w-4" />عدّل</>}
-                </Button>
-            </div>
-            <ul className="space-y-1 text-sm">
-                {items.map(i => (
-                    <li key={i.id} className={cn("flex items-start justify-between gap-3", !i.variant_id && "text-red-700 dark:text-red-400")}>
-                        <span className="min-w-0">{nameOf(i)} <span className="text-muted-foreground">× {i.quantity}</span></span>
-                        <span className="shrink-0 tabular-nums">{formatCurrency((Number(i.price_at_sale) || 0) * (Number(i.quantity) || 0))}</span>
-                    </li>
-                ))}
-                <li className="flex justify-between gap-3 text-muted-foreground">
-                    <span>الشحن</span><span className="tabular-nums">{formatCurrency(order.shipping_cost || 0)}</span>
-                </li>
-                {Number(order.paid_amount) > 0 && (
-                    <li className="flex justify-between gap-3 text-emerald-700 dark:text-emerald-400">
-                        <span>مدفوع</span><span className="tabular-nums">{formatCurrency(order.paid_amount)}</span>
-                    </li>
-                )}
-            </ul>
-            {place && <p className="text-sm text-muted-foreground">{place}</p>}
-            {order.notes && <p className="text-sm"><span className="text-muted-foreground">ملاحظة: </span>{order.notes}</p>}
-            {info.internal_workbench_notes && <p className="text-sm"><span className="text-muted-foreground">ملاحظات المراجعة: </span>{info.internal_workbench_notes}</p>}
-        </section>
     );
 }
 
