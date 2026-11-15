@@ -4,7 +4,10 @@
  *
  * Each moderator is measured over their own shift (business_users.shift_start
  * / shift_end / weekend_days, in Cairo time; a shift ending before it starts
- * runs past midnight). Four things are asked of a shift:
+ * runs past midnight). What the shift owes is worked out from the shift's
+ * hours; what they did counts over the whole day of the shift (creditWindow):
+ * Cairo midnight to midnight, or, for a shift past midnight, from its start
+ * until just before the next day's shift starts. Four things are asked:
  *
  *  1. Confirmation speed. Every store order must leave Waiting (confirmed or
  *     cancelled) within `confirm_within_hours` of arriving. The work that puts
@@ -207,6 +210,30 @@ export function scheduledShift(member: Member, day: string): Shift | null {
     return { email: member.user_email.toLowerCase(), day, start, end };
 }
 
+/**
+ * The hours whose work counts for the member's shift on `day`: the whole
+ * Cairo day, or, for a shift that runs past midnight, from its scheduled
+ * start until the same time the next day, just before the next one starts.
+ * A real shift reaching outside that (an early clock-in) is covered too.
+ */
+export function creditWindow(member: Member, day: string, shift?: Shift | null): { start: number; end: number } {
+    const startMin = minutesOf(member.shift_start, 9 * 60);
+    const endMin = minutesOf(member.shift_end, 17 * 60);
+    const dayStart = Date.parse(cairoDayStart(day));
+    const next = Date.parse(cairoDayStart(nextDay(day)));
+    let start = dayStart;
+    let end = next;
+    if (endMin <= startMin) {
+        start = dayStart + startMin * 60_000;
+        end = next + startMin * 60_000;
+    }
+    if (shift) {
+        start = Math.min(start, shift.start);
+        end = Math.max(end, shift.end);
+    }
+    return { start, end };
+}
+
 const overlap = (a0: number, a1: number, b0: number, b1: number) => Math.max(0, Math.min(a1, b1) - Math.max(a0, b0));
 
 // ---------------------------------------------------------------------------
@@ -258,8 +285,11 @@ export interface Scorecard {
     /** Targets missed plus attendance, before any monthly cap. */
     deduction: number;
     attendance: Attendance | null;
-    /** Until when this was measured (now, for a shift still running). */
+    /** Until when this was measured (now, while work still counts). */
     measured_until: string;
+    /** The hours whose work counts for this shift (creditWindow). */
+    counts_from: string;
+    counts_until: string;
 }
 
 const attendanceCost = (s: TargetSettings, k: AttendanceKey) =>
@@ -332,22 +362,28 @@ export function scoreDay(day: string, settings: TargetSettings, data: TargetData
         && overlap(Date.parse(l.start_time), Date.parse(l.end_time), s.start, s.end) >= (s.end - s.start) / 2);
     const working = shifts.filter(s => !onLeave(s.email, s));
 
-    // Courier follow-up: when each stuck order was last followed up.
-    const lastFollow = new Map<string, number[]>();
+    // Courier follow-up: when, and by whom, each stuck order was followed up.
+    const lastFollow = new Map<string, { t: number; by: string }[]>();
     for (const f of data.followups) {
         const list = lastFollow.get(f.order_id) || [];
-        list.push(Date.parse(f.created_at));
+        list.push({ t: Date.parse(f.created_at), by: lower(f.created_by) });
         lastFollow.set(f.order_id, list);
     }
 
     return shifts.map(shift => {
         const end = Math.min(shift.end, now);
+        const member = memberOf.get(shift.email)!;
+        // What they did counts over the whole day of the shift, not only its hours.
+        const win = creditWindow(member, day, shift);
+        const until = Math.min(win.end, now);
         const base = {
             user_email: shift.email,
             work_date: day,
             shift_start: new Date(shift.start).toISOString(),
             shift_end: new Date(shift.end).toISOString(),
-            measured_until: new Date(end).toISOString(),
+            measured_until: new Date(until).toISOString(),
+            counts_from: new Date(win.start).toISOString(),
+            counts_until: new Date(win.end).toISOString(),
         };
         if (!working.includes(shift)) {
             return { ...base, status: "leave" as const, share: 0, metrics: [], missed: [], deduction: 0, attendance: null };
@@ -357,28 +393,30 @@ export function scoreDay(day: string, settings: TargetSettings, data: TargetData
         const mine = end - shift.start;
         const staffed = working.reduce((s, o) => s + overlap(o.start, Math.min(o.end, now), shift.start, end), 0);
         const share = staffed > 0 ? mine / staffed : 1;
-        const inShift = (t: string | null) => !!t && Date.parse(t) >= shift.start && Date.parse(t) < end;
+        const counts = (t: string | null) => !!t && Date.parse(t) >= win.start && Date.parse(t) < until;
 
         // 1. Confirmation speed
+        const confirmedIds = data.storeOrders.filter(o => lower(o.confirmed_by) === shift.email && counts(o.confirmed_at)).map(o => o.id);
+        const cancelledIds = data.storeOrders.filter(o => lower(o.cancelled_by) === shift.email && cancelledFromWaiting(o) && counts(o.cancelled_at)).map(o => o.id);
+        const closedIds = new Set([...confirmedIds, ...cancelledIds]);
         const arrivedDue = data.storeOrders.filter(o => {
             const a = Date.parse(o.created_at);
             return a >= shift.start && a + H <= end;
         }).length;
+        // Waiting when the shift started; one they closed themselves earlier
+        // that day stays in, since it counts as done.
         const waitingAtStart = data.storeOrders.filter(o => {
             const a = Date.parse(o.created_at);
             if (a >= shift.start || a < shift.start - backlog) return false;
             const h = handledAt(o);
-            return h === null || h >= shift.start;
+            return h === null || h >= shift.start || closedIds.has(o.id);
         }).length;
-        const confirmedIds = data.storeOrders.filter(o => lower(o.confirmed_by) === shift.email && inShift(o.confirmed_at)).map(o => o.id);
-        const cancelledIds = data.storeOrders.filter(o => lower(o.cancelled_by) === shift.email && cancelledFromWaiting(o) && inShift(o.cancelled_at)).map(o => o.id);
         const confirmed = confirmedIds.length;
         const cancelled = cancelledIds.length;
         const handled = confirmed + cancelled;
         // A logged call on an order still Waiting is work done on it too:
         // the customer did not answer, or asked to be called later.
-        const closedIds = new Set([...confirmedIds, ...cancelledIds]);
-        const calledIds = new Set(data.attempts.filter(t => lower(t.attempted_by) === shift.email && inShift(t.created_at) && !closedIds.has(t.order_id)).map(t => t.order_id));
+        const calledIds = new Set(data.attempts.filter(t => lower(t.attempted_by) === shift.email && counts(t.created_at) && !closedIds.has(t.order_id)).map(t => t.order_id));
         const worked = handled + calledIds.size;
         const needed = arrivedDue + waitingAtStart;
         const confirmTarget = Math.ceil(needed * share);
@@ -389,7 +427,7 @@ export function scoreDay(day: string, settings: TargetSettings, data: TargetData
         };
 
         // 2. Orders from messages
-        const messages = data.manualOrders.filter(o => lower(o.closed_by) === shift.email && inShift(o.created_at)).length;
+        const messages = data.manualOrders.filter(o => lower(o.closed_by) === shift.email && counts(o.created_at)).length;
         const minMsg = Math.max(0, Number(settings.min_message_orders) || 0);
         const msg: MetricResult = {
             key: "messages", target: minMsg > 0 ? minMsg : null, done: messages, met: minMsg <= 0 || messages >= minMsg,
@@ -401,11 +439,14 @@ export function scoreDay(day: string, settings: TargetSettings, data: TargetData
         const stuckIds = new Set(data.stuck
             .filter(o => lower(o.status) !== "shipped" || (o.status_changed_at && Date.parse(o.status_changed_at) <= shift.start - staleMs))
             .map(o => o.id));
+        // Due when the shift started; one they followed up themselves earlier
+        // that day stays due, since it counts as done.
         const due = [...stuckIds].filter(id => {
-            const before = (lastFollow.get(id) || []).filter(t => t < shift.start);
+            const before = (lastFollow.get(id) || [])
+                .filter(f => f.t < shift.start && !(f.by === shift.email && f.t >= win.start)).map(f => f.t);
             return !before.length || Math.max(...before) <= shift.start - followEvery;
         }).length;
-        const followed = new Set(data.followups.filter(f => lower(f.created_by) === shift.email && inShift(f.created_at) && stuckIds.has(f.order_id)).map(f => f.order_id)).size;
+        const followed = new Set(data.followups.filter(f => lower(f.created_by) === shift.email && counts(f.created_at) && stuckIds.has(f.order_id)).map(f => f.order_id)).size;
         const followTarget = Math.ceil(due * share);
         const follow: MetricResult = {
             key: "followups", target: followTarget, done: followed, met: followed >= followTarget,
@@ -430,7 +471,6 @@ export function scoreDay(day: string, settings: TargetSettings, data: TargetData
         if (!anything && end >= shift.end) {
             return { ...base, status: "absent" as const, share, metrics, missed: [], deduction: 0, attendance: null };
         }
-        const member = memberOf.get(shift.email)!;
         const attendance = attendanceFor(member, day, clocking, settings, now, worked + messages + followed > 0);
         const missed = metrics.filter(m => !m.met).map(m => m.key);
         const deduction = missed.reduce((s, k) => s + deductionFor(settings, k), 0)

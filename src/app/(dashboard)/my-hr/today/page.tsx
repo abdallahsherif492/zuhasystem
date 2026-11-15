@@ -11,7 +11,7 @@ import { cairoDate } from "@/lib/cairo-day";
 import { Button } from "@/components/ui/button";
 import {
     ATTENDANCE_LABEL, METRIC_LABEL, attendanceFor, clockingFor, dataSince, deductionFor, loadTargetData,
-    recentDays, scheduledShift, scoreDay, settingsOf,
+    creditWindow, recentDays, scheduledShift, scoreDay, settingsOf,
     type Attendance, type Clocking, type Member, type MetricKey, type MetricResult, type Scorecard, type TargetSettings,
 } from "@/lib/hr/daily-targets";
 
@@ -99,10 +99,15 @@ export default function MyDayPage() {
             const mine = (clocks || []) as (Clocking & { id: string })[];
             const open = mine.find(c => !c.clock_out_time) || null;
 
-            // Which day's shift is "now": the one running, else today's.
+            // Which day's shift is "now": the one running, else the one whose
+            // day is still counting (a night shift until the next starts), else today's.
             const pick = days.slice().reverse().find(d => {
                 const s = scheduledShift(member, d);
                 return s && t >= s.start - 3 * 3_600_000 && t <= s.end + 3_600_000;
+            }) || days.slice().reverse().find(d => {
+                const s = scheduledShift(member, d);
+                const w = creditWindow(member, d, s);
+                return s && t >= s.start && t < w.end;
             }) || days[days.length - 1];
 
             let card: Scorecard | null = null;
@@ -305,8 +310,24 @@ function ShiftCard({ shift, openLog, attendance, settings, now, busy, onClockIn,
 // Today's targets
 // ---------------------------------------------------------------------------
 
+/** "من 12 بالليل لـ 12 بالليل" or "من 10:00 م لـ 9:59 م بكرة", in Cairo time. */
+function countsSpan(card: Scorecard) {
+    if (!card.counts_from || !card.counts_until) return "في يوم الشيفت";
+    const fmt = (iso: string) => {
+        const parts = new Intl.DateTimeFormat("en-US", { timeZone: "Africa/Cairo", hour: "numeric", minute: "2-digit", hour12: true }).formatToParts(new Date(iso));
+        const h = parts.find(p => p.type === "hour")?.value ?? "";
+        const m = parts.find(p => p.type === "minute")?.value ?? "";
+        const pm = parts.find(p => p.type === "dayPeriod")?.value?.toUpperCase() === "PM";
+        return h === "12" && m === "00" && !pm ? "12 بالليل" : `${h}:${m} ${pm ? "م" : "ص"}`;
+    };
+    const from = fmt(card.counts_from);
+    const until = fmt(new Date(Date.parse(card.counts_until) - 60_000).toISOString());
+    if (from === "12 بالليل") return "من 12 بالليل لحد آخر اليوم";
+    return `من ${from} لحد ${until} اليوم اللي بعده`;
+}
+
 function TodayTargets({ card, settings, attendance, now }: { card: Scorecard; settings: TargetSettings; attendance: Attendance | null; now: number }) {
-    const running = now < Date.parse(card.shift_end);
+    const running = now < Date.parse(card.counts_until || card.shift_end);
     const order: MetricKey[] = ["confirm", "messages", "followups", "rate"];
     const metrics = order.map(k => card.metrics.find(m => m.key === k)).filter(Boolean) as MetricResult[];
     const atRisk = metrics.filter(m => m.target !== null && !m.met).reduce((s, m) => s + deductionFor(settings, m.key), 0)
@@ -327,7 +348,7 @@ function TodayTargets({ card, settings, attendance, now }: { card: Scorecard; se
                 {metrics.map(m => <TargetRow key={m.key} m={m} cost={deductionFor(settings, m.key)} running={running} />)}
             </ul>
             <p className="text-xs text-muted-foreground">
-                نصيبك من شغل الشيفت {Math.round(card.share * 100)}% (حسب مين معاك في نفس الوقت). بيتحدّث كل 5 دقايق، والكشف النهائي بعد الشيفت بنص ساعة.
+                نصيبك من شغل الشيفت {Math.round(card.share * 100)}% (حسب مين معاك في نفس الوقت). كل شغلك {countsSpan(card)} بيتحسبلك، حتى برّه ساعات الشيفت. بيتحدّث كل 5 دقايق، والكشف النهائي بعدها بنص ساعة.
             </p>
         </section>
     );
@@ -513,6 +534,7 @@ function HowItWorks({ settings: s }: { settings: TargetSettings }) {
     const [open, setOpen] = useState(false);
     const lines = useMemo(() => {
         const out: string[] = [];
+        out.push("بيتحسبلك كل شغلك في يوم الشيفت كله، مش ساعات الشيفت بس: من 12 بالليل لـ 12 بالليل. ولو شيفتك بيعدّي نص الليل: من بداية شيفتك لحد قبل بداية شيفتك اللي بعده بدقيقة.");
         out.push(`سرعة التأكيد: أي أوردر من المتجر لازم يتشغل عليه خلال ${s.confirm_within_hours} ساعة من وصوله. «يتشغل عليه» يعني يتأكد، أو يتلغى، أو تسجّل عليه محاولة اتصال (مابيردش، كلّمني بعدين...). المطلوب منك نصيبك من الأوردرات اللي وصلت في شيفتك + اللي كانت مستنية من آخر ${s.backlog_days} يوم.`
             + (s.deduct_confirm > 0 ? ` لو قلّيت عن نصيبك: خصم ${egp(s.deduct_confirm)}.` : ""));
         if (s.min_message_orders > 0) out.push(`أوردرات الرسايل: ${s.min_message_orders} أوردر على الأقل في الشيفت من الرسايل (فيسبوك، واتساب، إنستجرام) باسمك.` + (s.deduct_messages > 0 ? ` خصم ${egp(s.deduct_messages)} لو أقل.` : ""));

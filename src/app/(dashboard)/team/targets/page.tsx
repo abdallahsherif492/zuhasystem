@@ -79,7 +79,7 @@ export default function DailyTargetsPage() {
             const out: Report[] = computed.map(c => {
                 const rec = stored.get(c.user_email);
                 if (rec) { stored.delete(c.user_email); return { ...rec, source: "recorded" as const }; }
-                return { ...c, source: Date.parse(c.shift_end) > now ? "live" as const : "computed" as const };
+                return { ...c, source: Date.parse(c.counts_until || c.shift_end) > now ? "live" as const : "computed" as const };
             });
             // Scored people no longer in the list.
             stored.forEach(r => out.push({ ...r, source: "recorded" }));

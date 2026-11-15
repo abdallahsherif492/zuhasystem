@@ -8,7 +8,8 @@ import {
 } from "@/lib/hr/daily-targets";
 
 /**
- * Scores every moderator shift that has ended and books the deduction for any
+ * Scores every moderator shift whose day is over (its work counts until
+ * then, creditWindow in daily-targets.ts) and books the deduction for any
  * target missed (src/lib/hr/daily-targets.ts, 20261113_moderator_daily_targets.sql).
  *
  * Run hourly by netlify/functions/moderator-targets.mjs with CRON_SECRET, or
@@ -22,7 +23,7 @@ const admin = createClient(supabaseUrl, process.env.SUPABASE_SERVICE_ROLE_KEY ||
 
 export const maxDuration = 120;
 
-/** A shift is final this long after it ends: late clicks still count. */
+/** A shift is final this long after its work stops counting (the end of its day). */
 const GRACE_MS = 30 * 60_000;
 /** How many days back a missed run can still catch up. */
 const LOOKBACK_DAYS = 3;
@@ -83,7 +84,7 @@ async function scoreBusiness(businessId: string, settings: TargetSettings) {
     const ready: Scorecard[] = [];
     for (const day of days) {
         for (const card of scoreDay(day, settings, data, now)) {
-            if (Date.parse(card.shift_end) + GRACE_MS > now) continue;
+            if (Date.parse(card.counts_until || card.shift_end) + GRACE_MS > now) continue;
             if (done.has(`${card.user_email}|${card.work_date}`)) continue;
             ready.push(card);
         }
