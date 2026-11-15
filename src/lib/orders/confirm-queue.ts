@@ -29,6 +29,7 @@ export interface QueueOrder {
     last_attempt_at?: string | null;
     last_attempt_reason?: string | null;
     last_attempt_note?: string | null;
+    last_attempt_by?: string | null;
     next_attempt_at?: string | null;
     claimed_by?: string | null;
     claimed_at?: string | null;
@@ -107,10 +108,21 @@ export const DUE_STATES: QueueState[] = ["new", "whatsapp", "last"];
 export const whatsappSent = (o: QueueOrder) =>
     !!o.whatsapp_sent_at || (o.whatsapp_sent_at === undefined && o.last_attempt_reason === "whatsapp_pending");
 
+/**
+ * Whose phone the WhatsApp went from. Before the migration, or for an order
+ * tried before the flow: whoever logged the last unanswered call, since the
+ * flow has them send it then.
+ */
+export function whatsappSender(o: QueueOrder): string | null {
+    if (o.whatsapp_sent_by) return o.whatsapp_sent_by;
+    return o.last_attempt_reason && ROUND_REASONS.has(o.last_attempt_reason) ? o.last_attempt_by ?? null : null;
+}
+
 /** Did the WhatsApp go from someone else's phone? Their email, if so. */
 export function whatsappFromOther(o: QueueOrder, me: string | null | undefined): string | null {
-    if (!o.whatsapp_sent_by) return null;
-    return me && o.whatsapp_sent_by.toLowerCase() === me.toLowerCase() ? null : o.whatsapp_sent_by;
+    const by = whatsappSender(o);
+    if (!by) return null;
+    return me && by.toLowerCase() === me.toLowerCase() ? null : by;
 }
 
 /**
@@ -119,35 +131,41 @@ export function whatsappFromOther(o: QueueOrder, me: string | null | undefined):
  */
 export function instructionFor(o: QueueOrder, me: string | null | undefined, opts: { missed?: boolean } = {}, now = Date.now()): { title: string; detail: string } {
     const step = stepOf(o, now);
-    const sent = whatsappSent(o);
+    // Past step 1 a WhatsApp went out: the no-answer button there says so.
+    const sent = whatsappSent(o) || roundsOf(o) >= 1;
+    const sender = whatsappSender(o);
     const other = whatsappFromOther(o, me);
     const checkWa = other
-        ? `اسأل ${shortName(other)} العميل ردّ على الواتساب ولا لأ.`
-        : "شوف العميل ردّ على الواتساب ولا لأ.";
+        ? `اسأل ${shortName(other)} العميل ردّ على الواتساب اللي بعتهوله ولا لأ.`
+        : sender
+            ? "شوف العميل ردّ على الواتساب اللي بعتهوله ولا لأ."
+            : "شوف العميل ردّ على الواتساب ولا لأ.";
     const ifNot = step === 3
-        ? (sent ? "لو مردش اتصل بيه مرتين، ولو مفيش رد الغي الأوردر." : "لو مفيش رد، ابعتله واتساب والغي الأوردر.")
-        : step === 2 && sent ? "لو مردش، اتصل بيه مرتين." : "لو مردش، ابعتله واتساب.";
+        ? (sent ? "لو مردش، اتصل بيه مرتين. لو مفيش رد، الغي الأوردر." : "لو مفيش رد، الغي الأوردر.")
+        : step === 2 ? "لو مردش، اتصل بيه مرتين واختار اللي حصل من الزراير تحت."
+        : "لو مردش، ابعتله واتساب واختار «مردش، وبعتله واتساب».";
+
+    // After a call the instruction itself asks for: what if nobody answers.
+    const afterCall = step === 3 ? "لو مفيش رد، الغي الأوردر."
+        : step === 2 ? "لو مردش، اختار «مردش ولا اتصال ولا واتساب»."
+        : "لو مردش، ابعتله واتساب واختار «مردش، وبعتله واتساب».";
 
     // Something the customer said last time comes first.
     switch (o.last_attempt_reason) {
-        case "call_later": return { title: "العميل طلب نكلمه في الميعاد ده. اتصل بيه.", detail: ifNot };
-        case "deposit_pending": return { title: "شوف الديبوزت وصل ولا لأ.", detail: `لو وصل أكّد الأوردر. لو موصلش كلّمه، و${ifNot}` };
-        case "thinking": return { title: "العميل كان لسه بيفكر. كلّمه تاني.", detail: ifNot };
-        case "wants_changes": return { title: "العميل كان عايز يعدّل في الطلب. كلّمه وعدّل وأكّد.", detail: ifNot };
-        case "price": return { title: "العميل كان معترض على السعر أو الشحن. كلّمه تاني.", detail: ifNot };
+        case "call_later": return { title: "العميل طلب نكلمه في الميعاد ده. اتصل بيه.", detail: afterCall };
+        case "deposit_pending": return { title: "شوف الديبوزت وصل ولا لأ.", detail: `لو وصل أكّد الأوردر. لو موصلش كلّمه. ${afterCall}` };
+        case "thinking": return { title: "العميل كان لسه بيفكر. كلّمه تاني.", detail: afterCall };
+        case "wants_changes": return { title: "العميل كان عايز يعدّل في الطلب. كلّمه وعدّل وأكّد.", detail: afterCall };
+        case "price": return { title: "العميل كان معترض على السعر أو الشحن. كلّمه تاني.", detail: afterCall };
         case "wrong_number": return { title: "الرقم متسجل غلط: جرّب أي رقم تاني في الأوردر أو ابعت واتساب.", detail: "لو مفيش فايدة، الغي الأوردر." };
     }
     if (step === 1) {
         return opts.missed
-            ? { title: "العميل ماكملش الطلب على الموقع. كلّمه واسأله لسه عايزه؟", detail: "اتصل مرتين، ولو مردش ابعتله واتساب." }
+            ? { title: "العميل ماكملش الطلب على الموقع. اتصل بيه مرتين واسأله لسه عايزه؟", detail: ifNot }
             : { title: "اتصل بالعميل مرتين.", detail: ifNot };
     }
-    if (step === 2) {
-        return sent
-            ? { title: checkWa, detail: ifNot + (other ? ` الواتساب اتبعت من موبايل ${shortName(other)}.` : "") }
-            : { title: "اتصل بالعميل مرتين.", detail: ifNot };
-    }
-    return sent ? { title: checkWa, detail: ifNot } : { title: "اتصل بالعميل مرتين.", detail: ifNot };
+    if (step === 3 && !sent) return { title: "اتصل بالعميل مرتين وابعتله واتساب.", detail: ifNot };
+    return { title: checkWa, detail: ifNot };
 }
 
 export const STEP_NAME: Record<FlowStep, string> = { 1: "أول اتصال", 2: "بعد الواتساب", 3: "آخر محاولة" };

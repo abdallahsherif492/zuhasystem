@@ -5,7 +5,7 @@ import { CalendarClock, Check, Loader2, MessageCircle, MoreHorizontal, PhoneCall
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
-    QUEUE_TABS, STEP_NAME, claimedByOther, dueLabel, instructionFor, isMine, nextAttemptAt, queueStateOf, shortName, stepOf, whatsappSent,
+    QUEUE_TABS, STEP_NAME, claimedByOther, dueLabel, instructionFor, isMine, nextAttemptAt, queueStateOf, shortName, stepOf,
     type FlowStep, type QueueOrder, type QueueState,
 } from "@/lib/orders/confirm-queue";
 import { type AttemptReason } from "@/components/orders/confirmation-attempts";
@@ -190,11 +190,10 @@ export function FlowActions({ order, now, busy, onConfirm, onAttempt, onCancel, 
     const step = stepOf(order, scheduled ? nextAttemptAt(order) : now);
     const spin = (k: AttemptReason | "confirm") => busy === k && <Loader2 className="h-4 w-4 animate-spin" />;
     const big = "h-12 text-base font-semibold [&_svg]:size-5";
-    // Step 2 asks about the WhatsApp; if none was ever sent, this is the one.
-    const noAnswer: { reason: AttemptReason; label: string } =
-        step === 1 || !whatsappSent(order)
-            ? { reason: "whatsapp_pending", label: "مردش، وبعتله واتساب" }
-            : { reason: "no_reply", label: "مردش ولا اتصال ولا واتساب" };
+    // Step 1: no answer, so a WhatsApp goes out. Step 2: no answer to either.
+    const noAnswer: { reason: AttemptReason; label: string } = step === 1
+        ? { reason: "whatsapp_pending", label: "مردش، وبعتله واتساب" }
+        : { reason: "no_reply", label: "مردش ولا اتصال ولا واتساب" };
 
     return (
         <div dir="rtl" className="space-y-2">
