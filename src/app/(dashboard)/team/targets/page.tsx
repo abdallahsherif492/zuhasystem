@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { teamName } from "@/lib/team-names";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { ChevronDown, ChevronLeft, ChevronRight, Loader2, RefreshCw, Settings } from "lucide-react";
@@ -43,7 +44,7 @@ const KEYS: MetricKey[] = ["confirm", "messages", "followups", "rate"];
 const prevDay = (ymd: string) => new Date(Date.UTC(+ymd.slice(0, 4), +ymd.slice(5, 7) - 1, +ymd.slice(8, 10) - 1)).toISOString().slice(0, 10);
 const fmtDay = (ymd: string) => new Date(`${ymd}T12:00:00Z`).toLocaleDateString("ar-EG", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
 const fmtTime = (iso: string) => new Date(iso).toLocaleTimeString("ar-EG", { hour: "numeric", minute: "2-digit", timeZone: "Africa/Cairo" });
-const who = (email: string) => email.split("@")[0];
+const who = (email: string) => teamName(email);
 
 export default function DailyTargetsPage() {
     const { activeBusiness } = useBusiness();

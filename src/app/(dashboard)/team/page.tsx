@@ -19,6 +19,7 @@ import { Loader2, Users, UserPlus, Trash2, Edit2, Shield, Clock, Key, Calendar, 
 import { formatCurrency } from "@/lib/utils";
 import { toast } from "sonner";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { savedTeamName, setTeamNames, withTeamName } from "@/lib/team-names";
 
 type BusinessUser = {
     id: string;
@@ -56,6 +57,8 @@ export default function TeamManagementPage() {
     const [newWeekendDays, setNewWeekendDays] = useState<string[]>(["Friday"]);
     const [saving, setSaving] = useState(false);
     const [editingMember, setEditingMember] = useState<BusinessUser | null>(null);
+    /** The member's name in Arabic, kept in theme_config.team_names (lib/team-names.ts). */
+    const [nameDraft, setNameDraft] = useState("");
     const [editSaving, setEditSaving] = useState(false);
 
     const availablePages = [
@@ -194,6 +197,19 @@ export default function TeamManagementPage() {
                 toast.error("You cannot change the role of the only owner.");
                 return;
             }
+        }
+
+        // The name: in the business's settings, read fresh so nothing else there is lost.
+        if (activeBusiness && nameDraft.trim() !== savedTeamName(editingMember.user_email)) {
+            const { data: fresh, error: readError } = await supabase.from("businesses").select("theme_config").eq("id", activeBusiness.id).single();
+            const theme_config = withTeamName(fresh?.theme_config, editingMember.user_email, nameDraft);
+            const { data: saved, error: nameError } = readError ? { data: null, error: readError } :
+                await supabase.from("businesses").update({ theme_config }).eq("id", activeBusiness.id).select("id");
+            if (nameError || !saved?.length) {
+                toast.error("الاسم ماتحفظش. جرّب تاني.");
+                return;
+            }
+            setTeamNames(theme_config.team_names as Record<string, string>);
         }
 
         // Pay is written to its own table, not through the membership update.
@@ -465,7 +481,8 @@ export default function TeamManagementPage() {
                                                         <AvatarFallback className="font-bold text-xs">{emailPrefix}</AvatarFallback>
                                                     </Avatar>
                                                     <div>
-                                                        <p className="font-semibold text-xs text-foreground">{member.user_email}</p>
+                                                        {savedTeamName(member.user_email) && <p className="font-semibold text-sm text-foreground">{savedTeamName(member.user_email)}</p>}
+                                                        <p className={savedTeamName(member.user_email) ? "text-[11px] text-muted-foreground" : "font-semibold text-xs text-foreground"}>{member.user_email}</p>
                                                         <p className="text-[10px] text-muted-foreground">Added: {new Date(member.created_at).toLocaleDateString()}</p>
                                                     </div>
                                                 </div>
@@ -519,7 +536,7 @@ export default function TeamManagementPage() {
                                                     variant="ghost" 
                                                     size="sm" 
                                                     className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground mr-1"
-                                                    onClick={() => { setEditingMember(member); setSalaryDraft(salaries[member.id] != null ? String(salaries[member.id]) : ""); }}
+                                                    onClick={() => { setEditingMember(member); setNameDraft(savedTeamName(member.user_email)); setSalaryDraft(salaries[member.id] != null ? String(salaries[member.id]) : ""); }}
                                                 >
                                                     <Edit2 className="h-4 w-4" />
                                                 </Button>
@@ -553,6 +570,11 @@ export default function TeamManagementPage() {
                     </DialogHeader>
                     {editingMember && (
                     <form onSubmit={handleSaveEdit} className="space-y-4 pt-2">
+                        <div className="space-y-1.5" dir="rtl">
+                            <Label className="text-xs">الاسم بالعربي</Label>
+                            <Input value={nameDraft} onChange={e => setNameDraft(e.target.value)} placeholder="عبدالرحمن" className="h-9" />
+                            <p className="text-[11px] text-muted-foreground">بيظهر بدل الإيميل في صفحة التأكيد والتقارير، زي «اسأل عبدالرحمن العميل ردّ ولا لأ».</p>
+                        </div>
                         <div className="space-y-1.5">
                             <Label className="text-xs font-medium">{t("Role")}</Label>
                             <Select value={editingMember.role} onValueChange={v => setEditingMember({...editingMember, role: v})}>

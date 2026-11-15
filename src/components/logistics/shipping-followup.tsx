@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { teamName } from "@/lib/team-names";
 import {
     Ban, CalendarCheck, Check, CircleHelp, Clock, Loader2, MapPin, MessageCircle, Phone, PhoneCall,
     PhoneMissed, PhoneOff, Plane, ThumbsUp, Truck, XCircle, AlertTriangle,
@@ -313,7 +314,7 @@ const STATUS_OPTIONS = [
 ];
 const statusLabel = (v: string) => STATUS_OPTIONS.find(s => s.value === v)?.label ?? v;
 
-const who = (email: string | null | undefined) => (email ? email.split("@")[0] : "—");
+const who = (email: string | null | undefined) => teamName(email, "—");
 
 /**
  * The panel a moderator records a call in. It keeps the customer's numbers at

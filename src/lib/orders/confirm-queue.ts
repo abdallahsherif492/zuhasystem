@@ -18,6 +18,8 @@
  * running before the migration still sorts orders the same way.
  */
 
+import { teamName } from "@/lib/team-names";
+
 export type FlowStep = 1 | 2 | 3;
 export type QueueState = "new" | "whatsapp" | "last" | "scheduled";
 
@@ -160,7 +162,8 @@ export function claimedByOther(o: QueueOrder, me: string | null | undefined, now
 export const isMine = (o: QueueOrder, me: string | null | undefined, now = Date.now()) =>
     !!(o.claimed_by && me && o.claimed_by.toLowerCase() === me.toLowerCase() && o.claimed_at && now - Date.parse(o.claimed_at) < CLAIM_MS);
 
-export const shortName = (email: string | null | undefined) => (email ? email.split("@")[0] : "");
+/** The person's name in Arabic if the team set one (lib/team-names.ts), else their email before the @. */
+export const shortName = (email: string | null | undefined) => teamName(email);
 
 /** "3:40 م" in Cairo time, with "بكرة" or the day when it is not today. */
 export function clockLabel(ms: number, now = Date.now()) {

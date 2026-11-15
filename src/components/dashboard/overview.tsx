@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useSyncExternalStore } from "react";
+import { teamName } from "@/lib/team-names";
 import Link from "next/link";
 import { ChevronDown } from "lucide-react";
 import { formatCurrency, cn } from "@/lib/utils";
@@ -34,7 +35,7 @@ export interface Overview {
 
 const n = (v: unknown) => Number(v) || 0;
 const int = (v: number) => Math.round(v).toLocaleString("en");
-const who = (email: string) => email.split("@")[0];
+const who = (email: string) => teamName(email);
 /** Whole pounds: piastres on a figure this size are noise. */
 const money = (v: number) => formatCurrency(Math.round(v)).replace(/\.00$/, "");
 

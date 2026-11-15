@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { teamName } from "@/lib/team-names";
 import {
     Ban, CalendarClock, Wallet, CircleHelp, History, Loader2, MessageCircle, PencilLine, PhoneMissed, PhoneOff, Tag, ThumbsDown,
 } from "lucide-react";
@@ -78,7 +79,7 @@ export function ago(iso: string | null | undefined) {
     return d === 1 ? "من يوم" : `من ${d} أيام`;
 }
 
-const who = (email: string | null | undefined) => (email ? email.split("@")[0] : "");
+const who = (email: string | null | undefined) => teamName(email);
 
 const isMissingFn = (e: { code?: string; message?: string }) =>
     e.code === "PGRST202" || /could not find|does not exist/i.test(e.message || "");

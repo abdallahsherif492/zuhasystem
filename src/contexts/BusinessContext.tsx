@@ -1,6 +1,7 @@
 "use client";
 
-import React, { createContext, useContext, useEffect, useState } from "react";
+import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { setTeamNames } from "@/lib/team-names";
 import { supabase } from "@/lib/supabase";
 import { useRouter, usePathname } from "next/navigation";
 import { safeLocal } from "@/lib/safe-storage";
@@ -261,6 +262,11 @@ export const BusinessProvider = ({ children }: { children: React.ReactNode }) =>
     safeLocal.set('activeBusinessId', businessId);
     window.location.href = '/dashboard';
   };
+
+  // The active business's team names, for anything that names a person by
+  // email. Set while rendering, and only when the business's settings change,
+  // so a name just saved from the team page is not undone by an older copy.
+  useMemo(() => setTeamNames(activeBusiness?.theme_config?.team_names), [activeBusiness?.theme_config]);
 
   return (
     <BusinessContext.Provider value={{ activeBusiness, userRole, currentUser, allowedPages, shiftStart, shiftEnd, weekendDays, isSystemAdmin, businesses, platformSettings, setActiveBusiness, impersonateBusiness, loading }}>
