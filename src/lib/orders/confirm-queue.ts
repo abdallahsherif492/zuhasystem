@@ -111,29 +111,44 @@ export function whatsappFromOther(o: QueueOrder, me: string | null | undefined):
     return me && o.whatsapp_sent_by.toLowerCase() === me.toLowerCase() ? null : o.whatsapp_sent_by;
 }
 
-/** What to do with the order now, in one or two sentences. */
-export function instructionFor(o: QueueOrder, me: string | null | undefined, opts: { missed?: boolean } = {}, now = Date.now()): string {
+/**
+ * What to do with the order now: the thing to do first (`title`), then what
+ * to do if it does not work (`detail`).
+ */
+export function instructionFor(o: QueueOrder, me: string | null | undefined, opts: { missed?: boolean } = {}, now = Date.now()): { title: string; detail: string } {
     const step = stepOf(o, now);
     const sent = whatsappSent(o);
     const other = whatsappFromOther(o, me);
     const checkWa = other
-        ? `الواتساب اتبعت من موبايل ${shortName(other)}، اسأله العميل ردّ ولا لأ.`
+        ? `اسأل ${shortName(other)} العميل ردّ على الواتساب ولا لأ.`
         : "شوف العميل ردّ على الواتساب ولا لأ.";
+    const ifNot = step === 3
+        ? (sent ? "لو مردش اتصل بيه مرتين، ولو مفيش رد الغي الأوردر." : "لو مفيش رد، ابعتله واتساب والغي الأوردر.")
+        : step === 2 && sent ? "لو مردش، اتصل بيه مرتين." : "لو مردش، ابعتله واتساب.";
+
+    // Something the customer said last time comes first.
+    switch (o.last_attempt_reason) {
+        case "call_later": return { title: "العميل طلب نكلمه في الميعاد ده. اتصل بيه.", detail: ifNot };
+        case "deposit_pending": return { title: "شوف الديبوزت وصل ولا لأ.", detail: `لو وصل أكّد الأوردر. لو موصلش كلّمه، و${ifNot}` };
+        case "thinking": return { title: "العميل كان لسه بيفكر. كلّمه تاني.", detail: ifNot };
+        case "wants_changes": return { title: "العميل كان عايز يعدّل في الطلب. كلّمه وعدّل وأكّد.", detail: ifNot };
+        case "price": return { title: "العميل كان معترض على السعر أو الشحن. كلّمه تاني.", detail: ifNot };
+        case "wrong_number": return { title: "الرقم متسجل غلط.", detail: "جرّب أي رقم تاني في الأوردر أو ابعت واتساب. لو مفيش فايدة، الغي الأوردر." };
+    }
     if (step === 1) {
         return opts.missed
-            ? "العميل ماكملش الطلب على الموقع. اتصل بيه مرتين واسأله لسه عايزه؟ ولو مردش ابعتله واتساب."
-            : "اتصل بالعميل مرتين دلوقتي، ولو مردش ابعتله واتساب.";
+            ? { title: "العميل ماكملش الطلب على الموقع. كلّمه واسأله لسه عايزه؟", detail: "اتصل مرتين، ولو مردش ابعتله واتساب." }
+            : { title: "اتصل بالعميل مرتين.", detail: ifNot };
     }
     if (step === 2) {
-        return sent ? `${checkWa} لو مردش اتصل بيه مرتين.` : "اتصل بالعميل مرتين، ولو مردش ابعتله واتساب.";
+        return sent
+            ? { title: checkWa, detail: ifNot + (other ? ` الواتساب اتبعت من موبايل ${shortName(other)}.` : "") }
+            : { title: "اتصل بالعميل مرتين.", detail: ifNot };
     }
-    if (o.last_attempt_reason === "wrong_number") {
-        return "الرقم متسجل غلط. جرّب أي رقم تاني في الأوردر أو ابعت واتساب، ولو مفيش فايدة الغي الأوردر.";
-    }
-    return sent
-        ? `آخر فرصة: ${checkWa} لو مردش اتصل بيه مرتين، ولو مفيش رد الغي الأوردر.`
-        : "آخر فرصة: اتصل بالعميل مرتين وابعتله واتساب. لو مفيش رد الغي الأوردر.";
+    return sent ? { title: checkWa, detail: ifNot } : { title: "اتصل بالعميل مرتين.", detail: ifNot };
 }
+
+export const STEP_NAME: Record<FlowStep, string> = { 1: "جديد", 2: "اتبعتله واتساب", 3: "آخر فرصة" };
 
 /** Who holds the order, if it is someone else and the claim is fresh. */
 export function claimedByOther(o: QueueOrder, me: string | null | undefined, now = Date.now()): string | null {

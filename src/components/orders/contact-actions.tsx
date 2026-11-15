@@ -22,13 +22,15 @@ import {
  * so it is shown, editable, and only then handed to WhatsApp.
  */
 export function ContactActions({
-    order, storeName, size = "sm", big = false, onContact,
+    order, storeName, size = "sm", big = false, inverse = false, onContact,
 }: {
     order: ConfirmationOrder;
     storeName: string;
     size?: "sm" | "default";
     /** Full-width, thumb-sized buttons for the confirmation queue. */
     big?: boolean;
+    /** On a dark panel (the confirmation card's instruction): light buttons. */
+    inverse?: boolean;
     /** Called as a number is dialled or the WhatsApp composer opens. */
     onContact?: () => void;
 }) {
@@ -68,7 +70,7 @@ export function ContactActions({
 
     if (numbers.length === 0) {
         return (
-            <span className="text-xs text-muted-foreground">مفيش رقم موبايل على الأوردر</span>
+            <span className={cn("text-xs", inverse ? "text-background/70" : "text-muted-foreground")}>مفيش رقم موبايل على الأوردر</span>
         );
     }
 
@@ -81,7 +83,8 @@ export function ContactActions({
                         asChild
                         size={size}
                         variant="outline"
-                        className={cn("gap-1.5 font-mono tabular-nums", big && "h-12 text-base sm:min-w-44 [&_svg]:size-5")}
+                        className={cn("gap-1.5 font-mono tabular-nums", big && "h-12 text-base sm:min-w-44 [&_svg]:size-5",
+                            inverse && "border-0 bg-background text-foreground shadow-none hover:bg-background/90")}
                     >
                         {/* One button per number: a single tel: built from
                             "0882232065 / 01159244278" dials neither.
@@ -105,7 +108,8 @@ export function ContactActions({
                     disabled={!waNumber}
                     title={waNumber ? undefined : "مفيش رقم موبايل مصري يقبل واتساب"}
                     className={cn("gap-1.5 border-emerald-500/40 text-emerald-700 hover:bg-emerald-500/10 dark:text-emerald-400",
-                        big && "h-12 text-base sm:min-w-36 [&_svg]:size-5", big && numbers.length % 2 === 0 && "col-span-2")}
+                        big && "h-12 text-base sm:min-w-36 [&_svg]:size-5", big && numbers.length % 2 === 0 && "col-span-2",
+                        inverse && "border-background/40 bg-transparent text-background shadow-none hover:bg-background/10 hover:text-background dark:text-background")}
                 >
                     <MessageCircle className="h-3.5 w-3.5" />
                     <span>{big ? "واتساب" : "رسالة تأكيد"}</span>
