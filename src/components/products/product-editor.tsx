@@ -130,7 +130,11 @@ export function ProductEditor({ productId }: { productId?: string }) {
         };
         let savedId: string | null = null;
         const { data, error } = await supabase.rpc("save_product", { p_business_id: businessId, p_product: payload });
-        if (error && isMissingRpc(error, "save_product")) {
+        // Missing (migration not run) or broken in the database (20261117's
+        // first version stopped on an ambiguous name, 42702): save the same
+        // thing with plain writes. 20261122_fix_save_product.sql fixes it.
+        if (error && (isMissingRpc(error, "save_product") || /^42/.test(error.code || ""))) {
+            console.warn("save_product unavailable, saving directly:", error);
             try { savedId = await legacySave(businessId, payload, original); }
             catch (e) { setSaving(false); toast.error(productError(e as never)); return; }
         } else if (error) {
@@ -359,9 +363,26 @@ type Payload = {
     variants: { id: string | null; title: string; sku: string | null; sale_price: number; cost_price: number; track_inventory: boolean; stock_qty?: number }[];
 };
 
-/** Before 20261117 is run: the older writes, minus writing stale stock back. */
+/**
+ * The same save as save_product, with plain writes, for when it cannot run:
+ * a SKU used by another product is refused, existing stock is never written,
+ * an option taken out is archived when orders use it, and a new product is
+ * removed again if its options fail to save.
+ */
 async function legacySave(businessId: string, p: Payload, original: ProductRow | null): Promise<string> {
+    const fail = (message: string): never => { throw { message, hint: "client" }; };
+
+    // A SKU belongs to one product in the business.
+    const skus = p.variants.map(v => v.sku).filter((x): x is string => !!x);
+    if (skus.length) {
+        const { data: taken } = await supabase.from("variants").select("id, sku, product_id, products(name)")
+            .eq("business_id", businessId).in("sku", skus);
+        const clash = (taken || []).find(t => t.product_id !== p.id && !p.variants.some(v => v.id && v.id === t.id));
+        if (clash) fail(`الكود ${clash.sku} مستخدم للمنتج «${(clash.products as { name?: string } | null)?.name || "تاني"}».`);
+    }
+
     let id = p.id;
+    const created = !id;
     if (!id) {
         const { data, error } = await supabase.from("products").insert({ business_id: businessId, name: p.name, description: p.description }).select("id").single();
         if (error) throw error;
@@ -370,21 +391,42 @@ async function legacySave(businessId: string, p: Payload, original: ProductRow |
         const { error } = await supabase.from("products").update({ name: p.name, description: p.description }).eq("business_id", businessId).eq("id", id);
         if (error) throw error;
     }
-    for (const v of p.variants) {
-        const row = { title: v.title, sku: v.sku, sale_price: v.sale_price, cost_price: v.cost_price, track_inventory: v.track_inventory };
-        if (v.id) {
-            const { error } = await supabase.from("variants").update(row).eq("business_id", businessId).eq("id", v.id);
-            if (error) throw error;
-        } else {
-            const { error } = await supabase.from("variants").insert({ ...row, business_id: businessId, product_id: id, stock_qty: v.track_inventory ? v.stock_qty || 0 : 0 });
-            if (error) throw error;
+
+    try {
+        for (const v of p.variants) {
+            const row = { title: v.title, sku: v.sku, sale_price: v.sale_price, cost_price: v.cost_price, track_inventory: v.track_inventory };
+            if (v.id) {
+                const { error } = await supabase.from("variants").update(row).eq("business_id", businessId).eq("id", v.id);
+                if (error) throw error;
+            } else {
+                const stock = v.track_inventory ? Math.max(0, v.stock_qty || 0) : 0;
+                const { data, error } = await supabase.from("variants")
+                    .insert({ ...row, business_id: businessId, product_id: id, stock_qty: stock }).select("id").single();
+                if (error) throw error;
+                if (stock > 0) {
+                    await supabase.from("inventory_transactions").insert({
+                        business_id: businessId, variant_id: data.id, quantity_change: stock, transaction_type: "restock", note: "رصيد أول المدة",
+                    });
+                }
+            }
         }
+    } catch (e) {
+        // Nothing half-saved: a new product whose options failed goes again.
+        if (created) {
+            await supabase.from("variants").delete().eq("business_id", businessId).eq("product_id", id);
+            await supabase.from("products").delete().eq("business_id", businessId).eq("id", id);
+        }
+        throw e;
     }
+
+    // Options taken out: deleted, or archived when orders or bundles use them.
     const keep = new Set(p.variants.map(v => v.id).filter(Boolean));
-    const gone = (original?.variants || []).filter(v => !keep.has(v.id)).map(v => v.id);
-    if (gone.length) {
-        const { error } = await supabase.from("variants").delete().eq("business_id", businessId).in("id", gone);
-        if (error) throw error;
+    for (const v of (original?.variants || []).filter(x => x.archived !== true && !keep.has(x.id))) {
+        const { error } = await supabase.from("variants").delete().eq("business_id", businessId).eq("id", v.id);
+        if (error?.code === "23503") {
+            const { error: e2 } = await supabase.from("variants").update({ archived: true }).eq("business_id", businessId).eq("id", v.id);
+            if (e2) throw e2;
+        } else if (error) throw error;
     }
     return id!;
 }

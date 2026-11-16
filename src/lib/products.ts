@@ -45,12 +45,14 @@ export const isMissingRpc = (e: { code?: string; message?: string } | null | und
 /** A readable message for a failed product or stock write. */
 export function productError(e: { code?: string; message?: string; hint?: string } | null | undefined): string {
     const msg = e?.message || "";
-    if (e?.hint && /[؀-ۿ]/.test(msg)) return msg; // our own Arabic messages
+    if (/[؀-ۿ]/.test(msg)) return msg; // our own Arabic messages
     if (/bundle_sku_is_product|product_sku_is_bundle|already a bundle/i.test(msg)) return "الكود ده مستخدم لباندل. اختار كود تاني.";
     if (e?.code === "23503") return "مينفعش يتمسح لأنه مستخدم في أوردرات أو باندلز. أرشفه بدل كده.";
     if (e?.code === "23505") return "الكود (SKU) ده مستخدم قبل كده.";
     if (/row-level security|permission/i.test(msg)) return "مش مسموحلك تعمل ده.";
-    return "ماتحفظش، جرّب تاني.";
+    if (/failed to fetch|network|timeout|aborted/i.test(msg)) return "النت فصل وماتحفظش. اتأكد من النت وجرّب تاني.";
+    // Anything else: say what the database said, so it can be fixed.
+    return msg ? `ماتحفظش: ${msg}` : "ماتحفظش، جرّب تاني.";
 }
 
 export const margin = (price: number, cost: number) => (price > 0 ? Math.round(((price - cost) / price) * 100) : null);
