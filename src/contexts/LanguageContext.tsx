@@ -116,7 +116,16 @@ export const LanguageProvider = ({ children }: { children: React.ReactNode }) =>
     // Direction is set independently of the language, so an Arabic dashboard
     // can still be laid out left to right.
     document.documentElement.dir = direction;
-    document.documentElement.lang = language;
+    // Always "ar", whatever the interface language: what is on the page is
+    // mostly Arabic (customers, addresses, notes), and the people reading it
+    // read Arabic. Marked "en", phone browsers that ignore translate="no"
+    // took the page for English and "translated" it into Arabic, mangling the
+    // Arabic already there and moving text React still holds.
+    document.documentElement.lang = "ar";
+    document.documentElement.setAttribute("translate", "no");
+    document.documentElement.classList.add("notranslate");
+    document.body.setAttribute("translate", "no");
+    document.body.classList.add("notranslate");
   }, [language, direction]);
 
   const setPreference = useCallback(async (next: { language: Language | null; direction: Direction | null }) => {

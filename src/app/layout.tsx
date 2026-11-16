@@ -66,6 +66,8 @@ export const metadata: Metadata = {
     // The meta form of the same instruction, which is what the Translate
     // toolbar itself reads before offering the banner at all.
     google: "notranslate",
+    // Read by translators that skip the attribute: the page is Arabic already.
+    "content-language": "ar",
   },
   ...(facebookDomainVerification
     ? {
@@ -109,7 +111,8 @@ export default function RootLayout({
     // than a workaround.
     <html lang="ar" dir="ltr" translate="no" className="notranslate" suppressHydrationWarning>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        className={`${geistSans.variable} ${geistMono.variable} antialiased notranslate`}
+        translate="no"
         suppressHydrationWarning
       >
         <ThemeProvider
