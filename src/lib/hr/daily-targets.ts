@@ -446,7 +446,11 @@ export function scoreDay(day: string, settings: TargetSettings, data: TargetData
                 .filter(f => f.t < shift.start && !(f.by === shift.email && f.t >= win.start)).map(f => f.t);
             return !before.length || Math.max(...before) <= shift.start - followEvery;
         }).length;
-        const followed = new Set(data.followups.filter(f => lower(f.created_by) === shift.email && counts(f.created_at) && stuckIds.has(f.order_id)).map(f => f.order_id)).size;
+        // Every shipment they followed up counts, whatever it is now: one that
+        // got delivered or returned since, or one shipped too recently to be
+        // "stuck", was still work done. (Counting only the ones stuck right
+        // now made the number drop as their shipments moved on.)
+        const followed = new Set(data.followups.filter(f => lower(f.created_by) === shift.email && counts(f.created_at)).map(f => f.order_id)).size;
         const followTarget = Math.ceil(due * share);
         const follow: MetricResult = {
             key: "followups", target: followTarget, done: followed, met: followed >= followTarget,
