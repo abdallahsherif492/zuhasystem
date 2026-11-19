@@ -50,7 +50,7 @@ export interface ConfirmationOrder {
     order_items?: {
         quantity: number | null;
         unmapped_name?: string | null;
-        variants?: { title?: string | null; products?: { name?: string | null } | null } | null;
+        variants?: { title?: string | null; products?: { name?: string | null; description?: string | null } | null } | null;
     }[] | null;
 }
 
@@ -58,54 +58,32 @@ const money = (n: number) =>
     `${Math.round(n).toLocaleString("en-US")} جنيه`;
 
 /**
- * The confirmation message a moderator sends after the call.
+ * The message a moderator sends on WhatsApp asking the customer to confirm:
+ * a greeting from the store, what they ordered in Arabic with how many of
+ * each, what they pay, and to reply «تأكيد». Short on purpose, so it is read.
  *
- * Written to be read back against, not just received: the customer checks the
- * address and the items and says yes, and the moderator has that in writing.
- * The order number is the eight-character reference the rest of the system
- * shows, so a reply quoting it can be found.
- *
- * Names the outstanding amount rather than the total whenever a deposit has
- * been taken — telling someone who already paid 100 that they owe the full 500
- * on delivery is how a parcel gets refused at the door.
+ * `labels` are the items' Arabic names (lib/orders/arabic-names.ts), in the
+ * order of order_items. With a deposit taken it says what is left to pay:
+ * telling someone who paid 100 that they owe the full 500 gets a parcel
+ * refused at the door.
  */
-export function confirmationMessage(order: ConfirmationOrder, storeName: string): string {
+export function confirmationMessage(order: ConfirmationOrder, storeName: string, labels?: string[]): string {
     const info = order.customer_info || {};
-    const name = (info.name || "").trim();
+    const first = String(info.name || "").trim().split(/\s+/)[0] || "";
     const total = Number(order.total_amount) || 0;
     const paid = Number(order.paid_amount) || 0;
     const due = Math.max(total - paid, 0);
 
-    const items = (order.order_items || []).map(it => {
-        const label = it.variants?.products?.name
-            ? `${it.variants.products.name}${it.variants.title ? ` - ${it.variants.title}` : ""}`
-            : (it.unmapped_name || "منتج");
-        const qty = Number(it.quantity) || 1;
-        return `• ${label}${qty > 1 ? ` × ${qty}` : ""}`;
+    const items = (order.order_items || []).map((it, i) => {
+        const label = labels?.[i] || it.variants?.products?.name || it.unmapped_name || "منتج";
+        return `• ${label} (عدد ${Number(it.quantity) || 1})`;
     });
 
-    const address = [info.address, info.governorate].filter(Boolean).join(" - ");
-
-    const lines = [
-        `أهلاً${name ? ` ${name}` : ""} 👋`,
-        `تم تأكيد طلبك من ${storeName}.`,
-        "",
-        `رقم الطلب: ${order.id.slice(0, 8).toUpperCase()}`,
-    ];
-
-    if (items.length) lines.push("", "الطلب:", ...items);
-    if (address) lines.push("", `العنوان: ${address}`);
-
-    lines.push("", `الإجمالي: ${money(total)}`);
-    if (paid > 0) {
-        lines.push(`مدفوع مقدماً: ${money(paid)}`, `المطلوب عند الاستلام: ${money(due)}`);
-    }
-
-    lines.push(
-        "",
-        "هيتم الشحن خلال 2 إلى 4 أيام عمل، وهيتواصل معك المندوب قبل التسليم.",
-        "لو فيه أي تعديل في العنوان أو الطلب ابعتلنا هنا في أي وقت 🌸",
-    );
-
+    const lines = [`أهلاً${first ? ` ${first}` : ""} 👋`, `شكراً إنك طلبت من ${storeName}.`, "", "برجاء تأكيد طلبك:"];
+    lines.push(...items);
+    lines.push("", paid > 0
+        ? `المطلوب عند الاستلام: ${money(due)} (دفعت ${money(paid)} مقدّم)`
+        : `الإجمالي عند الاستلام: ${money(total)}`);
+    lines.push("", "الرجاء الرد بكلمة «تأكيد» لتأكيد الأوردر.");
     return lines.join("\n");
 }

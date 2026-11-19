@@ -12,6 +12,7 @@ import { cn } from "@/lib/utils";
 import {
     phoneNumbers, whatsappLink, telLink, confirmationMessage, type ConfirmationOrder,
 } from "@/lib/orders/contact";
+import { arabicItemLabels } from "@/lib/orders/arabic-names";
 
 /**
  * Call and message buttons for one order.
@@ -51,11 +52,20 @@ export function ContactActions({
     // blocked, which is silent: the dialog closes and no chat ever opens.
     const sendHref = target ? whatsappLink(target, text) : null;
 
-    function openComposer() {
+    const [preparing, setPreparing] = useState(false);
+
+    // The products' Arabic names may need translating first: the dialog opens
+    // at once and the message appears when they are ready (a few seconds at
+    // most; the English name is used if translating fails).
+    async function openComposer() {
         onContact?.();
-        setText(confirmationMessage(order, storeName));
         setTarget(waNumber || null);
+        setText("");
+        setPreparing(true);
         setOpen(true);
+        const labels = await arabicItemLabels(order.order_items || []).catch(() => undefined);
+        setText(confirmationMessage(order, storeName, labels));
+        setPreparing(false);
     }
 
 
@@ -121,15 +131,16 @@ export function ContactActions({
                     <DialogHeader>
                         <DialogTitle>رسالة التأكيد</DialogTitle>
                         <DialogDescription>
-                            راجعها قبل ما تبعتها — العميل بيقرا العنوان والمنتجات منها ويأكد.
-                            تقدر تعدّل أي حاجة.
+                            العميل بيرد عليها بـ «تأكيد». راجع المنتجات والمبلغ، وتقدر تعدّل أي حاجة قبل ما تبعت.
                         </DialogDescription>
                     </DialogHeader>
 
                     <Textarea
                         value={text}
                         onChange={e => setText(e.target.value)}
-                        rows={14}
+                        placeholder={preparing ? "بجهّز الرسالة وأسماء المنتجات بالعربي…" : ""}
+                        disabled={preparing}
+                        rows={11}
                         className="text-sm leading-6"
                         dir="rtl"
                     />
@@ -154,7 +165,7 @@ export function ContactActions({
                             <Copy className="h-4 w-4" />
                             <span>نسخ</span>
                         </Button>
-                        {sendHref ? (
+                        {sendHref && !preparing ? (
                             <Button asChild className="gap-1.5" onClick={() => setOpen(false)}>
                                 {/* wa.me/<full international number> opens that
                                     contact's chat directly — creating it when the

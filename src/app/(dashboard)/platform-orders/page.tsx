@@ -53,7 +53,7 @@ const ORDER_SELECT = `
         *,
         variants (
             title, sku, product_id,
-            products (name)
+            products (name, description)
         )
     )
 `;
