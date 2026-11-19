@@ -970,11 +970,13 @@ function PlatformOrdersContent() {
     const byState = useMemo(() => {
         const m: Record<QueueState, Order[]> = { new: [], whatsapp: [], last: [], scheduled: [] };
         for (const o of listed) m[queueStateOf(o, now)].push(o);
-        // Whoever has waited longest first. A WhatsApp sent from my phone
-        // comes back to me first: only I can see whether they replied.
+        // The other lists: whoever has waited longest first. A WhatsApp sent
+        // from my phone comes back to me first: only I can see whether they replied.
         const sentByMe = (o: Order) => (o.whatsapp_sent_at && !whatsappFromOther(o, me) ? 1 : 0);
         const mineFirst = (a: Order, b: Order) => sentByMe(b) - sentByMe(a) || byDue(a, b);
-        m.new.sort(byDue);
+        // New orders: the one that just came in first. A customer who ordered
+        // a minute ago still remembers it and answers; the older ones follow.
+        m.new.sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at));
         m.whatsapp.sort(mineFirst);
         m.last.sort(mineFirst);
         m.scheduled.sort(byDue);
