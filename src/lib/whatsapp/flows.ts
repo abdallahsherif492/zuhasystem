@@ -87,6 +87,18 @@ function test(c: FlowCondition, x: Ctx): boolean {
     return false;
 }
 
+/**
+ * Does the order meet these conditions? For the automatic confirm / cancel
+ * settings (the same conditions as the rules). No conditions: yes.
+ */
+export async function orderMeets(businessId: string, orderId: string, rule: { match: "all" | "any"; conditions: FlowCondition[] } | undefined, reply?: string) {
+    if (!rule?.conditions?.length) return true;
+    const order = await loadOrder(businessId, orderId);
+    if (!order) return false;
+    const x: Ctx = { businessId, orderId, order, phone: order.customer_info?.phone || "", reply };
+    return rule.match === "any" ? rule.conditions.some(c => test(c, x)) : rule.conditions.every(c => test(c, x));
+}
+
 const matches = (f: Flow, x: Ctx) =>
     !f.conditions.length || (f.match === "any" ? f.conditions.some(c => test(c, x)) : f.conditions.every(c => test(c, x)));
 

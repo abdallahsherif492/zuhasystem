@@ -1,4 +1,4 @@
-import type { Flow } from "@/lib/whatsapp/flow-types";
+import type { Flow, FlowCondition } from "@/lib/whatsapp/flow-types";
 import type { MessageCase, SavedTemplate } from "@/lib/whatsapp/template-fields";
 /**
  * WhatsApp settings, kept in businesses.theme_config.whatsapp and set from
@@ -7,6 +7,11 @@ import type { MessageCase, SavedTemplate } from "@/lib/whatsapp/template-fields"
 export interface WhatsAppSettings {
     /** A customer's «تأكيد» confirms the order when nothing needs a person. */
     auto_confirm: boolean;
+    /** …and only for orders that meet these (none: every order). */
+    auto_confirm_rule: OrderRule;
+    /** A customer's «إلغاء الطلب» cancels the order at once (else it waits for a moderator). */
+    auto_cancel: boolean;
+    auto_cancel_rule: OrderRule;
     deposit_amount: number;
     deposit_instapay: string;
     deposit_wallet: string;
@@ -34,8 +39,13 @@ export const ORDER_EVENTS: { key: OrderEvent; label: string; template: string }[
     { key: "delivered", label: "الأوردر اتسلم", template: "order_delivered" },
 ];
 
+export interface OrderRule { match: "all" | "any"; conditions: FlowCondition[] }
+
 export const WHATSAPP_DEFAULTS: WhatsAppSettings = {
     auto_confirm: true,
+    auto_confirm_rule: { match: "all", conditions: [] },
+    auto_cancel: true,
+    auto_cancel_rule: { match: "all", conditions: [] },
     deposit_amount: 50,
     deposit_instapay: "01011690491",
     deposit_wallet: "01100354568",
@@ -49,7 +59,9 @@ export const WHATSAPP_DEFAULTS: WhatsAppSettings = {
 
 export function whatsappSettingsOf(themeConfig: { whatsapp?: Partial<WhatsAppSettings> } | null | undefined): WhatsAppSettings {
     const saved = themeConfig?.whatsapp || {};
-    return { ...WHATSAPP_DEFAULTS, ...saved, events: { ...WHATSAPP_DEFAULTS.events, ...(saved.events || {}) }, flows: Array.isArray(saved.flows) ? saved.flows : [], upsell: { ...WHATSAPP_DEFAULTS.upsell, ...(saved.upsell || {}) }, templates: saved.templates || {}, case_templates: saved.case_templates || {} };
+    return { ...WHATSAPP_DEFAULTS, ...saved, events: { ...WHATSAPP_DEFAULTS.events, ...(saved.events || {}) }, flows: Array.isArray(saved.flows) ? saved.flows : [], upsell: { ...WHATSAPP_DEFAULTS.upsell, ...(saved.upsell || {}) }, templates: saved.templates || {}, case_templates: saved.case_templates || {},
+        auto_confirm_rule: { ...WHATSAPP_DEFAULTS.auto_confirm_rule, ...(saved.auto_confirm_rule || {}) },
+        auto_cancel_rule: { ...WHATSAPP_DEFAULTS.auto_cancel_rule, ...(saved.auto_cancel_rule || {}) } };
 }
 
 /** The confirmation templates: the current one (with «إلغاء الطلب») first. */

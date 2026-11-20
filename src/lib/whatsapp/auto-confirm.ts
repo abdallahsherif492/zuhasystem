@@ -1,7 +1,7 @@
 import { deliveryRateOf } from "@/lib/easyorders-delivery-rate";
 import { admin } from "@/lib/whatsapp/server";
 import { reply, say } from "@/lib/whatsapp/system-text";
-import { runReplyFlows } from "@/lib/whatsapp/flows";
+import { orderMeets, runReplyFlows } from "@/lib/whatsapp/flows";
 import { offerUpsell, upsellAnswer } from "@/lib/whatsapp/upsell";
 import { creditFollowUp } from "@/lib/whatsapp/credit";
 import { CANCEL_CHOICES, CONFIRM_TEMPLATES, whatsappSettingsOf, type WhatsAppSettings } from "@/lib/whatsapp/settings";
@@ -108,6 +108,12 @@ async function builtIn(businessId: string, m: Incoming) {
     if (CANCEL.test(text)) {
         const orderId = await orderAskedAbout(businessId, m.customer_phone, m.context_id);
         if (!orderId || !(await waitingOrder(businessId, orderId))) return;
+        // Settings → «إلغاء الطلب» يلغي الأوردر لوحده (and its conditions); otherwise a moderator calls.
+        if (!settings.auto_cancel || !(await orderMeets(businessId, orderId, settings.auto_cancel_rule))) {
+            await note(orderId, "العميل داس «إلغاء الطلب» على الواتساب: كلّمه قبل ما تلغي (مش داخل في الإلغاء التلقائي).");
+            await say(businessId, m.customer_phone, "تمام، وصلنا طلبك 🌸 هنكلمك حالاً بخصوص الإلغاء.", orderId);
+            return;
+        }
         const { data: moved } = await admin.from("orders")
             .update({ status: "Cancelled", cancel_reason: "other", cancel_note: "العميل لغى من الواتساب (ضغط «إلغاء الطلب»)", cancelled_by: "whatsapp-auto" })
             .eq("business_id", businessId).eq("id", orderId).ilike("status", "waiting").select("id");
@@ -261,6 +267,12 @@ async function confirm(businessId: string, m: Incoming, s: WhatsAppSettings) {
         return;
     }
 
+    // Settings → «تأكيد» يأكد الأوردر لوحده — only for orders that meet its conditions.
+    if (!(await orderMeets(businessId, orderId, s.auto_confirm_rule))) {
+        await note(orderId, "رد «تأكيد» على الواتساب، بس الأوردر مش داخل في شروط التأكيد التلقائي: محتاج مودريتور يأكده.");
+        await say(businessId, phone, "شكراً! استلمنا تأكيدك ✅ وهنراجع طلبك ونكلمك لو محتاجين أي تفاصيل.", orderId);
+        return;
+    }
     const { data: moved } = await admin.from("orders")
         .update({ status: "Pending", confirmed_by: "whatsapp-auto" })
         .eq("business_id", businessId).eq("id", orderId).ilike("status", "waiting").select("id");

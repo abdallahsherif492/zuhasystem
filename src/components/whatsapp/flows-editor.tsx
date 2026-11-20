@@ -123,9 +123,7 @@ export function FlowsEditor({ businessId, flows, onChange, onSave, saving, manag
 function FlowForm({ flow: f, members, disabled, onChange, onDelete }: {
     flow: Flow; members: string[]; disabled: boolean; onChange: (patch: Partial<Flow>) => void; onDelete: () => void;
 }) {
-    const setCond = (i: number, patch: Partial<FlowCondition>) => onChange({ conditions: f.conditions.map((c, j) => (j === i ? { ...c, ...patch } : c)) });
     const setAction = (i: number, a: FlowAction) => onChange({ actions: f.actions.map((x, j) => (j === i ? a : x)) });
-    const fields = (Object.keys(FIELD_LABEL) as FlowField[]).filter(k => k !== "reply" || f.trigger.type === "reply");
     const textOutsideWindow = f.trigger.type !== "reply" && f.actions.some(a => a.type === "text");
 
     return (
@@ -154,49 +152,8 @@ function FlowForm({ flow: f, members, disabled, onChange, onDelete }: {
             </div>
 
             <div className="space-y-2">
-                <div className="flex flex-wrap items-center gap-2">
-                    <p className="text-base font-bold">لو</p>
-                    {f.conditions.length > 1 && (
-                        <div className="flex rounded-lg border bg-background p-0.5 text-sm">
-                            {(["all", "any"] as const).map(m => (
-                                <button key={m} type="button" disabled={disabled} onClick={() => onChange({ match: m })}
-                                    className={cn("rounded-md px-3 py-1", f.match === m ? "bg-[#25d366] font-semibold text-white" : "text-muted-foreground")}>
-                                    {m === "all" ? "كل الشروط (و)" : "أي شرط منهم (أو)"}
-                                </button>
-                            ))}
-                        </div>
-                    )}
-                </div>
-                {f.conditions.length === 0 && <p className="text-sm text-muted-foreground">من غير شروط: على كل الأوردرات.</p>}
-                {f.conditions.map((c, i) => {
-                    const choices = FIELD_CHOICES[c.field];
-                    return (
-                        <div key={i} className="flex flex-wrap items-center gap-2 rounded-lg bg-background p-2 ring-1 ring-border">
-                            {i > 0 && <span className="w-full text-xs font-bold text-[#0b7a3e]">{f.match === "any" ? "أو" : "و"}</span>}
-                            <select value={c.field} disabled={disabled} className={field}
-                                onChange={e => { const fl = e.target.value as FlowField; setCond(i, { field: fl, op: FIELD_OPS[fl][0], value: FIELD_CHOICES[fl]?.[0]?.value || "" }); }}>
-                                {fields.map(k => <option key={k} value={k}>{FIELD_LABEL[k]}</option>)}
-                            </select>
-                            <select value={c.op} disabled={disabled} className={field} onChange={e => setCond(i, { op: e.target.value as FlowCondition["op"] })}>
-                                {FIELD_OPS[c.field].map(o => <option key={o} value={o}>{OP_LABEL[o]}</option>)}
-                            </select>
-                            {choices ? (
-                                <select value={c.value} disabled={disabled} className={cn(field, "min-w-0 flex-1")} onChange={e => setCond(i, { value: e.target.value })}>
-                                    {choices.map(x => <option key={x.value} value={x.value}>{x.label}</option>)}
-                                </select>
-                            ) : (
-                                <input value={c.value} disabled={disabled} inputMode={["total", "items"].includes(c.field) ? "numeric" : undefined}
-                                    placeholder={c.field === "sku" ? "K71، K72" : c.field === "governorate" ? "القاهرة" : c.field === "total" ? "1500" : c.field === "reply" ? "كلمة في رد العميل" : ""}
-                                    className={cn(field, "min-w-0 flex-1")} onChange={e => setCond(i, { value: e.target.value })} />
-                            )}
-                            <Button variant="ghost" size="icon" disabled={disabled} aria-label="شيل الشرط" onClick={() => onChange({ conditions: f.conditions.filter((_, j) => j !== i) })}><Trash2 className="h-4 w-4" /></Button>
-                        </div>
-                    );
-                })}
-                <Button variant="outline" size="sm" disabled={disabled} className="gap-1"
-                    onClick={() => onChange({ conditions: [...f.conditions, { field: f.trigger.type === "reply" ? "reply" : "total", op: f.trigger.type === "reply" ? "contains" : "gt", value: "" }] })}>
-                    <Plus className="h-4 w-4" />شرط
-                </Button>
+                <ConditionsEditor title="لو" match={f.match} conditions={f.conditions} disabled={disabled} allowReply={f.trigger.type === "reply"}
+                    onChange={patch => onChange(patch)} />
             </div>
 
             <div className="space-y-2">
@@ -258,6 +215,65 @@ function FlowForm({ flow: f, members, disabled, onChange, onDelete }: {
                     <Trash2 className="h-4 w-4" />امسح القاعدة
                 </button>
             )}
+        </div>
+    );
+}
+
+/**
+ * Conditions on an order — «كل الشروط (و)» or «أي شرط منهم (أو)» — shared by
+ * the rules and by the automatic confirm / cancel settings.
+ */
+export function ConditionsEditor({ title, match, conditions, onChange, disabled, allowReply, empty }: {
+    title: string; match: "all" | "any"; conditions: FlowCondition[]; disabled: boolean; allowReply?: boolean; empty?: string;
+    onChange: (patch: { match?: "all" | "any"; conditions?: FlowCondition[] }) => void;
+}) {
+    const setCond = (i: number, patch: Partial<FlowCondition>) => onChange({ conditions: conditions.map((c, j) => (j === i ? { ...c, ...patch } : c)) });
+    const fields = (Object.keys(FIELD_LABEL) as FlowField[]).filter(k => k !== "reply" || allowReply);
+    return (
+        <div className="space-y-2">
+            <div className="flex flex-wrap items-center gap-2">
+                <p className="text-base font-bold">{title}</p>
+                {conditions.length > 1 && (
+                    <div className="flex rounded-lg border bg-background p-0.5 text-sm">
+                        {(["all", "any"] as const).map(m => (
+                            <button key={m} type="button" disabled={disabled} onClick={() => onChange({ match: m })}
+                                className={cn("rounded-md px-3 py-1", match === m ? "bg-[#25d366] font-semibold text-white" : "text-muted-foreground")}>
+                                {m === "all" ? "كل الشروط (و)" : "أي شرط منهم (أو)"}
+                            </button>
+                        ))}
+                    </div>
+                )}
+            </div>
+            {conditions.length === 0 && <p className="text-sm text-muted-foreground">{empty || "من غير شروط: على كل الأوردرات."}</p>}
+            {conditions.map((c, i) => {
+                const choices = FIELD_CHOICES[c.field];
+                return (
+                    <div key={i} className="flex flex-wrap items-center gap-2 rounded-lg bg-background p-2 ring-1 ring-border">
+                        {i > 0 && <span className="w-full text-xs font-bold text-[#0b7a3e]">{match === "any" ? "أو" : "و"}</span>}
+                        <select value={c.field} disabled={disabled} className={field}
+                            onChange={e => { const fl = e.target.value as FlowField; setCond(i, { field: fl, op: FIELD_OPS[fl][0], value: FIELD_CHOICES[fl]?.[0]?.value || "" }); }}>
+                            {fields.map(k => <option key={k} value={k}>{FIELD_LABEL[k]}</option>)}
+                        </select>
+                        <select value={c.op} disabled={disabled} className={field} onChange={e => setCond(i, { op: e.target.value as FlowCondition["op"] })}>
+                            {FIELD_OPS[c.field].map(o => <option key={o} value={o}>{OP_LABEL[o]}</option>)}
+                        </select>
+                        {choices ? (
+                            <select value={c.value} disabled={disabled} className={cn(field, "min-w-0 flex-1")} onChange={e => setCond(i, { value: e.target.value })}>
+                                {choices.map(x => <option key={x.value} value={x.value}>{x.label}</option>)}
+                            </select>
+                        ) : (
+                            <input value={c.value} disabled={disabled} inputMode={["total", "items"].includes(c.field) ? "numeric" : undefined}
+                                placeholder={c.field === "sku" ? "K71، K72" : c.field === "governorate" ? "القاهرة" : c.field === "total" ? "1500" : c.field === "reply" ? "كلمة في رد العميل" : ""}
+                                className={cn(field, "min-w-0 flex-1")} onChange={e => setCond(i, { value: e.target.value })} />
+                        )}
+                        <Button variant="ghost" size="icon" disabled={disabled} aria-label="شيل الشرط" onClick={() => onChange({ conditions: conditions.filter((_, j) => j !== i) })}><Trash2 className="h-4 w-4" /></Button>
+                    </div>
+                );
+            })}
+            <Button variant="outline" size="sm" disabled={disabled} className="gap-1"
+                onClick={() => onChange({ conditions: [...conditions, { field: allowReply ? "reply" : "total", op: allowReply ? "contains" : "gt", value: "" }] })}>
+                <Plus className="h-4 w-4" />شرط
+            </Button>
         </div>
     );
 }

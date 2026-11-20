@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { TEMPLATES } from "@/lib/whatsapp/templates";
-import { FlowsEditor } from "@/components/whatsapp/flows-editor";
+import { ConditionsEditor, FlowsEditor } from "@/components/whatsapp/flows-editor";
 import { TemplatesManager, type MetaTemplate } from "@/components/whatsapp/templates-manager";
 import { CASES, type MessageCase } from "@/lib/whatsapp/template-fields";
 import { UpsellSettings } from "@/components/whatsapp/upsell-settings";
@@ -136,6 +136,29 @@ export function WhatsAppTemplatesAndRules({ businessId, manager }: { businessId:
                         </span>
                         <Switch checked={settings.auto_confirm} onCheckedChange={v => set({ auto_confirm: v })} disabled={!manager} />
                     </label>
+                    {settings.auto_confirm && (
+                        <div className="rounded-xl border bg-muted/30 p-3">
+                            <ConditionsEditor title="بس للأوردرات اللي" match={settings.auto_confirm_rule.match} conditions={settings.auto_confirm_rule.conditions} disabled={!manager}
+                                empty="من غير شروط: أي أوردر (غير الحالات اللي فوق)."
+                                onChange={patch => set({ auto_confirm_rule: { ...settings.auto_confirm_rule, ...patch } })} />
+                            <p className="mt-2 text-xs text-muted-foreground">الأوردر اللي مش داخل في الشروط بيفضل للمودريتور، والعميل بيوصله «استلمنا تأكيدك وهنراجع طلبك».</p>
+                        </div>
+                    )}
+                    <label className="flex items-start justify-between gap-4 border-t pt-4">
+                        <span>
+                            <span className="block font-semibold">«إلغاء الطلب» يلغي الأوردر لوحده</span>
+                            <span className="block text-sm text-muted-foreground">بيتلغى أول ما العميل يدوس، وبعدين يتسأل عن السبب. لو مقفول (أو الأوردر مش داخل في الشروط)، الأوردر بيفضل ومكتوب عليه إن العميل عايز يلغي عشان المودريتور يكلمه.</span>
+                        </span>
+                        <Switch checked={settings.auto_cancel} onCheckedChange={v => set({ auto_cancel: v })} disabled={!manager} />
+                    </label>
+                    {settings.auto_cancel && (
+                        <div className="rounded-xl border bg-muted/30 p-3">
+                            <ConditionsEditor title="بس للأوردرات اللي" match={settings.auto_cancel_rule.match} conditions={settings.auto_cancel_rule.conditions} disabled={!manager}
+                                empty="من غير شروط: أي أوردر."
+                                onChange={patch => set({ auto_cancel_rule: { ...settings.auto_cancel_rule, ...patch } })} />
+                            <p className="mt-2 text-xs text-muted-foreground">مثلاً: الأوردرات اللي قيمتها أكتر من 1500 خليها للمودريتور يحاول يقنع العميل.</p>
+                        </div>
+                    )}
                     <div className="grid gap-3 sm:grid-cols-3">
                         <div className="space-y-1.5"><Label>الديبوزت (جنيه)</Label><Input type="number" min={0} value={settings.deposit_amount} disabled={!manager} onChange={e => set({ deposit_amount: Number(e.target.value) || 0 })} /></div>
                         <div className="space-y-1.5"><Label>رقم انستا باي</Label><Input dir="ltr" value={settings.deposit_instapay} disabled={!manager} onChange={e => set({ deposit_instapay: e.target.value })} /></div>
