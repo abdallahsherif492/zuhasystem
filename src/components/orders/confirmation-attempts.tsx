@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { teamName } from "@/lib/team-names";
 import {
-    Ban, CalendarClock, Wallet, CircleHelp, History, Loader2, MessageCircle, PencilLine, PhoneMissed, PhoneOff, Tag, ThumbsDown,
+    Ban, CalendarClock, Wallet, CircleHelp, History, Loader2, PencilLine, PhoneMissed, PhoneOff, Tag, ThumbsDown,
 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/lib/supabase";
@@ -31,8 +31,8 @@ export const ATTEMPT_REASONS: { key: AttemptReason; label: string; icon: React.C
     { key: "phone_off", label: "الموبايل مقفول / خارج الخدمة", icon: PhoneOff },
     { key: "wrong_number", label: "الرقم غلط", icon: Ban },
     { key: "call_later", label: "طلب نكلمه وقت تاني", icon: CalendarClock, hint: "اكتب الميعاد اللي قال عليه" },
-    { key: "whatsapp_pending", label: "مردش، وبعتناله واتساب", icon: MessageCircle },
-    { key: "no_reply", label: "مردش ولا اتصال ولا واتساب", icon: PhoneMissed },
+    { key: "whatsapp_pending", label: "مردش", icon: PhoneMissed },
+    { key: "no_reply", label: "مردش تاني", icon: PhoneMissed },
     { key: "deposit_pending", label: "وافق وهيحوّل الديبوزت", icon: Wallet, hint: "هيحوّل إمتى وعلى أنهي حساب" },
     { key: "thinking", label: "لسه بيفكر / متردد", icon: CircleHelp },
     { key: "wants_changes", label: "عايز يغيّر في الطلب", icon: PencilLine, hint: "اكتب التعديل المطلوب" },

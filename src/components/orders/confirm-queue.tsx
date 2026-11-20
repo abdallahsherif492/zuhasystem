@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { CalendarClock, Check, Loader2, MessageCircle, MoreHorizontal, PhoneCall, PhoneMissed, X } from "lucide-react";
+import { CalendarClock, Check, Loader2, MoreHorizontal, PhoneCall, PhoneMissed, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
@@ -190,10 +190,11 @@ export function FlowActions({ order, now, busy, onConfirm, onAttempt, onCancel, 
     const step = stepOf(order, scheduled ? nextAttemptAt(order) : now);
     const spin = (k: AttemptReason | "confirm") => busy === k && <Loader2 className="h-4 w-4 animate-spin" />;
     const big = "h-12 text-base font-semibold [&_svg]:size-5";
-    // Step 1: no answer, so a WhatsApp goes out. Step 2: no answer to either.
+    // Step 1: no answer (the company number's WhatsApp is already out).
+    // Step 2: no answer again, to the calls or the WhatsApp.
     const noAnswer: { reason: AttemptReason; label: string } = step === 1
-        ? { reason: "whatsapp_pending", label: "مردش، وبعتله واتساب" }
-        : { reason: "no_reply", label: "مردش ولا اتصال ولا واتساب" };
+        ? { reason: "whatsapp_pending", label: "مردش" }
+        : { reason: "no_reply", label: "مردش تاني" };
 
     return (
         <div dir="rtl" className="space-y-2">
@@ -206,7 +207,7 @@ export function FlowActions({ order, now, busy, onConfirm, onAttempt, onCancel, 
                 {step !== 3 && (
                     <Button variant="outline" disabled={!!busy} onClick={() => onAttempt(noAnswer.reason)}
                         className={cn(big, "col-span-2 bg-background sm:min-w-52")}>
-                        {spin(noAnswer.reason) || (noAnswer.reason === "whatsapp_pending" ? <MessageCircle /> : <PhoneMissed />)}{noAnswer.label}
+                        {spin(noAnswer.reason) || <PhoneMissed />}{noAnswer.label}
                     </Button>
                 )}
                 <Button variant="outline" disabled={!!busy} onClick={onCancel}

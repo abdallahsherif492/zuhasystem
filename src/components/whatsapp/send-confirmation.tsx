@@ -59,7 +59,7 @@ export function SendConfirmationButton({ order, businessId, className }: { order
         <Button type="button" onClick={send} disabled={sending}
             className={cn("h-12 w-full gap-2 bg-emerald-600 text-base font-semibold text-white hover:bg-emerald-700 sm:w-auto", className)}>
             {sending ? <Loader2 className="h-5 w-5 animate-spin" /> : sentAt ? <CheckCheck className="h-5 w-5" /> : <MessageSquareText className="h-5 w-5" />}
-            {sentAt ? "اتبعتت رسالة التأكيد · ابعت تاني" : "ابعت التأكيد من رقم الشركة"}
+            {sentAt ? "اتبعتت رسالة التأكيد" : "ابعت رسالة التأكيد"}
         </Button>
     );
 }

@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Loader2, Send } from "lucide-react";
+import { toast } from "sonner";
 import Link from "next/link";
 import { MessageCircle } from "lucide-react";
 import { supabase } from "@/lib/supabase";
@@ -24,6 +26,8 @@ export interface ChatState {
     confirmStatus: string | null;
     /** The confirmation failed because the number has no WhatsApp. */
     noWhatsApp: boolean;
+    /** The last template we sent (any kind), for the shipping problems page. */
+    lastTemplate: { name: string; at: string; status: string; noWhatsApp: boolean } | null;
 }
 
 interface Msg { customer_phone: string; direction: "in" | "out"; type: string; template_name: string | null; status: string; error: unknown; sent_at: string }
@@ -42,16 +46,20 @@ export function useChatStates(businessId: string | undefined) {
         const apply = (m: Msg, isNew = true) => {
             if (m.type === "reaction") return;
             const key = last10(m.customer_phone);
-            const s = out.get(key) || { phone: m.customer_phone, lastDirection: m.direction, lastAt: m.sent_at, waiting: 0, confirmSentAt: null, confirmStatus: null, noWhatsApp: false };
+            const s = out.get(key) || { phone: m.customer_phone, lastDirection: m.direction, lastAt: m.sent_at, waiting: 0, confirmSentAt: null, confirmStatus: null, noWhatsApp: false, lastTemplate: null };
             if (isNew && (m.sent_at >= s.lastAt || !out.has(key))) {
                 s.waiting = m.direction === "in" ? (s.lastDirection === "in" && out.has(key) ? s.waiting + 1 : 1) : 0;
                 s.lastDirection = m.direction;
                 s.lastAt = m.sent_at;
             }
+            const failedNoWa = m.status === "failed" && JSON.stringify(m.error || "").includes("131026");
+            if (m.direction === "out" && m.template_name && (!s.lastTemplate || m.sent_at >= s.lastTemplate.at)) {
+                s.lastTemplate = { name: m.template_name, at: m.sent_at, status: m.status, noWhatsApp: failedNoWa };
+            }
             if (m.direction === "out" && m.template_name && CONFIRM_TEMPLATES.includes(m.template_name) && (!s.confirmSentAt || m.sent_at >= s.confirmSentAt)) {
                 s.confirmSentAt = m.sent_at;
                 s.confirmStatus = m.status;
-                s.noWhatsApp = m.status === "failed" && JSON.stringify(m.error || "").includes("131026");
+                s.noWhatsApp = failedNoWa;
             }
             out.set(key, s);
         };
@@ -80,6 +88,10 @@ export function useChatStates(businessId: string | undefined) {
 
 export const chatStateOf = (states: Map<string, ChatState>, phone: string | null | undefined) =>
     (phone && states.get(last10(phone))) || null;
+
+/** The chats page's link for a phone, whichever way it was written. */
+export const chatHref = (state: ChatState | null, phone: string | null | undefined) =>
+    `/whatsapp?phone=${encodeURIComponent(state?.phone || (last10(phone).length === 10 ? `0${last10(phone)}` : String(phone || "")))}`;
 
 function since(iso: string, now: number) {
     const min = Math.max(0, Math.round((now - Date.parse(iso)) / 60_000));
@@ -120,11 +132,81 @@ export function OrderChatStatus({ state, now }: { state: ChatState | null; now: 
                 </span>
                 <span className="min-w-0">{text}</span>
             </p>
-            <Link href={`/whatsapp?phone=${encodeURIComponent(state.phone)}`}
+            <Link href={chatHref(state, state.phone)}
                 className={cn("inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg px-2.5 text-sm font-semibold",
                     waiting ? "bg-[#25d366] text-white hover:bg-[#1fb855]" : "bg-background ring-1 ring-border hover:bg-muted")}>
                 <MessageCircle className="h-4 w-4" />{waiting ? "رد عليه" : "الشات"}
             </Link>
+        </div>
+    );
+}
+
+/** The shipping templates, by what the customer reads. */
+const SHIPPING_TEMPLATES: Record<string, string> = {
+    delivery_failed: "المندوب ماقدرش يوصله", order_returning: "الشحنة راجعة", order_shipped: "اتشحن", order_delivered: "اتسلم",
+};
+const KIND_TEMPLATE = { hold: "delivery_failed", returning: "order_returning" } as const;
+
+/**
+ * The shipping problems page's WhatsApp line: the customer wrote and waits,
+ * or which message went out and when; a button to send the message for the
+ * order's problem when it did not go out; and the chat, always.
+ */
+export function ShippingChatStatus({ state, phone, now, businessId, orderId, kind }: {
+    state: ChatState | null; phone: string | null | undefined; now: number; businessId: string; orderId: string;
+    kind: "hold" | "returning" | null;
+}) {
+    const [sending, setSending] = useState(false);
+    const [sent, setSent] = useState(false);
+    if (!phone) return null;
+    const waiting = state?.lastDirection === "in";
+    const t = state?.lastTemplate;
+    const shippingMsg = t && SHIPPING_TEMPLATES[t.name] ? t : null;
+    const due = kind && !sent && !(shippingMsg && shippingMsg.name === KIND_TEMPLATE[kind] && shippingMsg.status !== "failed");
+
+    const send = async () => {
+        setSending(true);
+        const res = await fetch("/api/whatsapp/send-order", {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ business_id: businessId, order_id: orderId, kind }),
+        });
+        const body = await res.json().catch(() => ({}));
+        setSending(false);
+        if (!res.ok) { toast.error(body.error || "الرسالة ما اتبعتتش."); return; }
+        setSent(true);
+        toast.success("الرسالة اتبعتت من رقم الشركة.");
+    };
+
+    const text = waiting
+        ? `العميل بعت ${state!.waiting > 1 ? `${state!.waiting} رسايل` : "رسالة"} ${since(state!.lastAt, now)}`
+        : shippingMsg?.noWhatsApp
+            ? "الرسالة ما وصلتش: الرقم غالباً مش عليه واتساب"
+            : shippingMsg
+                ? `رسالة «${SHIPPING_TEMPLATES[shippingMsg.name]}» اتبعتت ${since(shippingMsg.at, now)} · ${SEEN[shippingMsg.status] || "اتبعتت"}`
+                : state ? `آخر رسالة مننا ${since(state.lastAt, now)}` : "مفيش رسايل مع العميل لسه";
+
+    return (
+        <div dir="rtl" className={cn("space-y-2 rounded-xl px-3 py-2",
+            waiting ? "bg-[#25d366]/15 ring-1 ring-[#25d366]/50" : shippingMsg?.noWhatsApp ? "bg-amber-50 ring-1 ring-amber-300 dark:bg-amber-950/40 dark:ring-amber-800" : "bg-muted")}>
+            <div className="flex items-center justify-between gap-2">
+                <p className={cn("flex min-w-0 items-center gap-2 text-sm sm:text-[15px]",
+                    waiting ? "font-bold text-[#0b7a3e] dark:text-[#25d366]" : shippingMsg?.noWhatsApp ? "font-semibold text-amber-900 dark:text-amber-100" : "font-medium text-muted-foreground")}>
+                    <span className={cn("h-2.5 w-2.5 shrink-0 rounded-full", waiting ? "bg-[#25d366]" : "bg-muted-foreground/50")} />
+                    <span className="min-w-0">{text}</span>
+                </p>
+                <Link href={chatHref(state, phone)}
+                    className={cn("inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg px-2.5 text-sm font-semibold",
+                        waiting ? "bg-[#25d366] text-white hover:bg-[#1fb855]" : "bg-background ring-1 ring-border hover:bg-muted")}>
+                    <MessageCircle className="h-4 w-4" />{waiting ? "رد عليه" : "الشات"}
+                </Link>
+            </div>
+            {due && !waiting && !shippingMsg?.noWhatsApp && (
+                <button type="button" onClick={send} disabled={sending}
+                    className="flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-[#25d366] text-sm font-bold text-white hover:bg-[#1fb855] disabled:opacity-60">
+                    {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4 -scale-x-100" />}
+                    ابعتله رسالة «{SHIPPING_TEMPLATES[KIND_TEMPLATE[kind!]]}»
+                </button>
+            )}
         </div>
     );
 }

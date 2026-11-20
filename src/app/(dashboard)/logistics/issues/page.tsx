@@ -3,13 +3,14 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useBusiness } from "@/contexts/BusinessContext";
+import { ShippingChatStatus, chatStateOf, useChatStates } from "@/components/whatsapp/order-chat-status";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { formatCurrency, cn, normalizeSearchText } from "@/lib/utils";
 import { Card, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
-    Loader2, LifeBuoy, Phone, MessageCircle, Search, RefreshCw,
+    Loader2, LifeBuoy, Phone, Search, RefreshCw,
     ChevronDown, Clock, Download, PhoneCall, PhoneMissed, PhoneOff, ClipboardCheck,
 } from "lucide-react";
 import * as XLSX from "xlsx";
@@ -18,7 +19,7 @@ import { format } from "date-fns";
 import { ago } from "@/components/orders/confirmation-attempts";
 import {
     FOLLOW_TABS, FOLLOW_TONE, FollowupRecorder, OrderBrief, byUrgency, loadOrderBriefs, type OrderBriefData, dayLabel, followChip, followDueAt, followStateOf, isFailed, outcomeLabel,
-    phoneNumbers, quickFollowup, todayStr, waLink, type Followup, type FollowState, type Issue,
+    phoneNumbers, quickFollowup, todayStr, type Followup, type FollowState, type Issue,
 } from "@/components/logistics/shipping-followup";
 
 const BUCKETS = [
@@ -55,6 +56,7 @@ export default function ShippingIssuesPage() {
     const [busy, setBusy] = useState<string | null>(null);
     // Worked out again each minute, so a retry whose time comes moves to "today".
     const [now, setNow] = useState(() => Date.now());
+    const chatStates = useChatStates(activeBusiness?.id);
     useEffect(() => {
         const timer = setInterval(() => setNow(Date.now()), 60_000);
         return () => clearInterval(timer);
@@ -471,6 +473,12 @@ export default function ShippingIssuesPage() {
                                         </p>
                                     )}
 
+                                    {activeBusiness && (
+                                        <ShippingChatStatus state={chatStateOf(chatStates, r.customer_phone)} phone={phones[0] || r.customer_phone} now={now}
+                                            businessId={activeBusiness.id} orderId={r.order_id}
+                                            kind={r.bucket === "hold" ? "hold" : r.bucket === "returning" ? "returning" : null} />
+                                    )}
+
                                     {phones.length === 0 ? (
                                         <p className="text-sm text-muted-foreground">مفيش رقم مسجل</p>
                                     ) : (
@@ -480,12 +488,6 @@ export default function ShippingIssuesPage() {
                                                     <a href={`tel:${num}`}><Phone /><span>{num}</span></a>
                                                 </Button>
                                             ))}
-                                            {phones.map(waLink).find(Boolean) && (
-                                                <Button asChild variant="outline"
-                                                    className={cn("h-12 gap-1.5 border-emerald-500/40 text-base text-emerald-700 hover:bg-emerald-500/10 dark:text-emerald-400 sm:min-w-32 [&_svg]:size-5", phones.length % 2 === 0 && "col-span-2")}>
-                                                    <a href={phones.map(waLink).find(Boolean)!} target="_blank" rel="noopener noreferrer"><MessageCircle /><span>واتساب</span></a>
-                                                </Button>
-                                            )}
                                         </div>
                                     )}
 

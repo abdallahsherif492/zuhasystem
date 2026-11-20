@@ -306,6 +306,10 @@ function ChatView({ phone, chat, messages, businessId, me, now, others, onBack, 
     };
 
     const sendConfirmation = (o: OrderLite) => post("/api/whatsapp/send-order", JSON.stringify({ business_id: businessId, order_id: o.id }));
+    // The message for a shipping problem, from the company number.
+    const shippingKind = (o: OrderLite) => { const st = o.status?.toLowerCase() || ""; return st.includes("hold") ? "hold" : st === "returning" ? "returning" : null; };
+    const sendShipping = (o: OrderLite) => post("/api/whatsapp/send-order", JSON.stringify({ business_id: businessId, order_id: o.id, kind: shippingKind(o) }));
+    const problemOrder = orders?.find(o => shippingKind(o)) || null;
 
     const confirmOrder = async (o: OrderLite) => {
         if (o.order_items.some(i => !i.variant_id) || (Number(o.paid_amount) || 0) > 0) {
@@ -356,6 +360,13 @@ function ChatView({ phone, chat, messages, businessId, me, now, others, onBack, 
                                 <div className="min-w-0 flex-1 text-sm">
                                     <p className="truncate font-semibold">{egp(o.total_amount)} · <span className={waiting ? "text-amber-600" : "text-muted-foreground"}>{STATUS_AR[o.status?.toLowerCase()] || o.status}</span></p>
                                     <p className="truncate text-xs text-muted-foreground">{o.order_items.map(i => `${i.variants?.products?.name || i.unmapped_name || "منتج"} ×${i.quantity}`).join("، ")}</p>
+                                    {shippingKind(o) && (
+                                        <div className="mt-1 flex gap-1.5">
+                                            <button type="button" disabled={sending} onClick={() => sendShipping(o)} className="rounded-md border px-2.5 py-1 text-xs font-semibold hover:bg-muted">
+                                                {shippingKind(o) === "hold" ? "ابعت «المندوب ماقدرش يوصله»" : "ابعت «الشحنة راجعة»"}
+                                            </button>
+                                        </div>
+                                    )}
                                     {waiting && (
                                         <div className="mt-1 flex gap-1.5">
                                             <button type="button" disabled={sending} onClick={() => sendConfirmation(o)} className="rounded-md border px-2.5 py-1 text-xs font-semibold hover:bg-muted">ابعت التأكيد</button>
@@ -436,8 +447,9 @@ function ChatView({ phone, chat, messages, businessId, me, now, others, onBack, 
                     </>
                 ) : (
                     <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-[#fff5c4] p-3 text-sm text-[#54656f] dark:bg-[#182229] dark:text-[#ffd279]">
-                        <span>{chat?.lastIn ? "عدّت 24 ساعة من آخر رسالة من العميل، فواتساب مش بيسمح برسالة عادية. اتصل بيه أو ابعت رسالة التأكيد." : "العميل لسه ما بعتش حاجة. ابدأ برسالة التأكيد."}</span>
-                        {waitingOrder && <Button size="sm" disabled={sending} onClick={() => sendConfirmation(waitingOrder)} className="bg-[#25d366] text-white hover:bg-[#1fb855]">ابعت رسالة التأكيد</Button>}
+                        <span>{chat?.lastIn ? "عدّت 24 ساعة من آخر رسالة من العميل، فواتساب مش بيسمح برسالة عادية. اتصل بيه أو ابعتله قالب." : "العميل لسه ما بعتش حاجة. ابدأ بقالب، ولما يرد تقدر تكتب عادي."}</span>
+                        {waitingOrder ? <Button size="sm" disabled={sending} onClick={() => sendConfirmation(waitingOrder)} className="bg-[#25d366] text-white hover:bg-[#1fb855]">ابعت رسالة التأكيد</Button>
+                            : problemOrder && <Button size="sm" disabled={sending} onClick={() => sendShipping(problemOrder)} className="bg-[#25d366] text-white hover:bg-[#1fb855]">{shippingKind(problemOrder) === "hold" ? "ابعت «المندوب ماقدرش يوصله»" : "ابعت «الشحنة راجعة»"}</Button>}
                     </div>
                 )}
             </footer>

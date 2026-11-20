@@ -118,8 +118,20 @@ export function whatsappSender(o: QueueOrder): string | null {
     return o.last_attempt_reason && ROUND_REASONS.has(o.last_attempt_reason) ? o.last_attempt_by ?? null : null;
 }
 
+/**
+ * Since 20 Nov 2026 the confirmation goes from the company number on its own,
+ * and its reply shows on the order. Before that a moderator sent it from
+ * their own phone, so only they could see the reply.
+ */
+const COMPANY_NUMBER_SINCE = Date.parse("2026-11-20T21:00:00Z");
+const fromOwnPhone = (o: QueueOrder) => {
+    const at = o.whatsapp_sent_at ? Date.parse(o.whatsapp_sent_at) : o.last_attempt_at ? Date.parse(o.last_attempt_at) : 0;
+    return at > 0 && at < COMPANY_NUMBER_SINCE;
+};
+
 /** Did the WhatsApp go from someone else's phone? Their email, if so. */
 export function whatsappFromOther(o: QueueOrder, me: string | null | undefined): string | null {
+    if (!fromOwnPhone(o)) return null;
     const by = whatsappSender(o);
     if (!by) return null;
     return me && by.toLowerCase() === me.toLowerCase() ? null : by;
@@ -133,22 +145,19 @@ export function instructionFor(o: QueueOrder, me: string | null | undefined, opt
     const step = stepOf(o, now);
     // Steps 2 and 3 always start from the WhatsApp: whoever sent it is asked
     // first, or, when nobody is known to have, the moderator checks it.
-    const sender = whatsappSender(o);
     const other = whatsappFromOther(o, me);
     const checkWa = other
         ? `اسأل ${shortName(other)} العميل ردّ على الواتساب اللي بعتهوله ولا لأ.`
-        : sender
-            ? "شوف العميل ردّ على الواتساب اللي بعتهوله ولا لأ."
-            : "شوف العميل ردّ على الواتساب ولا لأ.";
+        : "شوف العميل ردّ على رسالة الواتساب ولا لأ (السطر الأخضر في الكارت).";
     const ifNot = step === 3
         ? "لو مردش، اتصل بيه مرتين. لو مفيش رد، الغي الأوردر."
-        : step === 2 ? "لو مردش، اتصل بيه مرتين واختار اللي حصل من الزراير تحت."
-        : "لو مردش، ابعتله واتساب واختار «مردش، وبعتله واتساب».";
+        : step === 2 ? "لو مردش، اتصل بيه مرتين. لو مفيش رد، اختار «مردش تاني»."
+        : "لو مردش، اختار «مردش». رسالة التأكيد بتوصله لوحدها من رقم الشركة، ولو ردّ عليها هتشوفها هنا.";
 
     // After a call the instruction itself asks for: what if nobody answers.
     const afterCall = step === 3 ? "لو مفيش رد، الغي الأوردر."
-        : step === 2 ? "لو مردش، اختار «مردش ولا اتصال ولا واتساب»."
-        : "لو مردش، ابعتله واتساب واختار «مردش، وبعتله واتساب».";
+        : step === 2 ? "لو مردش، اختار «مردش تاني»."
+        : "لو مردش، اختار «مردش».";
 
     // Something the customer said last time comes first.
     switch (o.last_attempt_reason) {
@@ -157,7 +166,7 @@ export function instructionFor(o: QueueOrder, me: string | null | undefined, opt
         case "thinking": return { title: "العميل كان لسه بيفكر. كلّمه تاني.", detail: afterCall };
         case "wants_changes": return { title: "العميل كان عايز يعدّل في الطلب. كلّمه وعدّل وأكّد.", detail: afterCall };
         case "price": return { title: "العميل كان معترض على السعر أو الشحن. كلّمه تاني.", detail: afterCall };
-        case "wrong_number": return { title: "الرقم متسجل غلط: جرّب أي رقم تاني في الأوردر أو ابعت واتساب.", detail: "لو مفيش فايدة، الغي الأوردر." };
+        case "wrong_number": return { title: "الرقم متسجل غلط: جرّب أي رقم تاني في الأوردر.", detail: "لو مفيش فايدة، الغي الأوردر." };
     }
     if (step === 1) {
         return opts.missed

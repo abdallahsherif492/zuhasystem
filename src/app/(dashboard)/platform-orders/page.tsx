@@ -1421,7 +1421,7 @@ function PlatformOrdersContent() {
                             <FlowInstruction order={order} me={me} missed={isMissed(order)} now={now}>
                                 <ContactActions order={order as any} storeName={storeName} size="default" big
                                     inverse={queueStateOf(order, now) !== "scheduled"} onContact={() => claim(order)} />
-                                {activeBusiness && <SendConfirmationButton order={order as any} businessId={activeBusiness.id} />}
+                                {activeBusiness && !chatStateOf(chatStates, info.phone)?.confirmSentAt && <SendConfirmationButton order={order as any} businessId={activeBusiness.id} />}
                             </FlowInstruction>
 
                             {/* 3. What to keep in mind, and what happened last time. */}
