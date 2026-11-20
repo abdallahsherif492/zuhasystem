@@ -138,25 +138,25 @@ export function WhatsAppTemplatesAndRules({ businessId, manager }: { businessId:
                     </label>
                     {settings.auto_confirm && (
                         <div className="rounded-xl border bg-muted/30 p-3">
-                            <ConditionsEditor title="بس للأوردرات اللي" match={settings.auto_confirm_rule.match} conditions={settings.auto_confirm_rule.conditions} disabled={!manager}
-                                empty="من غير شروط: أي أوردر (غير الحالات اللي فوق)."
+                            <ConditionsEditor title="ماعدا الأوردرات اللي" match={settings.auto_confirm_rule.match} conditions={settings.auto_confirm_rule.conditions} disabled={!manager}
+                                empty="مفيش استثناءات: كل الأوردرات بتتأكد لوحدها (غير الحالات اللي فوق)."
                                 onChange={patch => set({ auto_confirm_rule: { ...settings.auto_confirm_rule, ...patch } })} />
-                            <p className="mt-2 text-xs text-muted-foreground">الأوردر اللي مش داخل في الشروط بيفضل للمودريتور، والعميل بيوصله «استلمنا تأكيدك وهنراجع طلبك».</p>
+                            <p className="mt-2 text-xs text-muted-foreground">الأوردر اللي داخل في الشروط دي مابيتأكدش لوحده: بيفضل للمودريتور، والعميل بيوصله «استلمنا تأكيدك وهنراجع طلبك».</p>
                         </div>
                     )}
                     <label className="flex items-start justify-between gap-4 border-t pt-4">
                         <span>
                             <span className="block font-semibold">«إلغاء الطلب» يلغي الأوردر لوحده</span>
-                            <span className="block text-sm text-muted-foreground">بيتلغى أول ما العميل يدوس، وبعدين يتسأل عن السبب. لو مقفول (أو الأوردر مش داخل في الشروط)، الأوردر بيفضل ومكتوب عليه إن العميل عايز يلغي عشان المودريتور يكلمه.</span>
+                            <span className="block text-sm text-muted-foreground">بيتلغى أول ما العميل يدوس، وبعدين يتسأل عن السبب. لو مقفول، الأوردر بيفضل ومكتوب عليه إن العميل عايز يلغي عشان المودريتور يكلمه.</span>
                         </span>
                         <Switch checked={settings.auto_cancel} onCheckedChange={v => set({ auto_cancel: v })} disabled={!manager} />
                     </label>
                     {settings.auto_cancel && (
                         <div className="rounded-xl border bg-muted/30 p-3">
-                            <ConditionsEditor title="بس للأوردرات اللي" match={settings.auto_cancel_rule.match} conditions={settings.auto_cancel_rule.conditions} disabled={!manager}
-                                empty="من غير شروط: أي أوردر."
+                            <ConditionsEditor title="ماعدا الأوردرات اللي" match={settings.auto_cancel_rule.match} conditions={settings.auto_cancel_rule.conditions} disabled={!manager}
+                                empty="مفيش استثناءات: كل الأوردرات بتتلغي لوحدها."
                                 onChange={patch => set({ auto_cancel_rule: { ...settings.auto_cancel_rule, ...patch } })} />
-                            <p className="mt-2 text-xs text-muted-foreground">مثلاً: الأوردرات اللي قيمتها أكتر من 1500 خليها للمودريتور يحاول يقنع العميل.</p>
+                            <p className="mt-2 text-xs text-muted-foreground">الأوردر اللي داخل في الشروط دي مابيتلغيش لوحده: بيفضل ومكتوب عليه إن العميل عايز يلغي عشان المودريتور يكلمه. مثلاً: قيمة الأوردر أكتر من 1500.</p>
                         </div>
                     )}
                     <div className="grid gap-3 sm:grid-cols-3">

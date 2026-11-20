@@ -7,9 +7,9 @@ import type { MessageCase, SavedTemplate } from "@/lib/whatsapp/template-fields"
 export interface WhatsAppSettings {
     /** A customer's «تأكيد» confirms the order when nothing needs a person. */
     auto_confirm: boolean;
-    /** …and only for orders that meet these (none: every order). */
+    /** …except the orders these describe (none: no exceptions).*/
     auto_confirm_rule: OrderRule;
-    /** A customer's «إلغاء الطلب» cancels the order at once (else it waits for a moderator). */
+    /** A customer's «إلغاء الطلب» cancels the order at once (else it waits for a moderator); except these. */
     auto_cancel: boolean;
     auto_cancel_rule: OrderRule;
     deposit_amount: number;

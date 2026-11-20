@@ -88,11 +88,11 @@ function test(c: FlowCondition, x: Ctx): boolean {
 }
 
 /**
- * Does the order meet these conditions? For the automatic confirm / cancel
- * settings (the same conditions as the rules). No conditions: yes.
+ * Is the order one of the exceptions of the automatic confirm / cancel
+ * settings (the same conditions as the rules)? No conditions: no exceptions.
  */
-export async function orderMeets(businessId: string, orderId: string, rule: { match: "all" | "any"; conditions: FlowCondition[] } | undefined, reply?: string) {
-    if (!rule?.conditions?.length) return true;
+export async function orderExcepted(businessId: string, orderId: string, rule: { match: "all" | "any"; conditions: FlowCondition[] } | undefined, reply?: string) {
+    if (!rule?.conditions?.length) return false;
     const order = await loadOrder(businessId, orderId);
     if (!order) return false;
     const x: Ctx = { businessId, orderId, order, phone: order.customer_info?.phone || "", reply };
