@@ -463,7 +463,7 @@ function Bubble({ m, tail, businessId, me, quoted, reaction, onReply }: {
     const out = m.direction === "out";
     const media = m.media_id ? `/api/whatsapp/media/${m.media_id}?business_id=${businessId}` : null;
     const header = m.payload?.header_image || null;
-    const buttons = m.type === "template" ? m.payload?.buttons || [] : [];
+    const buttons = m.direction === "out" && (m.type === "template" || m.type === "interactive") ? m.payload?.buttons || [] : [];
     const loc = m.payload?.location;
     return (
         // Tap (phone) or hover (desktop) shows reply / copy.

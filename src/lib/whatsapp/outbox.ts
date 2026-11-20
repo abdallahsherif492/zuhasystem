@@ -1,6 +1,7 @@
 import { admin } from "@/lib/whatsapp/server";
 import { sendOrderMessage } from "@/lib/whatsapp/order-messages";
 import { runEventFlows } from "@/lib/whatsapp/flows";
+import { offerUpsell } from "@/lib/whatsapp/upsell";
 import { whatsappSettingsOf, type OrderEvent } from "@/lib/whatsapp/settings";
 
 /**
@@ -60,6 +61,8 @@ export async function processOutbox(opts: { orderId?: string } = {}) {
             const r = await sendOrderMessage(item.business_id, item.order_id, event, "system", names.get(item.business_id));
             await finish(r.ok ? "sent" : "failed", r.ok ? undefined : r.error);
         }
+        // A moderator confirmed someone who wrote today: the offer (free inside the window).
+        if (event === "confirmed") { try { await offerUpsell(item.business_id, item.order_id, null); } catch (e) { console.error("whatsapp upsell", e); } }
         // The rules for this event (Settings → WhatsApp → الأتمتة), even when its built-in message is off.
         try { await runEventFlows(item.business_id, item.order_id, event); } catch (e) { console.error("whatsapp rules", e); }
     }

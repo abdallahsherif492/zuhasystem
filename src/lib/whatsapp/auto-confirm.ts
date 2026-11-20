@@ -2,6 +2,7 @@ import { deliveryRateOf } from "@/lib/easyorders-delivery-rate";
 import { admin } from "@/lib/whatsapp/server";
 import { reply, say } from "@/lib/whatsapp/system-text";
 import { runReplyFlows } from "@/lib/whatsapp/flows";
+import { offerUpsell, upsellAnswer } from "@/lib/whatsapp/upsell";
 import { CANCEL_CHOICES, CONFIRM_TEMPLATES, whatsappSettingsOf, type WhatsAppSettings } from "@/lib/whatsapp/settings";
 
 /**
@@ -68,6 +69,10 @@ export async function handleReply(businessId: string, m: Incoming) {
 }
 
 async function builtIn(businessId: string, m: Incoming) {
+    // The offer's buttons (lib/whatsapp/upsell.ts).
+    const buttonId = (m.payload as { interactive?: { button_reply?: { id?: string } } })?.interactive?.button_reply?.id || "";
+    if (buttonId.startsWith("upsell:") && (await upsellAnswer(businessId, m.customer_phone, buttonId))) return;
+
     const { data: biz } = await admin.from("businesses").select("theme_config").eq("id", businessId).maybeSingle();
     const settings = whatsappSettingsOf(biz?.theme_config);
     const listId = (m.payload as { interactive?: { list_reply?: { id?: string } } })?.interactive?.list_reply?.id || "";
@@ -224,4 +229,6 @@ async function confirm(businessId: string, m: Incoming, s: WhatsAppSettings) {
     if (!moved?.length) return;
     await log(businessId, orderId, "Pending (العميل أكد على الواتساب)");
     await say(businessId, phone, "تم تأكيد طلبك ✅ هيتجهز ويتشحن خلال يومين عمل، وهنبعتلك رقم البوليصة أول ما يتشحن.", orderId);
+    // The offer with a product's photo (Settings → WhatsApp → «عرض بعد التأكيد»).
+    try { await offerUpsell(businessId, orderId, phone); } catch (e) { console.error("whatsapp upsell", e); }
 }

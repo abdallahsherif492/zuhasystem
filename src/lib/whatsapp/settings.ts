@@ -15,6 +15,8 @@ export interface WhatsAppSettings {
     events: Record<OrderEvent, boolean>;
     /** «الأتمتة»: rules (lib/whatsapp/flow-types.ts). */
     flows: Flow[];
+    /** After confirming: one product often bought with the order, with its photo, at a discount (lib/whatsapp/upsell.ts). */
+    upsell: { enabled: boolean; discount_percent: number };
 }
 
 export type OrderEvent = "new_order" | "confirmed" | "shipped" | "hold" | "returning" | "delivered";
@@ -35,11 +37,12 @@ export const WHATSAPP_DEFAULTS: WhatsAppSettings = {
     min_address_words: 4,
     events: { new_order: true, confirmed: true, shipped: true, hold: true, returning: true, delivered: true },
     flows: [],
+    upsell: { enabled: true, discount_percent: 10 },
 };
 
 export function whatsappSettingsOf(themeConfig: { whatsapp?: Partial<WhatsAppSettings> } | null | undefined): WhatsAppSettings {
     const saved = themeConfig?.whatsapp || {};
-    return { ...WHATSAPP_DEFAULTS, ...saved, events: { ...WHATSAPP_DEFAULTS.events, ...(saved.events || {}) }, flows: Array.isArray(saved.flows) ? saved.flows : [] };
+    return { ...WHATSAPP_DEFAULTS, ...saved, events: { ...WHATSAPP_DEFAULTS.events, ...(saved.events || {}) }, flows: Array.isArray(saved.flows) ? saved.flows : [], upsell: { ...WHATSAPP_DEFAULTS.upsell, ...(saved.upsell || {}) } };
 }
 
 /** The confirmation templates: the current one (with «إلغاء الطلب») first. */

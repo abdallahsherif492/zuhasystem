@@ -21,6 +21,15 @@ interface OrderRow {
     order_items: { quantity: number; unmapped_name: string | null; variants: { title: string | null; products: { name: string | null; description: string | null; image_url: string | null } | null } | null }[];
 }
 
+/** A product's short Arabic name: from its description, else translated. */
+export async function arabicProductName(name: string | null | undefined, description: string | null | undefined, option?: string | null): Promise<string> {
+    const fromDesc = arabicProductLabel(description);
+    const base = fromDesc ? fromDesc.split(/\s[—–-]\s/)[0].replace(/…$/, "").trim() : await translateToArabic(plainEnglish(name || "منتج"));
+    const opt = option && !/^default/i.test(option.trim()) ? option.trim() : null;
+    if (!opt) return base;
+    return `${base} - ${ARABIC.test(opt) ? opt : await translateToArabic(opt)}`;
+}
+
 async function arabicName(it: OrderRow["order_items"][number]): Promise<string> {
     const p = it.variants?.products;
     const fromDesc = arabicProductLabel(p?.description);

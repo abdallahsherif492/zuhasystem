@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { TEMPLATES } from "@/lib/whatsapp/templates";
 import { FlowsEditor } from "@/components/whatsapp/flows-editor";
+import { UpsellSettings } from "@/components/whatsapp/upsell-settings";
 import { CONFIRM_TEMPLATES, ORDER_EVENTS, whatsappSettingsOf, type WhatsAppSettings } from "@/lib/whatsapp/settings";
 
 /**
@@ -152,6 +153,11 @@ export function WhatsAppTemplatesAndRules({ businessId, manager }: { businessId:
                     </div>
                     {manager && <Button onClick={save} disabled={saving}>{saving && <Loader2 className="me-2 h-4 w-4 animate-spin" />}احفظ</Button>}
                 </section>
+            )}
+
+            {settings && (
+                <UpsellSettings businessId={businessId} value={settings.upsell} manager={manager} saving={saving}
+                    onChange={upsell => set({ upsell })} onSave={save} />
             )}
 
             {settings && (
