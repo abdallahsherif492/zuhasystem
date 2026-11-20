@@ -1,3 +1,4 @@
+import type { Flow } from "@/lib/whatsapp/flow-types";
 /**
  * WhatsApp settings, kept in businesses.theme_config.whatsapp and set from
  * Settings → WhatsApp. Defaults are what the owner asked for.
@@ -12,6 +13,8 @@ export interface WhatsAppSettings {
     min_address_words: number;
     /** Sent on their own, per event (whatsapp_outbox, 20261125). */
     events: Record<OrderEvent, boolean>;
+    /** «الأتمتة»: rules (lib/whatsapp/flow-types.ts). */
+    flows: Flow[];
 }
 
 export type OrderEvent = "new_order" | "confirmed" | "shipped" | "hold" | "returning" | "delivered";
@@ -31,11 +34,12 @@ export const WHATSAPP_DEFAULTS: WhatsAppSettings = {
     deposit_wallet: "01100354568",
     min_address_words: 4,
     events: { new_order: true, confirmed: true, shipped: true, hold: true, returning: true, delivered: true },
+    flows: [],
 };
 
 export function whatsappSettingsOf(themeConfig: { whatsapp?: Partial<WhatsAppSettings> } | null | undefined): WhatsAppSettings {
     const saved = themeConfig?.whatsapp || {};
-    return { ...WHATSAPP_DEFAULTS, ...saved, events: { ...WHATSAPP_DEFAULTS.events, ...(saved.events || {}) } };
+    return { ...WHATSAPP_DEFAULTS, ...saved, events: { ...WHATSAPP_DEFAULTS.events, ...(saved.events || {}) }, flows: Array.isArray(saved.flows) ? saved.flows : [] };
 }
 
 /** The confirmation templates: the current one (with «إلغاء الطلب») first. */

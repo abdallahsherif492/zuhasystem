@@ -1,5 +1,7 @@
 import { deliveryRateOf } from "@/lib/easyorders-delivery-rate";
-import { accountOf, admin, graph, waNumber } from "@/lib/whatsapp/server";
+import { admin } from "@/lib/whatsapp/server";
+import { reply, say } from "@/lib/whatsapp/system-text";
+import { runReplyFlows } from "@/lib/whatsapp/flows";
 import { CANCEL_CHOICES, CONFIRM_TEMPLATES, whatsappSettingsOf, type WhatsAppSettings } from "@/lib/whatsapp/settings";
 
 /**
@@ -22,23 +24,7 @@ const norm = (s: string | null) => (s || "").replace(/[\p{P}\p{S}\s]+/gu, " ").t
 const YES = /^(تأكيد|تاكيد|تأكيد الطلب|أكد|اكد|أأكد|موافق|تمام|اوكي|اوك|ok|okay|yes|confirm)$/i;
 const CANCEL = /^(إلغاء الطلب|الغاء الطلب|إلغاء|الغاء|الغي|ألغي|cancel)$/i;
 
-interface Incoming { customer_phone: string; body: string | null; context_id: string | null; payload: unknown }
-
-async function reply(businessId: string, phone: string, message: Record<string, unknown>, text: string, orderId: string | null) {
-    const account = await accountOf(businessId);
-    if (!account) return;
-    const res = await graph(`${account.phone_number_id}/messages`, account.token, {
-        method: "POST", body: JSON.stringify({ messaging_product: "whatsapp", to: waNumber(phone), ...message }),
-    });
-    if (!res.ok) { console.error("whatsapp auto reply failed", res.body?.error?.message); return; }
-    await admin.from("whatsapp_messages").insert({
-        business_id: businessId, phone_number_id: account.phone_number_id, wa_message_id: res.body?.messages?.[0]?.id || null,
-        direction: "out", customer_phone: phone, type: String(message.type || "text"), body: text, status: "pending",
-        sent_by: "system", order_id: orderId, sent_at: new Date().toISOString(),
-    });
-}
-const say = (businessId: string, phone: string, text: string, orderId: string | null) =>
-    reply(businessId, phone, { type: "text", text: { body: text } }, text, orderId);
+interface Incoming { customer_phone: string; body: string | null; context_id: string | null; payload: unknown; wa_message_id?: string | null }
 
 /** The order the customer is answering about: the message replied to, else our latest confirmation in 3 days. */
 async function orderAskedAbout(businessId: string, phone: string, contextId: string | null): Promise<string | null> {
@@ -72,7 +58,16 @@ async function log(businessId: string, orderId: string, change: string) {
     });
 }
 
+/** A customer's message: the built-in answers first, then the rules of «الأتمتة». */
 export async function handleReply(businessId: string, m: Incoming) {
+    await builtIn(businessId, m);
+    try {
+        const orderId = await orderAskedAbout(businessId, m.customer_phone, m.context_id);
+        await runReplyFlows(businessId, orderId, m.customer_phone, m.body || "", m.wa_message_id || `${m.customer_phone}:${Date.now()}`);
+    } catch (e) { console.error("whatsapp rules", e); }
+}
+
+async function builtIn(businessId: string, m: Incoming) {
     const { data: biz } = await admin.from("businesses").select("theme_config").eq("id", businessId).maybeSingle();
     const settings = whatsappSettingsOf(biz?.theme_config);
     const listId = (m.payload as { interactive?: { list_reply?: { id?: string } } })?.interactive?.list_reply?.id || "";

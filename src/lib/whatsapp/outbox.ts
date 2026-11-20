@@ -1,5 +1,6 @@
 import { admin } from "@/lib/whatsapp/server";
 import { sendOrderMessage } from "@/lib/whatsapp/order-messages";
+import { runEventFlows } from "@/lib/whatsapp/flows";
 import { whatsappSettingsOf, type OrderEvent } from "@/lib/whatsapp/settings";
 
 /**
@@ -52,11 +53,15 @@ export async function processOutbox(opts: { orderId?: string } = {}) {
             await admin.from("whatsapp_outbox").update({ status, detail: detail || null, processed_at: new Date().toISOString() }).eq("id", item.id);
             done.push({ id: item.id, status, detail });
         };
-        if (!settingsOf.get(item.business_id)!.events[event]) { await finish("skipped", "off in settings"); continue; }
         const { data: order } = await admin.from("orders").select("status").eq("id", item.order_id).maybeSingle();
         if (!order || !STILL[event]?.(String(order.status).toLowerCase())) { await finish("skipped", `order is ${order?.status || "gone"}`); continue; }
-        const r = await sendOrderMessage(item.business_id, item.order_id, event, "system", names.get(item.business_id));
-        await finish(r.ok ? "sent" : "failed", r.ok ? undefined : r.error);
+        if (!settingsOf.get(item.business_id)!.events[event]) await finish("skipped", "off in settings");
+        else {
+            const r = await sendOrderMessage(item.business_id, item.order_id, event, "system", names.get(item.business_id));
+            await finish(r.ok ? "sent" : "failed", r.ok ? undefined : r.error);
+        }
+        // The rules for this event (Settings → WhatsApp → الأتمتة), even when its built-in message is off.
+        try { await runEventFlows(item.business_id, item.order_id, event); } catch (e) { console.error("whatsapp rules", e); }
     }
     return { ok: true as const, processed: done.length, done };
 }

@@ -134,6 +134,7 @@ export async function POST(request: Request) {
             }
             // Answers to the confirmation message: confirm, cancel, a cancel reason.
             for (const r of rows) {
+                if (r.type === "reaction") continue;
                 try { await handleReply(businessId, r); }
                 catch (e) { console.error("whatsapp auto reply failed", e); }
             }

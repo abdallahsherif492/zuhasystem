@@ -34,7 +34,7 @@ const firstName = (o: OrderRow) => String(o.customer_info?.name || "").trim().sp
 const due = (o: OrderRow) => String(Math.round(Math.max(0, (Number(o.total_amount) || 0) - (Number(o.paid_amount) || 0))));
 const ref = (o: OrderRow) => o.id.slice(0, 8).toUpperCase();
 
-export type OrderMessageKind = OrderEvent | "confirm";
+export type OrderMessageKind = OrderEvent | "confirm" | "reminder";
 
 export async function sendOrderMessage(businessId: string, orderId: string, kind: OrderMessageKind, sentBy: string, storeName?: string)
     : Promise<{ ok: true; message: unknown } | { ok: false; error: string }> {
@@ -59,6 +59,9 @@ export async function sendOrderMessage(businessId: string, orderId: string, kind
             { name: "order_confirm", params },
             { name: "order_confirmation", params },
         ];
+    } else if (kind === "reminder") {
+        const names = await Promise.all((o.order_items || []).map(arabicName));
+        tries = [{ name: "confirmation_reminder", params: [firstName(o), names.join("، ") || "طلبك"] }];
     } else if (kind === "confirmed") tries = [{ name: "order_confirmed", params: [firstName(o), ref(o), due(o)] }];
     else if (kind === "shipped") tries = [{ name: "order_shipped", params: [firstName(o), o.shipping_companies?.name || "شركة الشحن", o.courier_code || ref(o), due(o)] }];
     else if (kind === "hold") tries = [{ name: "delivery_failed", params: [firstName(o), ref(o)] }];

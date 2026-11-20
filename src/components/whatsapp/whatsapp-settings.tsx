@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { TEMPLATES } from "@/lib/whatsapp/templates";
+import { FlowsEditor } from "@/components/whatsapp/flows-editor";
 import { CONFIRM_TEMPLATES, ORDER_EVENTS, whatsappSettingsOf, type WhatsAppSettings } from "@/lib/whatsapp/settings";
 
 /**
@@ -151,6 +152,11 @@ export function WhatsAppTemplatesAndRules({ businessId, manager }: { businessId:
                     </div>
                     {manager && <Button onClick={save} disabled={saving}>{saving && <Loader2 className="me-2 h-4 w-4 animate-spin" />}احفظ</Button>}
                 </section>
+            )}
+
+            {settings && (
+                <FlowsEditor businessId={businessId} flows={settings.flows} manager={manager} saving={saving}
+                    onChange={flows => set({ flows })} onSave={save} />
             )}
         </>
     );
