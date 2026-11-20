@@ -2,6 +2,7 @@
 
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import Link from "next/link";
 import {
     ArrowDown, ArrowRight, Check, CheckCheck, Clock, Copy, CornerUpLeft, FileText, Loader2, MapPin, MessageCircle, MessageSquareDot,
     Paperclip, Phone, Search, Send, Smile, TriangleAlert, User, X,
@@ -16,6 +17,8 @@ import { teamName } from "@/lib/team-names";
 import { egp } from "@/components/orders/order-summary";
 import { telLink } from "@/lib/orders/contact";
 import { logBusinessAction } from "@/lib/logs/actions-logger";
+import { CancelOrderDialog } from "@/components/orders/cancel-order-dialog";
+import { CANCEL_REASON_FALLBACK, FLOW_CANCEL_REASONS, cancelReasonLabel, type CancelReason } from "@/lib/orders/cancel-reasons";
 import { QUICK_REPLIES, chatsOf, preview, windowUntil, type Chat, type WaMessage } from "@/lib/whatsapp/chats";
 import { clockLabel } from "@/lib/orders/confirm-queue";
 
@@ -131,7 +134,7 @@ function Chats() {
 
     return (
         <div dir="rtl" className="-m-4 flex h-[calc(100dvh-4rem)] min-h-0 overflow-hidden border-t sm:-m-6">
-            <aside className={cn("flex w-full min-w-0 flex-col border-s bg-background md:w-[360px] md:shrink-0", open && "hidden md:flex")}>
+            <aside className={cn("flex w-full min-w-0 flex-col border-s bg-background lg:w-[360px] lg:shrink-0", open && "hidden lg:flex")}>
                 <div className="space-y-2.5 bg-muted/40 px-3 pb-2.5 pt-3">
                     <h1 className="flex items-center gap-2 text-xl font-bold"><MessageCircle className="h-5 w-5 text-[#25d366]" />المحادثات</h1>
                     <div className="relative">
@@ -181,7 +184,7 @@ function Chats() {
                 </div>
             </aside>
 
-            <section className={cn("min-w-0 flex-1 flex-col", open ? "flex" : "hidden md:flex")}>
+            <section className={cn("min-w-0 flex-1 flex-col", open ? "flex" : "hidden lg:flex")}>
                 {open && businessId
                     ? <ChatView key={open} phone={open} chat={current} businessId={businessId} me={me} now={now}
                         others={others(open)} onBack={() => setOpen(null)} onSent={addSent}
@@ -195,6 +198,9 @@ function Chats() {
         </div>
     );
 }
+
+/** The order's number as printed on the waybill and in the messages. */
+const orderRef = (id: string) => id.slice(0, 8).toUpperCase();
 
 function Avatar({ name, size = 44 }: { name: string; size?: number }) {
     return (
@@ -311,6 +317,25 @@ function ChatView({ phone, chat, messages, businessId, me, now, others, onBack, 
     const sendShipping = (o: OrderLite) => post("/api/whatsapp/send-order", JSON.stringify({ business_id: businessId, order_id: o.id, kind: shippingKind(o) }));
     const problemOrder = orders?.find(o => shippingKind(o)) || null;
 
+    // «الغي الأوردر»: the same reasons as the confirmations page.
+    const [cancelling, setCancelling] = useState<OrderLite | null>(null);
+    const cancelOrder = async (o: OrderLite, reason: CancelReason, note: string | null) => {
+        const attempt = (r: CancelReason, n: string | null) => supabase.from("orders")
+            .update({ status: "Cancelled", cancel_reason: r, cancel_note: n })
+            .eq("business_id", businessId).eq("id", o.id).ilike("status", "waiting").select("id");
+        let { data, error } = await attempt(reason, note);
+        const older = CANCEL_REASON_FALLBACK[reason];
+        if (error?.code === "23514" && older) ({ data, error } = await attempt(older, [cancelReasonLabel(reason), note].filter(Boolean).join(" — ")));
+        if (error) { toast.error("ما اتلغاش، جرّب تاني."); return; }
+        if (!data?.length) { toast.info("الأوردر اتنقل قبل كده من زميلك."); loadOrders(); return; }
+        logBusinessAction({
+            businessId, userEmail: currentUser?.email || "Staff", actionType: "update_status", entityType: "order", entityId: o.id,
+            entityName: `Order #${o.id.slice(0, 8)}`, changes: [{ field: "Status", old_value: o.status, new_value: `Cancelled (from WhatsApp: ${cancelReasonLabel(reason)})` }],
+        });
+        toast.success("الأوردر اتلغى.");
+        loadOrders();
+    };
+
     const confirmOrder = async (o: OrderLite) => {
         if (o.order_items.some(i => !i.variant_id) || (Number(o.paid_amount) || 0) > 0) {
             toast.info("الأوردر ده محتاج يتأكد من صفحة التأكيد (منتج مش متربط أو ديبوزت).");
@@ -333,7 +358,7 @@ function ChatView({ phone, chat, messages, businessId, me, now, others, onBack, 
         <>
             <header className="flex items-center justify-between gap-2 bg-muted/40 px-2 py-2 sm:px-4">
                 <div className="flex min-w-0 items-center gap-2">
-                    <Button variant="ghost" size="icon" className="h-10 w-10 md:hidden" onClick={onBack} aria-label="ارجع للمحادثات"><ArrowRight className="h-6 w-6" /></Button>
+                    <Button variant="ghost" size="icon" className="h-10 w-10 lg:hidden" onClick={onBack} aria-label="ارجع للمحادثات"><ArrowRight className="h-6 w-6" /></Button>
                     <Avatar name={name} size={40} />
                     <div className="min-w-0">
                         <p className="truncate text-base font-semibold leading-tight">{name}</p>
@@ -349,7 +374,7 @@ function ChatView({ phone, chat, messages, businessId, me, now, others, onBack, 
             </header>
 
             {orders && orders.length > 0 && (
-                <div className="flex snap-x gap-2 overflow-x-auto border-b bg-background px-2 py-2 sm:px-3">
+                <div className="flex shrink-0 snap-x gap-2 overflow-x-auto border-b bg-background px-2 py-2 sm:px-3">
                     {orders.slice(0, 3).map(o => {
                         const waiting = o.status?.toLowerCase() === "waiting";
                         const img = o.order_items.map(i => i.variants?.products?.image_url).find(Boolean);
@@ -358,7 +383,11 @@ function ChatView({ phone, chat, messages, businessId, me, now, others, onBack, 
                                 {img ? /* eslint-disable-next-line @next/next/no-img-element */ <img src={img} alt="" className="h-12 w-12 shrink-0 rounded-lg object-cover" />
                                     : <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-muted text-lg">📦</span>}
                                 <div className="min-w-0 flex-1 text-sm">
-                                    <p className="truncate font-semibold">{egp(o.total_amount)} · <span className={waiting ? "text-amber-600" : "text-muted-foreground"}>{STATUS_AR[o.status?.toLowerCase()] || o.status}</span></p>
+                                    <p className="flex items-center gap-2 truncate">
+                                        <span className="font-mono text-[13px] font-bold tracking-wider" dir="ltr">#{orderRef(o.id)}</span>
+                                        <span className={cn("text-xs font-semibold", waiting ? "text-amber-600" : "text-muted-foreground")}>{STATUS_AR[o.status?.toLowerCase()] || o.status}</span>
+                                    </p>
+                                    <p className="truncate font-semibold">{egp(o.total_amount)}</p>
                                     <p className="truncate text-xs text-muted-foreground">{o.order_items.map(i => `${i.variants?.products?.name || i.unmapped_name || "منتج"} ×${i.quantity}`).join("، ")}</p>
                                     {shippingKind(o) && (
                                         <div className="mt-1 flex gap-1.5">
@@ -367,10 +396,14 @@ function ChatView({ phone, chat, messages, businessId, me, now, others, onBack, 
                                             </button>
                                         </div>
                                     )}
+                                    <div className="mt-1 flex flex-wrap gap-1.5">
+                                        <Link href={`/orders/${o.id}?edit=1`} className="rounded-md border px-2.5 py-1 text-xs font-semibold hover:bg-muted">عدّل الأوردر</Link>
+                                    </div>
                                     {waiting && (
                                         <div className="mt-1 flex gap-1.5">
                                             <button type="button" disabled={sending} onClick={() => sendConfirmation(o)} className="rounded-md border px-2.5 py-1 text-xs font-semibold hover:bg-muted">ابعت التأكيد</button>
                                             <button type="button" onClick={() => confirmOrder(o)} className="rounded-md bg-[#25d366] px-2.5 py-1 text-xs font-bold text-white hover:bg-[#1fb855]">أكّد الأوردر</button>
+                                            <button type="button" onClick={() => setCancelling(o)} className="rounded-md border border-destructive/40 px-2.5 py-1 text-xs font-bold text-destructive hover:bg-destructive/10">الغي الأوردر</button>
                                         </div>
                                     )}
                                 </div>
@@ -453,6 +486,11 @@ function ChatView({ phone, chat, messages, businessId, me, now, others, onBack, 
                     </div>
                 )}
             </footer>
+            {cancelling && (
+                <CancelOrderDialog customerName={cancelling.customer_info?.name || name} only={FLOW_CANCEL_REASONS} description="العميل قال إيه؟"
+                    open onOpenChange={v => { if (!v) setCancelling(null); }}
+                    onConfirm={(reason, note) => { const o = cancelling; setCancelling(null); return cancelOrder(o, reason, note); }} />
+            )}
         </>
     );
 }
@@ -496,6 +534,7 @@ function Bubble({ m, tail, businessId, me, quoted, reaction, onReply }: {
                     {m.body && m.type !== "document" && <p className="whitespace-pre-wrap break-words">{m.body}</p>}
                     {!m.body && !media && !header && m.type !== "location" && <p className="italic text-muted-foreground">{preview(m)}</p>}
                     <span className="mt-0.5 flex items-center justify-end gap-1 text-[11px] text-[#667781] dark:text-[#8696a0]">
+                        {m.order_id && <span className="font-mono" dir="ltr">#{orderRef(m.order_id)}</span>}
                         {out && m.sent_by && <span>{m.sent_by === "system" ? "تلقائي" : m.sent_by.toLowerCase() === me ? "انت" : teamName(m.sent_by)} ·</span>}
                         {time(m.sent_at)}
                         {out && <Ticks status={m.status} />}

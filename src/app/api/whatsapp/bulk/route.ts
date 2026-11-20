@@ -62,7 +62,7 @@ async function owed(businessId: string, kind: Kind, days: number): Promise<{ id:
             if (!CONFIRM_TEMPLATES.some(t => had.has(t)) && !had.has("order_confirm_photo")) out.push({ id: o.id, kind: "confirm" });
         } else {
             const k = String(o.status).toLowerCase().startsWith("hold") ? "hold" : "returning";
-            if (!had.has(SHIPPING_TEMPLATE[k])) out.push({ id: o.id, kind: k });
+            if (!had.has(SHIPPING_TEMPLATE[k]) && !had.has(`${SHIPPING_TEMPLATE[k]}_photo`)) out.push({ id: o.id, kind: k });
         }
     }
     return out;

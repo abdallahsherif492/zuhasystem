@@ -78,26 +78,40 @@ async function builtIn(businessId: string, m: Incoming) {
     const listId = (m.payload as { interactive?: { list_reply?: { id?: string } } })?.interactive?.list_reply?.id || "";
     const text = norm(m.body);
 
-    // A cancel reason picked from the list.
+    // A cancel reason picked from the list: the order was cancelled when the
+    // customer pressed «إلغاء الطلب»; the reason is filled in now.
     if (listId.startsWith("cancel:")) {
         const choice = CANCEL_CHOICES.find(c => c.id === listId);
         const orderId = await orderAskedAbout(businessId, m.customer_phone, m.context_id);
-        if (!choice || !orderId || !(await waitingOrder(businessId, orderId))) return;
-        const { data: moved } = await admin.from("orders")
-            .update({ status: "Cancelled", cancel_reason: choice.reason, cancel_note: `العميل لغى من الواتساب: ${choice.title}`, cancelled_by: "whatsapp-auto" })
-            .eq("business_id", businessId).eq("id", orderId).ilike("status", "waiting").select("id");
-        if (!moved?.length) return;
-        await log(businessId, orderId, `Cancelled (العميل لغى من الواتساب: ${choice.title})`);
+        if (!choice || !orderId) return;
+        const { data: o } = await admin.from("orders").select("status, cancelled_by").eq("business_id", businessId).eq("id", orderId).maybeSingle();
+        const st = String(o?.status || "").toLowerCase();
+        if (st === "cancelled" && o?.cancelled_by === "whatsapp-auto") {
+            await admin.from("orders").update({ cancel_reason: choice.reason, cancel_note: `العميل لغى من الواتساب: ${choice.title}` }).eq("id", orderId);
+        } else if (st === "waiting") {
+            const { data: moved } = await admin.from("orders")
+                .update({ status: "Cancelled", cancel_reason: choice.reason, cancel_note: `العميل لغى من الواتساب: ${choice.title}`, cancelled_by: "whatsapp-auto" })
+                .eq("business_id", businessId).eq("id", orderId).ilike("status", "waiting").select("id");
+            if (!moved?.length) return;
+            await log(businessId, orderId, `Cancelled (العميل لغى من الواتساب: ${choice.title})`);
+        } else return;
         await say(businessId, m.customer_phone, choice.reason === "other"
-            ? "تم إلغاء طلبك. لو حابب تقولنا السبب ابعتهولنا هنا، يهمنا نعرف 🌸"
-            : "تم إلغاء طلبك. لو غيرت رأيك في أي وقت ابعتلنا هنا 🌸", orderId);
+            ? "شكراً 🌸 لو حابب تقولنا السبب اكتبهولنا هنا، يهمنا نعرف."
+            : "شكراً إنك قولتلنا 🌸 لو غيرت رأيك في أي وقت ابعتلنا هنا.", orderId);
         return;
     }
 
+    // «إلغاء الطلب»: cancelled at once (a customer who never picks a reason
+    // must not leave the order waiting), then the reason is asked.
     if (CANCEL.test(text)) {
         const orderId = await orderAskedAbout(businessId, m.customer_phone, m.context_id);
         if (!orderId || !(await waitingOrder(businessId, orderId))) return;
-        const body = "تمام. ممكن تقولنا سبب الإلغاء؟";
+        const { data: moved } = await admin.from("orders")
+            .update({ status: "Cancelled", cancel_reason: "other", cancel_note: "العميل لغى من الواتساب (ضغط «إلغاء الطلب»)", cancelled_by: "whatsapp-auto" })
+            .eq("business_id", businessId).eq("id", orderId).ilike("status", "waiting").select("id");
+        if (!moved?.length) return;
+        await log(businessId, orderId, "Cancelled (العميل لغى من الواتساب)");
+        const body = "تم إلغاء طلبك. ممكن تقولنا السبب؟ يهمنا نعرف 🌸\nولو ضغطت بالغلط ابعتلنا هنا ونرجّعه.";
         await reply(businessId, m.customer_phone, {
             type: "interactive",
             interactive: {
@@ -106,6 +120,20 @@ async function builtIn(businessId: string, m: Incoming) {
             },
         }, body, orderId);
         return;
+    }
+
+    // Words after «سبب تاني» (within 2 hours): the reason, kept on the order.
+    if (text && !listId && !YES.test(text)) {
+        const { data: lastOut } = await admin.from("whatsapp_messages").select("order_id, body, sent_at")
+            .eq("business_id", businessId).eq("customer_phone", m.customer_phone).eq("direction", "out")
+            .order("sent_at", { ascending: false }).limit(1).maybeSingle();
+        if (lastOut?.order_id && /اكتبهولنا هنا|ممكن تقولنا السبب/.test(lastOut.body || "") && Date.now() - Date.parse(lastOut.sent_at) < 2 * 3_600_000) {
+            const { data: o } = await admin.from("orders").select("status, cancelled_by, cancel_note").eq("id", lastOut.order_id).maybeSingle();
+            if (String(o?.status).toLowerCase() === "cancelled" && o?.cancelled_by === "whatsapp-auto") {
+                await admin.from("orders").update({ cancel_note: `${o.cancel_note || "العميل لغى من الواتساب"} — قال: «${(m.body || "").slice(0, 300)}»` }).eq("id", lastOut.order_id);
+                return;
+            }
+        }
     }
 
     if (await shippingAnswer(businessId, m, text)) return;
@@ -135,6 +163,9 @@ const SHIPPING_ANSWERS: Record<string, Record<string, { outcome?: string; days?:
         "فيه مشكلة": { reply: () => "آسفين جداً 🙏 احكيلنا إيه المشكلة، ولو تقدر ابعت صورة، وهنحلها على طول." },
     },
 };
+// The photo versions take the same answers.
+SHIPPING_ANSWERS.delivery_failed_photo = SHIPPING_ANSWERS.delivery_failed;
+SHIPPING_ANSWERS.order_returning_photo = SHIPPING_ANSWERS.order_returning;
 const plain = (s: string) => s.replace(/[ّ]/g, "").replace(/[أإآ]/g, "ا").replace(/ة/g, "ه").trim();
 
 async function shippingAnswer(businessId: string, m: Incoming, text: string): Promise<boolean> {

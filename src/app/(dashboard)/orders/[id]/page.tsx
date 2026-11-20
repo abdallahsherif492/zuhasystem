@@ -81,7 +81,9 @@ export default function OrderDetailsPage() {
 
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
-    const [isEditing, setIsEditing] = useState(false);
+    // ?edit=1 (the chats page's «عدّل الأوردر») opens it ready to edit. Read
+    // on the client only; the first render is the loading spinner either way.
+    const [isEditing, setIsEditing] = useState(() => typeof window !== "undefined" && new URLSearchParams(window.location.search).get("edit") === "1");
     const [order, setOrder] = useState<any>(null);
 
     // Product Data for Selector

@@ -147,6 +147,7 @@ export function OrderChatStatus({ state, now }: { state: ChatState | null; now: 
 /** The shipping templates, by what the customer reads. */
 const SHIPPING_TEMPLATES: Record<string, string> = {
     delivery_failed: "المندوب ماقدرش يوصله", order_returning: "الشحنة راجعة", order_shipped: "اتشحن", order_delivered: "اتسلم",
+    delivery_failed_photo: "المندوب ماقدرش يوصله", order_returning_photo: "الشحنة راجعة",
 };
 const KIND_TEMPLATE = { hold: "delivery_failed", returning: "order_returning" } as const;
 
@@ -165,7 +166,7 @@ export function ShippingChatStatus({ state, phone, now, businessId, orderId, kin
     const waiting = state?.lastDirection === "in";
     const t = state?.lastTemplate;
     const shippingMsg = t && SHIPPING_TEMPLATES[t.name] ? t : null;
-    const due = kind && !sent && !(shippingMsg && shippingMsg.name === KIND_TEMPLATE[kind] && shippingMsg.status !== "failed");
+    const due = kind && !sent && !(shippingMsg && shippingMsg.name.replace(/_photo$/, "") === KIND_TEMPLATE[kind] && shippingMsg.status !== "failed");
 
     const send = async () => {
         setSending(true);

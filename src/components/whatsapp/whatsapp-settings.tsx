@@ -113,7 +113,7 @@ export function WhatsAppTemplatesAndRules({ businessId, manager }: { businessId:
                     <p className="text-sm text-muted-foreground">أول ما حالة الأوردر تتغير، العميل بتوصله الرسالة في خلال دقيقة من رقم الشركة. الأوردر الواحد مابيوصلوش نفس الرسالة مرتين.</p>
                     <ul className="divide-y">
                         {ORDER_EVENTS.map(e => {
-                            const ready = (e.key === "new_order" ? CONFIRM_TEMPLATES : [e.template]).some(n => byName.get(n)?.status === "APPROVED");
+                            const ready = (e.key === "new_order" ? CONFIRM_TEMPLATES : [e.template, `${e.template}_photo`]).some(n => byName.get(n)?.status === "APPROVED");
                             return (
                                 <li key={e.key}>
                                     <label className="flex items-center justify-between gap-4 py-3">

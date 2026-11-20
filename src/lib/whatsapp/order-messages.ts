@@ -73,8 +73,18 @@ export async function sendOrderMessage(businessId: string, orderId: string, kind
         tries = [{ name: "confirmation_reminder", params: [firstName(o), names.join("، ") || "طلبك"] }];
     } else if (kind === "confirmed") tries = [{ name: "order_confirmed", params: [firstName(o), ref(o), due(o)] }];
     else if (kind === "shipped") tries = [{ name: "order_shipped", params: [firstName(o), o.shipping_companies?.name || "شركة الشحن", o.courier_code || ref(o), due(o)] }];
-    else if (kind === "hold") tries = [{ name: "delivery_failed", params: [firstName(o), ref(o)] }];
-    else if (kind === "returning") tries = [{ name: "order_returning", params: [firstName(o), ref(o)] }];
+    else if (kind === "hold" || kind === "returning") {
+        // The product's name and photo when it has one (the photo templates),
+        // else the plain ones Meta approved first.
+        const names = await Promise.all((o.order_items || []).map(arabicName));
+        const line = (o.order_items || []).map((it, i) => `${names[i]} (عدد ${it.quantity || 1})`).join("، ") || "طلبك";
+        const image = (o.order_items || []).map(i => i.variants?.products?.image_url).find(Boolean) || null;
+        const [photo, plain] = kind === "hold" ? ["delivery_failed_photo", "delivery_failed"] : ["order_returning_photo", "order_returning"];
+        tries = [
+            ...(image ? [{ name: photo, params: [firstName(o), line, ref(o)], image }] : []),
+            { name: plain, params: [firstName(o), ref(o)] },
+        ];
+    }
     else tries = [{ name: "order_delivered", params: [firstName(o), storeName || "Zuha Store"] }];
 
     const to = waNumber(o.customer_info.phone);
