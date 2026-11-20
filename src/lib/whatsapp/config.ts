@@ -12,6 +12,8 @@ export const WHATSAPP_CONFIG_ID = process.env.NEXT_PUBLIC_WHATSAPP_CONFIG_ID || 
  */
 export const WHATSAPP_WABA_ID = process.env.WHATSAPP_WABA_ID || "2397259777694119";
 export const WHATSAPP_PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID || "1522742187579184";
+/** What Meta sends back when the webhook URL is saved; not a secret (the app secret signs every message). */
+export const WHATSAPP_VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN || "zuha-system-whatsapp";
 export const GRAPH_VERSION = "v25.0";
 export const GRAPH = `https://graph.facebook.com/${GRAPH_VERSION}`;
 export const WHATSAPP_MIGRATION = "supabase/migrations/20261123_whatsapp_accounts.sql";
