@@ -15,6 +15,8 @@ export interface WaMessage {
     body: string | null;
     media_id: string | null;
     media_mime: string | null;
+    context_id?: string | null;
+    payload?: { params?: string[]; buttons?: string[]; header_image?: string | null; reaction?: { emoji: string; message_id: string }; location?: { latitude: number; longitude: number }; document?: { filename?: string } } | null;
     template_name: string | null;
     status: string;
     error: unknown;
@@ -29,6 +31,8 @@ export interface Chat {
     last: WaMessage;
     /** Customer messages since our last reply. */
     waiting: number;
+    /** Customer messages nobody on the team opened yet. */
+    unread: number;
     lastIn: WaMessage | null;
     mine: boolean;
 }
@@ -38,6 +42,7 @@ const DAY = 24 * 3_600_000;
 export function chatsOf(messages: WaMessage[], me: string | null): Chat[] {
     const by = new Map<string, WaMessage[]>();
     for (const m of messages) {
+        if (m.type === "reaction") continue;
         const list = by.get(m.customer_phone) || [];
         list.push(m);
         by.set(m.customer_phone, list);
@@ -48,10 +53,11 @@ export function chatsOf(messages: WaMessage[], me: string | null): Chat[] {
         const last = list[list.length - 1];
         let waiting = 0;
         for (let i = list.length - 1; i >= 0 && list[i].direction === "in"; i--) waiting++;
+        const unread = list.filter(m => m.direction === "in" && m.status === "received").length;
         const lastIn = [...list].reverse().find(m => m.direction === "in") || null;
         const name = [...list].reverse().find(m => m.contact_name)?.contact_name || null;
         const mine = !!me && list.some(m => m.direction === "out" && m.sent_by?.toLowerCase() === me.toLowerCase());
-        out.push({ phone, name, last, waiting, lastIn, mine });
+        out.push({ phone, name, last, waiting, unread, lastIn, mine });
     }
     return out.sort((a, b) => Date.parse(b.last.sent_at) - Date.parse(a.last.sent_at));
 }

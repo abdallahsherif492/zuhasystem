@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { translateToArabic } from "@/lib/translate-ar";
 
 /**
  * English product names into Arabic, for the confirmation message a
@@ -10,15 +11,7 @@ import { NextResponse } from "next/server";
 const MAX_TEXTS = 30;
 const MAX_LEN = 200;
 
-async function translate(text: string): Promise<string> {
-    const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=ar&dt=t&q=${encodeURIComponent(text)}`;
-    const res = await fetch(url, { signal: AbortSignal.timeout(4000) });
-    if (!res.ok) return text;
-    const data = await res.json() as unknown;
-    const parts = Array.isArray(data) && Array.isArray(data[0]) ? (data[0] as unknown[][]) : [];
-    const out = parts.map(p => (typeof p?.[0] === "string" ? p[0] : "")).join("").trim();
-    return out || text;
-}
+const translate = translateToArabic;
 
 export async function POST(request: Request) {
     const body = await request.json().catch(() => null) as { texts?: unknown } | null;

@@ -448,6 +448,21 @@ export async function POST(request: Request) {
             }
         }
 
+        // The product's photo, from the store, for the WhatsApp confirmation
+        // and the chats (products.image_url, 20261125). Only where none is set.
+        try {
+            const photos = new Map<string, string>();
+            for (const item of rawItems) {
+                const sku = normalizeStr(item.variant?.taager_code || item.product?.sku || item.sku || "");
+                const thumb = item.product?.thumb || item.product?.images?.[0] || item.thumb;
+                const v = sku ? variantsMap.get(sku) : null;
+                if (v?.product_id && typeof thumb === "string" && /^https:\/\//.test(thumb)) photos.set(v.product_id, thumb);
+            }
+            for (const [productId, url] of photos) {
+                await supabase.from("products").update({ image_url: url }).eq("id", productId).eq("business_id", businessId).is("image_url", null);
+            }
+        } catch { /* before 20261125: no column yet */ }
+
         // Whoever was a "missed order" with this phone has now ordered
         // (20261025_missed_leads.sql; harmless before it is run).
         if (phone1) {

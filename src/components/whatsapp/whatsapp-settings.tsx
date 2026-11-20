@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { TEMPLATES } from "@/lib/whatsapp/templates";
-import { whatsappSettingsOf, type WhatsAppSettings } from "@/lib/whatsapp/settings";
+import { CONFIRM_TEMPLATES, ORDER_EVENTS, whatsappSettingsOf, type WhatsAppSettings } from "@/lib/whatsapp/settings";
 
 /**
  * Settings → WhatsApp, below the connected number: the message templates and
@@ -104,6 +104,31 @@ export function WhatsAppTemplatesAndRules({ businessId, manager }: { businessId:
                     </ul>
                 )}
             </section>
+
+            {settings && (
+                <section className="space-y-3 rounded-2xl border bg-card p-5">
+                    <h2 className="text-lg font-bold">رسايل بتتبعت لوحدها</h2>
+                    <p className="text-sm text-muted-foreground">أول ما حالة الأوردر تتغير، العميل بتوصله الرسالة في خلال دقيقة من رقم الشركة. الأوردر الواحد مابيوصلوش نفس الرسالة مرتين.</p>
+                    <ul className="divide-y">
+                        {ORDER_EVENTS.map(e => {
+                            const ready = (e.key === "new_order" ? CONFIRM_TEMPLATES : [e.template]).some(n => byName.get(n)?.status === "APPROVED");
+                            return (
+                                <li key={e.key}>
+                                    <label className="flex items-center justify-between gap-4 py-3">
+                                        <span className="min-w-0">
+                                            <span className="block font-semibold">{e.label}</span>
+                                            {meta && !ready && <span className="block text-xs text-amber-700">القالب لسه ماتوافقش عليه، هيبدأ يتبعت أول ما Meta توافق.</span>}
+                                        </span>
+                                        <Switch checked={settings.events[e.key]} disabled={!manager}
+                                            onCheckedChange={v => set({ events: { ...settings.events, [e.key]: v } })} />
+                                    </label>
+                                </li>
+                            );
+                        })}
+                    </ul>
+                    {manager && <Button onClick={save} disabled={saving}>{saving && <Loader2 className="me-2 h-4 w-4 animate-spin" />}احفظ</Button>}
+                </section>
+            )}
 
             {settings && (
                 <section className="space-y-4 rounded-2xl border bg-card p-5">

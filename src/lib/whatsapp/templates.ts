@@ -9,9 +9,20 @@ export interface TemplateDef {
     body: string;
     example: string[];
     buttons?: string[];
+    /** A product photo above the text. */
+    imageHeader?: boolean;
 }
 
+const CONFIRM_BODY = "أهلاً {{1}}\nشكراً إنك طلبت من Zuha Store.\n\nبرجاء تأكيد طلبك:\n{{2}}\n\nالمطلوب عند الاستلام: {{3}} جنيه\n\nالرجاء الرد بكلمة «تأكيد» لتأكيد الأوردر.";
+
 export const TEMPLATES: TemplateDef[] = [
+    {
+        name: "order_confirm_photo", purpose: "أوردر جديد بصورة المنتج: برجاء التأكيد",
+        body: CONFIRM_BODY,
+        example: ["ساره", "مطحنة بن وتوابل (عدد 1)، طقم بلانشات خشب (عدد 2)", "655"],
+        buttons: ["تأكيد", "إلغاء الطلب"],
+        imageHeader: true,
+    },
     {
         name: "order_confirm", purpose: "أوردر جديد: برجاء التأكيد",
         body: "أهلاً {{1}}\nشكراً إنك طلبت من Zuha Store.\n\nبرجاء تأكيد طلبك:\n{{2}}\n\nالمطلوب عند الاستلام: {{3}} جنيه\n\nالرجاء الرد بكلمة «تأكيد» لتأكيد الأوردر.",
@@ -54,11 +65,20 @@ export const TEMPLATES: TemplateDef[] = [
     },
 ];
 
-/** The body Meta's API expects for creating a template. */
-export function templatePayload(t: TemplateDef) {
-    const components: Record<string, unknown>[] = [
-        { type: "BODY", text: t.body, example: { body_text: [t.example] } },
-    ];
+export const templateDef = (name: string | null | undefined) => TEMPLATES.find(t => t.name === name) ||
+    (name === "order_confirmation" ? { ...TEMPLATES.find(t => t.name === "order_confirm")!, name, buttons: ["تأكيد"] } : undefined);
+
+/** The text the customer reads: the template with its values filled in. */
+export function renderTemplate(name: string, params: string[]): string | null {
+    const t = templateDef(name);
+    return t ? t.body.replace(/\{\{(\d+)\}\}/g, (_, n) => params[Number(n) - 1] ?? "") : null;
+}
+
+/** The body Meta's API expects for creating a template; a photo header needs an uploaded sample. */
+export function templatePayload(t: TemplateDef, headerHandle?: string) {
+    const components: Record<string, unknown>[] = [];
+    if (t.imageHeader && headerHandle) components.push({ type: "HEADER", format: "IMAGE", example: { header_handle: [headerHandle] } });
+    components.push({ type: "BODY", text: t.body, example: { body_text: [t.example] } });
     if (t.buttons?.length) components.push({ type: "BUTTONS", buttons: t.buttons.map(text => ({ type: "QUICK_REPLY", text })) });
     return { name: t.name, language: "ar", category: "UTILITY", components };
 }

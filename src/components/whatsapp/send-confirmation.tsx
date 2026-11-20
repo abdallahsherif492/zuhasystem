@@ -5,8 +5,7 @@ import { CheckCheck, Loader2, MessageSquareText } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { arabicItemLabels, type NamedItem } from "@/lib/orders/arabic-names";
-import { CONFIRM_TEMPLATE } from "@/lib/whatsapp/settings";
+import { type NamedItem } from "@/lib/orders/arabic-names";
 
 /**
  * «ابعت التأكيد من رقم الشركة»: the confirmation template, sent from the
@@ -45,18 +44,9 @@ export function SendConfirmationButton({ order, businessId, className }: { order
 
     const send = async () => {
         setSending(true);
-        const items = order.order_items || [];
-        const labels = await arabicItemLabels(items).catch(() => undefined);
-        const line = items.map((it, i) => `${labels?.[i] || it.variants?.products?.name || it.unmapped_name || "منتج"} (عدد ${it.quantity || 1})`).join("، ");
-        const due = Math.max(0, (Number(order.total_amount) || 0) - (Number(order.paid_amount) || 0));
-        const first = String(order.customer_info?.name || "").trim().split(/\s+/)[0] || "عميلنا";
-        const res = await fetch("/api/whatsapp/send", {
+        const res = await fetch("/api/whatsapp/send-order", {
             method: "POST", headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                business_id: businessId, phone: order.customer_info!.phone, order_id: order.id,
-                template: { name: CONFIRM_TEMPLATE, language: "ar", params: [first, line, String(Math.round(due))] },
-                preview: `رسالة التأكيد: ${line} · ${Math.round(due)} جنيه`,
-            }),
+            body: JSON.stringify({ business_id: businessId, order_id: order.id }),
         });
         const body = await res.json().catch(() => ({}));
         setSending(false);

@@ -15,7 +15,7 @@ const clean = (s: string) => String(s ?? "").replace(/[\r\n\t]+/g, " ").replace(
 
 export async function POST(request: Request) {
     const body = await request.json().catch(() => null) as {
-        business_id?: string; phone?: string; text?: string; order_id?: string | null;
+        business_id?: string; phone?: string; text?: string; order_id?: string | null; reply_to?: string | null;
         template?: { name: string; language?: string; params?: string[] }; preview?: string;
     } | null;
     if (!body?.business_id || !body.phone || (!body.text?.trim() && !body.template?.name)) {
@@ -39,7 +39,7 @@ export async function POST(request: Request) {
                     : [],
             },
         }
-        : { messaging_product: "whatsapp", to, type: "text", text: { body: body.text!.trim() } };
+        : { messaging_product: "whatsapp", to, type: "text", text: { body: body.text!.trim(), preview_url: true }, ...(body.reply_to ? { context: { message_id: body.reply_to } } : {}) };
 
     const sent = await graph(`${account.phone_number_id}/messages`, account.token, { method: "POST", body: JSON.stringify(message) });
     if (!sent.ok) return NextResponse.json({ error: sendError(sent.body) }, { status: 502 });
@@ -55,6 +55,7 @@ export async function POST(request: Request) {
         type: body.template ? "template" : "text",
         body: body.template ? (body.preview || body.template.params?.join(" · ") || body.template.name) : body.text!.trim(),
         template_name: body.template?.name || null,
+        context_id: body.reply_to || null,
         status: "pending",
         sent_by: who.email,
         order_id: body.order_id || null,

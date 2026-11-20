@@ -40,6 +40,7 @@ import { fetchDeliveryRatesAction } from "./delivery-rate-actions";
 import { MISSED_ORDERS_IN_QUEUE, MissedOrderNote } from "@/components/orders/missed-order";
 import { OrderSummary, egp } from "@/components/orders/order-summary";
 import { SendConfirmationButton } from "@/components/whatsapp/send-confirmation";
+import { OrderChatStatus, chatStateOf, useChatStates } from "@/components/whatsapp/order-chat-status";
 import { governorateArabic } from "@/lib/governorates";
 import { CancelOrderDialog } from "@/components/orders/cancel-order-dialog";
 import {
@@ -962,6 +963,7 @@ function PlatformOrdersContent() {
     const [busy, setBusy] = useState<{ id: string; what: AttemptReason | "confirm" } | null>(null);
     const [focusId, setFocusId] = useState<string | null>(null);
     const [now, setNow] = useState(() => Date.now());
+    const chatStates = useChatStates(activeBusiness?.id);
     useEffect(() => {
         const timer = setInterval(() => setNow(Date.now()), 60_000);
         return () => clearInterval(timer);
@@ -1413,6 +1415,7 @@ function PlatformOrdersContent() {
                                 </div>
                                 <p className="shrink-0 text-xl font-bold tabular-nums">{egp(order.total_amount)}</p>
                             </div>
+                            <OrderChatStatus state={chatStateOf(chatStates, info.phone)} now={now} />
 
                             {/* 2. What to do now, with the buttons to do it. */}
                             <FlowInstruction order={order} me={me} missed={isMissed(order)} now={now}>

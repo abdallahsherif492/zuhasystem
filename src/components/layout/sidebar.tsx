@@ -14,6 +14,7 @@ import { LayoutDashboard, AlertTriangle, Package, ShoppingCart, Settings, Users,
 import Image from "next/image";
 import { useState, useEffect } from "react";
 import { MISSED_ORDERS_IN_QUEUE } from "@/components/orders/missed-order";
+import { useWhatsAppWaiting } from "@/hooks/use-whatsapp-waiting";
 
 interface SidebarProps extends React.HTMLAttributes<HTMLDivElement> { }
 
@@ -97,6 +98,7 @@ export function SidebarContent({ onLinkClick }: { onLinkClick?: () => void }) {
     // queue is visible without opening it — previously the only way to know
     // work had arrived was to go and look.
     const [waitingCount, setWaitingCount] = useState(0);
+    const waChats = useWhatsAppWaiting(activeBusiness?.id);
     useEffect(() => {
         if (!activeBusiness) return;
         let cancelled = false;
@@ -371,7 +373,10 @@ export function SidebarContent({ onLinkClick }: { onLinkClick?: () => void }) {
                                                     )}
                                                 >
                                                     <item.icon className={cn("mr-3 h-4 w-4", isActive ? "text-primary-foreground" : "opacity-70")} />
-                                                    {item.title}
+                                                    <span className="flex-1 text-start">{item.title}</span>
+                                                    {item.href === "/whatsapp" && waChats > 0 && (
+                                                        <span className="ms-2 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-[#25d366] px-1.5 text-[11px] font-bold tabular-nums text-white">{waChats}</span>
+                                                    )}
                                                 </Button>
                                             </Link>
                                             
