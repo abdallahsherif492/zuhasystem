@@ -16,7 +16,7 @@ export interface WaMessage {
     media_id: string | null;
     media_mime: string | null;
     context_id?: string | null;
-    payload?: { params?: string[]; buttons?: string[]; header_image?: string | null; reaction?: { emoji: string; message_id: string }; location?: { latitude: number; longitude: number }; document?: { filename?: string } } | null;
+    payload?: { params?: string[]; buttons?: string[]; header_image?: string | null; cards?: { image: string; title: string; price: number; old_price: number; variant_id: string }[]; reaction?: { emoji: string; message_id: string }; location?: { latitude: number; longitude: number }; document?: { filename?: string } } | null;
     template_name: string | null;
     status: string;
     error: unknown;

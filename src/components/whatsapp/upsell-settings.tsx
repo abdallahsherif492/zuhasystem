@@ -33,8 +33,8 @@ export function UpsellSettings({ businessId, value, onChange, onSave, saving, ma
                 <span>
                     <span className="flex items-center gap-2 text-lg font-bold"><Gift className="h-5 w-5 text-[#25d366]" />عرض بعد التأكيد</span>
                     <span className="mt-1 block text-sm text-muted-foreground">
-                        أول ما الأوردر يتأكد، العميل بتوصله صور منتجات بتتشري كتير مع اللي طلبه، بخصم، وزرار «ضيفه لطلبي» بيضيف المنتج لنفس الأوردر من غير شحن زيادة.
-                        كل منتج في رسالة بصورته وزرار لوحده، والعميل يقدر يضيف أكتر من واحد. بيتبعت بس لو العميل كاتبلنا النهارده (ببلاش)، ومرة واحدة للأوردر، ومفيش منتج بيتعرض من غير صورة.
+                        أول ما الأوردر يتأكد، العميل بيوصله كاروسيل منتجات بصورها: الأول اللي بيتشري كتير مع اللي طلبه، والباقي رفايع رخيصة موجودة في المخزن، فكل أوردر عليه عرض. كل كارت عليه زرار «ضيفه لطلبي» بيضيف المنتج لنفس الأوردر بخصم ومن غير شحن زيادة.
+                        العميل يقدر يضيف أكتر من منتج. بيتبعت بس لو العميل كاتبلنا النهارده (ببلاش)، ومرة واحدة للأوردر، ومفيش منتج بيتعرض من غير صورة.
                     </span>
                 </span>
                 <Switch checked={value.enabled} disabled={!manager} onCheckedChange={v => onChange({ ...value, enabled: v })} />
@@ -51,8 +51,15 @@ export function UpsellSettings({ businessId, value, onChange, onSave, saving, ma
                     <span className="text-sm font-semibold">عدد المنتجات في العرض</span>
                     <select value={value.count} disabled={!manager} onChange={e => onChange({ ...value, count: Number(e.target.value) })}
                         className="flex h-9 w-24 rounded-md border bg-background px-2 text-sm">
-                        {[1, 2, 3, 4, 5].map(n => <option key={n} value={n}>{n}</option>)}
+                        {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => <option key={n} value={n}>{n}</option>)}
                     </select>
+                </label>
+                <label className="space-y-1.5">
+                    <span className="text-sm font-semibold">الرفايع لحد</span>
+                    <span className="flex items-center gap-2">
+                        <Input type="number" min={10} className="w-24" value={value.cheap_max} disabled={!manager}
+                            onChange={e => onChange({ ...value, cheap_max: Math.max(10, Number(e.target.value) || 150) })} />جنيه
+                    </span>
                 </label>
                 {stats && (
                     <p className="text-sm text-muted-foreground">

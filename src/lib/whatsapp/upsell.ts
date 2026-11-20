@@ -21,8 +21,26 @@ const ACTIVE = ["pending", "processing", "prepared"];
 interface Pick { variantId: string; productId: string; name: string; description: string | null; option: string | null; image: string; price: number; cost: number }
 
 /** Which product to offer: bought together with the order's products, else a best seller. */
-/** What to offer: the products most bought together with the order's, else best sellers; `count` of them. */
-export async function pickProducts(businessId: string, productIds: string[], count: number): Promise<Pick[]> {
+type ProductRow = {
+    id: string; name: string; description: string | null; image_url: string | null; archived: boolean | null;
+    variants: { id: string; title: string | null; sale_price: number | null; cost_price: number | null; track_inventory: boolean | null; stock_qty: number | null; archived: boolean | null }[];
+};
+const PRODUCT_COLS = "id, name, description, image_url, archived, variants(id, title, sale_price, cost_price, track_inventory, stock_qty, archived)";
+
+const toPick = (p: ProductRow, v: ProductRow["variants"][number]): Pick => ({
+    variantId: v.id, productId: p.id, name: p.name, description: p.description, option: (p.variants.length > 1 ? v.title : null),
+    image: p.image_url!, price: Number(v.sale_price), cost: Number(v.cost_price) || 0,
+});
+
+/**
+ * What to offer, `count` products:
+ *  1. the products most bought together with the order's (last 6 months);
+ *  2. topped up with small things («رفايع»): at most `cheapMax` pounds, in
+ *     stock (tracked and above zero), best sellers of the last 2 months
+ *     first — so every order gets an offer, even with nothing bought with it.
+ * Never a product without a photo, archived, out of stock, or already in the order.
+ */
+export async function pickProducts(businessId: string, productIds: string[], count: number, cheapMax = 150): Promise<Pick[]> {
     const since = new Date(Date.now() - 180 * DAY).toISOString();
     const score = new Map<string, number>();
 
@@ -42,37 +60,47 @@ export async function pickProducts(businessId: string, productIds: string[], cou
             }
         }
     }
-    if (score.size < count) {
-        // Not enough bought together yet: topped up with what sold most in the last month.
-        const together = new Set(score.keys());
-        const { data: recent } = await admin.from("order_items").select("quantity, variants(product_id), orders!inner(created_at, status)")
-            .eq("business_id", businessId).gte("orders.created_at", new Date(Date.now() - 30 * DAY).toISOString()).limit(3000);
-        for (const it of recent || []) {
-            const pid = (it.variants as unknown as { product_id: string } | null)?.product_id;
-            if (pid && !productIds.includes(pid) && !together.has(pid) && !/cancel/i.test(String((it.orders as unknown as { status: string })?.status)))
-                score.set(pid, (score.get(pid) || 0) - 1_000_000 + (Number(it.quantity) || 1)); // after every bought-together one
+
+    const out: Pick[] = [];
+    const taken = new Set(productIds);
+    const ranked = [...score.entries()].sort((a, b) => b[1] - a[1]).slice(0, count * 4).map(([pid]) => pid);
+    if (ranked.length) {
+        const { data: products } = await admin.from("products").select(PRODUCT_COLS).in("id", ranked).eq("business_id", businessId);
+        for (const pid of ranked) {
+            const p = (products || []).find(x => x.id === pid) as unknown as ProductRow | undefined;
+            if (!p || p.archived || !p.image_url) continue;
+            const v = (p.variants || []).find(x => !x.archived && Number(x.sale_price) > 0 && (!x.track_inventory || Number(x.stock_qty) > 0));
+            if (!v) continue;
+            out.push(toPick(p, v));
+            taken.add(p.id);
+            if (out.length >= count) return out;
         }
     }
 
-    const ranked = [...score.entries()].sort((a, b) => b[1] - a[1]).slice(0, count * 6).map(([pid]) => pid);
-    if (!ranked.length) return [];
-    const out: Pick[] = [];
-    const { data: products } = await admin.from("products")
-        .select("id, name, description, image_url, archived, variants(id, title, sale_price, cost_price, track_inventory, stock_qty, archived)")
-        .in("id", ranked).eq("business_id", businessId);
-    for (const pid of ranked) {
-        const p = (products || []).find(x => x.id === pid) as unknown as {
-            id: string; name: string; description: string | null; image_url: string | null; archived: boolean | null;
-            variants: { id: string; title: string | null; sale_price: number | null; cost_price: number | null; track_inventory: boolean | null; stock_qty: number | null; archived: boolean | null }[];
-        } | undefined;
-        if (!p || p.archived || !p.image_url) continue;
-        const v = (p.variants || []).find(x => !x.archived && Number(x.sale_price) > 0 && (!x.track_inventory || Number(x.stock_qty) > 0));
-        if (!v) continue;
-        out.push({ variantId: v.id, productId: p.id, name: p.name, description: p.description, option: (p.variants.length > 1 ? v.title : null), image: p.image_url, price: Number(v.sale_price), cost: Number(v.cost_price) || 0 });
-        if (out.length >= count) break;
+    // «رفايع»: cheap, in stock, with a photo; the best sellers first.
+    const { data: cheap } = await admin.from("products").select(PRODUCT_COLS).eq("business_id", businessId).not("image_url", "is", null);
+    const fillers: { p: ProductRow; v: ProductRow["variants"][number] }[] = [];
+    for (const p of (cheap || []) as unknown as ProductRow[]) {
+        if (p.archived || taken.has(p.id)) continue;
+        const v = (p.variants || []).filter(x => !x.archived && x.track_inventory && Number(x.stock_qty) > 0 && Number(x.sale_price) > 0 && Number(x.sale_price) <= cheapMax)
+            .sort((a, b) => Number(b.stock_qty) - Number(a.stock_qty))[0];
+        if (v) fillers.push({ p, v });
+    }
+    if (fillers.length) {
+        const sold = new Map<string, number>();
+        const { data: sales } = await admin.from("order_items").select("variant_id, quantity, orders!inner(created_at)")
+            .in("variant_id", fillers.map(f => f.v.id)).gte("orders.created_at", new Date(Date.now() - 60 * DAY).toISOString()).limit(5000);
+        for (const r of sales || []) sold.set(r.variant_id, (sold.get(r.variant_id) || 0) + (Number(r.quantity) || 1));
+        fillers.sort((a, b) => (sold.get(b.v.id) || 0) - (sold.get(a.v.id) || 0));
+        for (const f of fillers) {
+            out.push(toPick(f.p, f.v));
+            if (out.length >= count) break;
+        }
     }
     return out;
 }
+
+interface Card { pick: Pick; mediaId: string; name: string; price: number }
 
 /** The offer's price: the discount, rounded down to a round 5 pounds. */
 const offerPrice = (price: number, pct: number) => Math.max(1, Math.floor((price * (1 - pct / 100)) / 5) * 5);
@@ -105,38 +133,70 @@ export async function offerUpsell(businessId: string, orderId: string, phone: st
         .eq("business_id", businessId).eq("id", orderId).maybeSingle();
     if (!order || !ACTIVE.includes(String(order.status).toLowerCase())) return "order not active";
     const productIds = (order.order_items || []).map(i => (i.variants as unknown as { product_id: string } | null)?.product_id).filter(Boolean) as string[];
-    const picks = await pickProducts(businessId, productIds, Math.min(5, Math.max(1, s.count)));
+    const picks = await pickProducts(businessId, productIds, Math.min(10, Math.max(1, s.count)), s.cheap_max);
     if (!picks.length) return "nothing to offer";
 
-    // One message per product: its photo, the price, and its own «ضيفه لطلبي».
-    // The first says what it is; the last also has «لا شكراً».
     const account = await accountOf(businessId);
     if (!account) return "no account";
     const first = String((order.customer_info as { name?: string } | null)?.name || "").trim().split(/\s+/)[0];
-    let sent = 0;
-    for (const [i, pick] of picks.entries()) {
+
+    // Each product's card: photo (uploaded with its real type), name, prices.
+    const cards: Card[] = [];
+    for (const pick of picks) {
         const mediaId = await uploadImage(account, pick.image);
-        if (!mediaId) continue; // no usable photo, not offered
-        const name = await arabicProductName(pick.name, pick.description, pick.option);
-        const price = offerPrice(pick.price, s.discount_percent);
-        const intro = sent === 0
-            ? `🎁 عروض لطلبك بس${first ? ` يا ${first}` : ""}، بخصم ${s.discount_percent}% وبتوصلك مع نفس الطلب من غير شحن زيادة:\n\n`
-            : "";
-        const text = `${intro}${name}\nبدل ${Math.round(pick.price)} جنيه بـ ${price} جنيه بس`;
-        const last = i === picks.length - 1;
+        if (!mediaId) continue;
+        const name = (await arabicProductName(pick.name, pick.description, pick.option)).slice(0, 100);
+        cards.push({ pick, mediaId, name, price: offerPrice(pick.price, s.discount_percent) });
+    }
+    if (!cards.length) return "no usable photos";
+    const intro = `🎁 عروض لطلبك بس${first ? ` يا ${first}` : ""}، بخصم ${s.discount_percent}% وبتوصلك مع نفس الطلب من غير مصاريف شحن زيادة.`;
+
+    // A carousel: the cards side by side, each with «ضيفه لطلبي» (2 to 10 cards).
+    if (cards.length >= 2) {
+        const text = `${intro}\nاسحب وشوف 👈`;
+        const payload = {
+            kind: "upsell",
+            cards: cards.map(c => ({ image: c.pick.image, title: c.name, price: c.price, old_price: Math.round(c.pick.price), variant_id: c.pick.variantId })),
+        };
+        const carousel = (withType: boolean) => ({
+            type: "interactive",
+            interactive: {
+                type: "carousel",
+                body: { text },
+                action: {
+                    cards: cards.map((c, i) => ({
+                        card_index: i,
+                        ...(withType ? { type: "cta_url" } : {}),
+                        header: { type: "image", image: { id: c.mediaId } },
+                        body: { text: `${c.name}\nبدل ${Math.round(c.pick.price)} بـ ${c.price} جنيه` },
+                        action: { buttons: [{ type: "quick_reply", quick_reply: { id: `upsell:add:${orderId}:${c.pick.variantId}`, title: "ضيفه لطلبي" } }] },
+                    })),
+                },
+            },
+        });
+        // As documented; then the shape of Meta's own example; else the separate messages below.
+        if (await reply(businessId, phone, carousel(false), text, orderId, payload)) return `carousel ${cards.length}`;
+        if (await reply(businessId, phone, carousel(true), text, orderId, payload)) return `carousel ${cards.length}`;
+    }
+
+    // One message per product (one card, or the carousel was refused).
+    let sent = 0;
+    for (const [i, c] of cards.entries()) {
+        const text = `${sent === 0 ? `${intro}\n\n` : ""}${c.name}\nبدل ${Math.round(c.pick.price)} جنيه بـ ${c.price} جنيه بس`;
+        const last = i === cards.length - 1;
         const buttons = last ? ["ضيفه لطلبي", "لا شكراً"] : ["ضيفه لطلبي"];
         const ok = await reply(businessId, phone, {
             type: "interactive",
             interactive: {
                 type: "button",
-                header: { type: "image", image: { id: mediaId } },
+                header: { type: "image", image: { id: c.mediaId } },
                 body: { text },
                 action: { buttons: [
-                    { type: "reply", reply: { id: `upsell:add:${orderId}:${pick.variantId}`, title: buttons[0] } },
+                    { type: "reply", reply: { id: `upsell:add:${orderId}:${c.pick.variantId}`, title: buttons[0] } },
                     ...(last ? [{ type: "reply", reply: { id: `upsell:no:${orderId}`, title: buttons[1] } }] : []),
                 ] },
             },
-        }, text, orderId, { kind: "upsell", header_image: pick.image, buttons, variant_id: pick.variantId, price });
+        }, text, orderId, { kind: "upsell", header_image: c.pick.image, buttons, variant_id: c.pick.variantId, price: c.price });
         if (ok) sent++;
     }
     return `offered ${sent}`;
@@ -149,11 +209,16 @@ export async function upsellAnswer(businessId: string, phone: string, buttonId: 
     if (what === "no") { await say(businessId, phone, "ولا يهمك 🌸 طلبك هيتجهز ويتشحن قريب.", orderId); return true; }
     if (what !== "add" || !variantId) return false;
 
-    const { data: offer } = await admin.from("whatsapp_messages").select("payload")
-        .eq("order_id", orderId).eq("direction", "out").eq("payload->>kind", "upsell").eq("payload->>variant_id", variantId)
-        .order("sent_at", { ascending: false }).limit(1).maybeSingle();
-    const price = Number((offer?.payload as { price?: number } | null)?.price);
-    if (!offer || !(price > 0)) return false;
+    // The price offered: a message of its own, or a card in the carousel.
+    const { data: offers } = await admin.from("whatsapp_messages").select("payload")
+        .eq("order_id", orderId).eq("direction", "out").eq("payload->>kind", "upsell").order("sent_at", { ascending: false }).limit(20);
+    let price = 0;
+    for (const o of offers || []) {
+        const pl = o.payload as { variant_id?: string; price?: number; cards?: { variant_id: string; price: number }[] } | null;
+        const hit = pl?.variant_id === variantId ? pl.price : pl?.cards?.find(c => c.variant_id === variantId)?.price;
+        if (Number(hit) > 0) { price = Number(hit); break; }
+    }
+    if (!(price > 0)) return false;
 
     const { data: order } = await admin.from("orders").select("id, status, courier_code, subtotal, total_amount, total_cost, paid_amount, order_items(variant_id)")
         .eq("business_id", businessId).eq("id", orderId).maybeSingle();

@@ -33,7 +33,8 @@ import { clockLabel } from "@/lib/orders/confirm-queue";
  * a tap away. Voice notes and calls are not sent from here.
  */
 
-type Filter = "unread" | "waiting" | "mine" | "all" | "confirm" | "shipping";
+type Filter = "unread" | "waiting" | "mine" | "all";
+type Topic = "all" | "confirm" | "shipping";
 
 interface OrderLite {
     id: string; status: string; total_amount: number; paid_amount: number | null; created_at: string; closed_by?: string | null;
@@ -75,6 +76,7 @@ function Chats() {
     const [messages, setMessages] = useState<WaMessage[] | null>(null);
     const [problem, setProblem] = useState<string | null>(null);
     const [filter, setFilter] = useState<Filter>(params.get("phone") ? "all" : "waiting");
+    const [topic, setTopic] = useState<Topic>("all");
     const [query, setQuery] = useState("");
     const [open, setOpen] = useState<string | null>(params.get("phone"));
     const [now, setNow] = useState(() => Date.now());
@@ -125,10 +127,14 @@ function Chats() {
     const chats = useMemo(() => chatsOf(messages || [], me), [messages, me]);
     const q = query.trim();
     const shown = chats.filter(c =>
-        (filter === "all" || (filter === "unread" ? c.unread > 0 || c.phone === open : filter === "waiting" ? c.last.direction === "in"
-            : filter === "confirm" ? c.topic === "confirm" : filter === "shipping" ? c.topic === "shipping" : c.mine))
+        (topic === "all" || c.topic === topic)
+        && (filter === "all" || (filter === "unread" ? c.unread > 0 || c.phone === open : filter === "waiting" ? c.last.direction === "in" : c.mine))
         && (!q || c.phone.includes(q.replace(/\D/g, "") || "~") || (c.name || "").includes(q) || (c.last.body || "").includes(q)));
-    const counts = { confirm: chats.filter(c => c.topic === "confirm").length, shipping: chats.filter(c => c.topic === "shipping").length, unread: chats.filter(c => c.unread > 0).length, waiting: chats.filter(c => c.last.direction === "in").length, mine: chats.filter(c => c.mine).length, all: chats.length };
+    // The section (all / confirmations / shipping problems) narrows every filter below it.
+    const inTopic = (t: Topic) => chats.filter(c => t === "all" || c.topic === t);
+    const scoped = inTopic(topic);
+    const counts = { unread: scoped.filter(c => c.unread > 0).length, waiting: scoped.filter(c => c.last.direction === "in").length, mine: scoped.filter(c => c.mine).length, all: scoped.length };
+    const topicUnread = (t: Topic) => inTopic(t).filter(c => c.unread > 0 || c.last.direction === "in").length;
     const current: Chat | null = chats.find(c => c.phone === open) || null;
     const others = (phone: string) => Object.entries(typing).filter(([email, p]) => p === phone && email !== me).map(([email]) => teamName(email));
     const addSent = useCallback((m: WaMessage) => setMessages(prev => (prev && !prev.some(x => x.id === m.id) ? [m, ...prev] : prev)), []);
@@ -143,8 +149,18 @@ function Chats() {
                         <input value={query} onChange={e => setQuery(e.target.value)} placeholder="دوّر برقم أو اسم أو كلمة"
                             className="h-10 w-full rounded-lg bg-background pe-9 ps-3 text-base outline-none ring-1 ring-border focus:ring-2 focus:ring-[#25d366] sm:text-sm" />
                     </div>
+                    <div className="grid grid-cols-3 rounded-lg bg-background p-0.5 ring-1 ring-border">
+                        {([["all", "كل المحادثات"], ["confirm", "التأكيدات"], ["shipping", "مشاكل الشحن"]] as [Topic, string][]).map(([k, label]) => (
+                            <button key={k} type="button" onClick={() => setTopic(k)}
+                                className={cn("flex items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-sm font-semibold",
+                                    topic === k ? "bg-[#008069] text-white dark:bg-[#00a884]" : "text-muted-foreground hover:bg-muted")}>
+                                {label}
+                                {k !== "all" && topicUnread(k) > 0 && <span className={cn("rounded-full px-1.5 text-[11px] tabular-nums", topic === k ? "bg-white/25" : "bg-[#25d366] text-white")}>{topicUnread(k)}</span>}
+                            </button>
+                        ))}
+                    </div>
                     <div className="-mx-3 flex gap-1.5 overflow-x-auto px-3 [scrollbar-width:none]">
-                        {([["all", "الكل"], ["unread", "غير مقروءة"], ["waiting", "مستنيين رد"], ["confirm", "التأكيدات"], ["shipping", "مشاكل الشحن"], ["mine", "بتوعي"]] as [Filter, string][]).map(([k, label]) => (
+                        {([["all", "الكل"], ["unread", "غير مقروءة"], ["waiting", "مستنيين رد"], ["mine", "بتوعي"]] as [Filter, string][]).map(([k, label]) => (
                             <button key={k} type="button" onClick={() => setFilter(k)}
                                 className={cn("shrink-0 rounded-full px-3 py-1.5 text-sm font-medium", filter === k ? "bg-[#d9fdd3] text-[#008069] dark:bg-[#0a332c] dark:text-[#25d366]" : "bg-background text-muted-foreground ring-1 ring-border hover:bg-muted")}>
                                 {label}{counts[k] > 0 && <span className="ms-1 tabular-nums">{counts[k]}</span>}
@@ -155,7 +171,7 @@ function Chats() {
                 <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
                     {messages === null ? <div className="flex h-24 items-center justify-center"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
                         : problem ? <p className="p-4 text-sm font-medium text-amber-700">{problem}</p>
-                        : shown.length === 0 ? <p className="p-6 text-center text-sm text-muted-foreground">{filter === "waiting" ? "مفيش حد مستني رد 👌" : filter === "unread" ? "مفيش رسايل غير مقروءة 👌" : "مفيش محادثات هنا."}</p>
+                        : shown.length === 0 ? <p className="p-6 text-center text-sm text-muted-foreground">{filter === "waiting" ? "مفيش حد مستني رد هنا 👌" : filter === "unread" ? "مفيش رسايل غير مقروءة هنا 👌" : "مفيش محادثات هنا."}</p>
                         : shown.map(c => {
                             const unreadNow = c.unread > 0 && c.phone !== open;
                             const waitingNow = c.last.direction === "in" && c.waiting > 0;
@@ -548,6 +564,24 @@ function Bubble({ m, tail, businessId, me, quoted, reaction, onReply }: {
                                 out ? "bg-[#d9fdd3] dark:bg-[#005c4b]" : "bg-white dark:bg-[#202c33]")}>
                                 <CornerUpLeft className="h-4 w-4" />{b}
                             </span>
+                        ))}
+                    </div>
+                )}
+                {m.payload?.cards && m.payload.cards.length > 0 && (
+                    // The carousel as the customer swipes it: photo, name, prices, button.
+                    <div className="mt-1 flex snap-x gap-2 overflow-x-auto pb-1 [scrollbar-width:thin]">
+                        {m.payload.cards.map(c => (
+                            <div key={c.variant_id} className={cn("w-44 shrink-0 snap-start overflow-hidden rounded-lg shadow-sm", out ? "bg-[#d9fdd3] dark:bg-[#005c4b]" : "bg-white dark:bg-[#202c33]")}>
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img src={c.image} alt="" className="h-36 w-full object-cover" />
+                                <div className="space-y-0.5 p-2 text-[13px] leading-snug">
+                                    <p className="line-clamp-2 font-medium">{c.title}</p>
+                                    <p><span className="text-[#667781] line-through">{c.old_price}</span> <b>{c.price} جنيه</b></p>
+                                </div>
+                                <span className="flex items-center justify-center gap-1.5 border-t border-black/5 py-1.5 text-[13px] font-medium text-[#027eb5] dark:border-white/10 dark:text-[#53bdeb]">
+                                    <CornerUpLeft className="h-3.5 w-3.5" />ضيفه لطلبي
+                                </span>
+                            </div>
                         ))}
                     </div>
                 )}
