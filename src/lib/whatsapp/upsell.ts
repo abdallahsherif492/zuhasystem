@@ -32,17 +32,75 @@ const toPick = (p: ProductRow, v: ProductRow["variants"][number]): Pick => ({
     image: p.image_url!, price: Number(v.sale_price), cost: Number(v.cost_price) || 0,
 });
 
+// ---------------------------------------------------------------------------
+// Learning what customers take (Thompson sampling)
+// ---------------------------------------------------------------------------
+
+/** Each product's record in offers: how often shown, how often added (last 90 days). */
+export async function offerStats(businessId: string): Promise<Map<string, { shown: number; added: number }>> {
+    const since = new Date(Date.now() - 90 * DAY).toISOString();
+    const stats = new Map<string, { shown: number; added: number }>();
+    const bump = (v: string, k: "shown" | "added") => {
+        const s = stats.get(v) || { shown: 0, added: 0 };
+        s[k]++;
+        stats.set(v, s);
+    };
+    const { data: sent } = await admin.from("whatsapp_messages").select("payload, status")
+        .eq("business_id", businessId).eq("direction", "out").eq("payload->>kind", "upsell").gte("sent_at", since).limit(3000);
+    for (const m of sent || []) {
+        if (m.status === "failed") continue;
+        const pl = m.payload as { variant_id?: string; cards?: { variant_id: string }[] } | null;
+        for (const v of pl?.cards?.map(c => c.variant_id) || (pl?.variant_id ? [pl.variant_id] : [])) bump(v, "shown");
+    }
+    const { data: taps } = await admin.from("whatsapp_messages").select("payload")
+        .eq("business_id", businessId).eq("direction", "in").like("payload->interactive->button_reply->>id", "upsell:add:%").gte("sent_at", since).limit(3000);
+    const counted = new Set<string>();
+    for (const m of taps || []) {
+        const id = String((m.payload as { interactive?: { button_reply?: { id?: string } } })?.interactive?.button_reply?.id || "");
+        const [, , orderId, variantId] = id.split(":");
+        if (!variantId || counted.has(`${orderId}:${variantId}`)) continue; // a double tap counts once
+        counted.add(`${orderId}:${variantId}`);
+        bump(variantId, "added");
+    }
+    return stats;
+}
+
+/** A draw from Beta(a, b), from two Gamma draws (Marsaglia–Tsang). */
+function gamma(k: number): number {
+    if (k < 1) return gamma(k + 1) * Math.pow(Math.random(), 1 / k);
+    const d = k - 1 / 3, c = 1 / Math.sqrt(9 * d);
+    for (;;) {
+        let x: number, v: number;
+        do {
+            const u1 = Math.random(), u2 = Math.random();
+            x = Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
+            v = 1 + c * x;
+        } while (v <= 0);
+        v = v * v * v;
+        const u = Math.random();
+        if (u < 1 - 0.0331 * x ** 4 || Math.log(u) < 0.5 * x * x + d * (1 - v + Math.log(v))) return d * v;
+    }
+}
+const beta = (a: number, b: number) => { const x = gamma(a); return x / (x + gamma(b)); };
+
+/** A product that has been shown fewer times than this is still being tried. */
+export const LEARNING = 12;
+
 /**
- * What to offer, `count` products:
- *  1. the products most bought together with the order's (last 6 months);
- *  2. topped up with small things («رفايع»): at most `cheapMax` pounds, in
- *     stock (tracked and above zero), best sellers of the last 2 months
- *     first — so every order gets an offer, even with nothing bought with it.
- * Never a product without a photo, archived, out of stock, or already in the order.
+ * What to offer, `count` products, chosen afresh for each order:
+ *  - candidates: products bought together with the order's (last 6
+ *    months), small things up to `cheapMax`, and anything customers have
+ *    added from an offer before — all in stock (tracked, above zero), with a
+ *    photo, not archived, not already in the order;
+ *  - each one's chance of being added is drawn from what customers did with
+ *    it (added / shown), starting from a modest guess for products not shown
+ *    yet, so winners come back more and new products keep getting tried;
+ *  - being bought together with the order raises it;
+ *  - at least one slot goes to a product still being tried, when there is one.
  */
 export async function pickProducts(businessId: string, productIds: string[], count: number, cheapMax = 150): Promise<Pick[]> {
     const since = new Date(Date.now() - 180 * DAY).toISOString();
-    const score = new Map<string, number>();
+    const together = new Map<string, number>();
 
     if (productIds.length) {
         const { data: theirVariants } = await admin.from("variants").select("id").in("product_id", productIds);
@@ -55,49 +113,42 @@ export async function pickProducts(businessId: string, productIds: string[], cou
                 const { data: items } = await admin.from("order_items").select("order_id, variants(product_id)").in("order_id", orderIds.slice(i, i + 200));
                 for (const it of items || []) {
                     const pid = (it.variants as unknown as { product_id: string } | null)?.product_id;
-                    if (pid && !productIds.includes(pid)) score.set(pid, (score.get(pid) || 0) + 1);
+                    if (pid && !productIds.includes(pid)) together.set(pid, (together.get(pid) || 0) + 1);
                 }
             }
         }
     }
 
-    const out: Pick[] = [];
-    const taken = new Set(productIds);
-    const ranked = [...score.entries()].sort((a, b) => b[1] - a[1]).slice(0, count * 4).map(([pid]) => pid);
-    if (ranked.length) {
-        const { data: products } = await admin.from("products").select(PRODUCT_COLS).in("id", ranked).eq("business_id", businessId);
-        for (const pid of ranked) {
-            const p = (products || []).find(x => x.id === pid) as unknown as ProductRow | undefined;
-            if (!p || p.archived || !p.image_url) continue;
-            const v = (p.variants || []).find(x => !x.archived && Number(x.sale_price) > 0 && (!x.track_inventory || Number(x.stock_qty) > 0));
-            if (!v) continue;
-            out.push(toPick(p, v));
-            taken.add(p.id);
-            if (out.length >= count) return out;
-        }
-    }
+    const [stats, { data: products }] = await Promise.all([
+        offerStats(businessId),
+        admin.from("products").select(PRODUCT_COLS).eq("business_id", businessId).not("image_url", "is", null),
+    ]);
+    const maxTogether = Math.max(1, ...together.values());
 
-    // «رفايع»: cheap, in stock, with a photo; the best sellers first.
-    const { data: cheap } = await admin.from("products").select(PRODUCT_COLS).eq("business_id", businessId).not("image_url", "is", null);
-    const fillers: { p: ProductRow; v: ProductRow["variants"][number] }[] = [];
-    for (const p of (cheap || []) as unknown as ProductRow[]) {
-        if (p.archived || taken.has(p.id)) continue;
-        const v = (p.variants || []).filter(x => !x.archived && x.track_inventory && Number(x.stock_qty) > 0 && Number(x.sale_price) > 0 && Number(x.sale_price) <= cheapMax)
+    type Cand = { pick: Pick; score: number; shown: number };
+    const cands: Cand[] = [];
+    for (const p of (products || []) as unknown as ProductRow[]) {
+        if (p.archived || productIds.includes(p.id)) continue;
+        const v = (p.variants || []).filter(x => !x.archived && x.track_inventory && Number(x.stock_qty) > 0 && Number(x.sale_price) > 0)
             .sort((a, b) => Number(b.stock_qty) - Number(a.stock_qty))[0];
-        if (v) fillers.push({ p, v });
+        if (!v) continue;
+        const t = together.get(p.id) || 0;
+        const st = stats.get(v.id) || { shown: 0, added: 0 };
+        const cheap = Number(v.sale_price) <= cheapMax;
+        if (!t && !cheap && !st.added) continue;
+        // Prior: about 1 in 15 add it, worth 10 showings; then what really happened.
+        const theta = beta(st.added + 10 / 15, Math.max(0, st.shown - st.added) + 10 * 14 / 15);
+        const relevance = 1 + 1.5 * (t / maxTogether);
+        cands.push({ pick: toPick(p, v), score: theta * relevance, shown: st.shown });
     }
-    if (fillers.length) {
-        const sold = new Map<string, number>();
-        const { data: sales } = await admin.from("order_items").select("variant_id, quantity, orders!inner(created_at)")
-            .in("variant_id", fillers.map(f => f.v.id)).gte("orders.created_at", new Date(Date.now() - 60 * DAY).toISOString()).limit(5000);
-        for (const r of sales || []) sold.set(r.variant_id, (sold.get(r.variant_id) || 0) + (Number(r.quantity) || 1));
-        fillers.sort((a, b) => (sold.get(b.v.id) || 0) - (sold.get(a.v.id) || 0));
-        for (const f of fillers) {
-            out.push(toPick(f.p, f.v));
-            if (out.length >= count) break;
-        }
+    cands.sort((a, b) => b.score - a.score);
+    const out = cands.slice(0, count);
+    // Keep learning: one place for a product still being tried.
+    if (out.length === count && !out.some(c => c.shown < LEARNING)) {
+        const fresh = cands.slice(count).find(c => c.shown < LEARNING);
+        if (fresh) out[out.length - 1] = fresh;
     }
-    return out;
+    return out.map(c => c.pick);
 }
 
 interface Card { pick: Pick; mediaId: string; name: string; price: number }
@@ -206,12 +257,19 @@ export async function offerUpsell(businessId: string, orderId: string, phone: st
 export async function upsellAnswer(businessId: string, phone: string, buttonId: string): Promise<boolean> {
     const [, what, orderId, variantId] = buttonId.split(":");
     if (!orderId) return false;
+    const { data: biz } = await admin.from("businesses").select("theme_config").eq("id", businessId).maybeSingle();
+    const hours = whatsappSettingsOf(biz?.theme_config).upsell.offer_hours;
     if (what === "no") { await say(businessId, phone, "ولا يهمك 🌸 طلبك هيتجهز ويتشحن قريب.", orderId); return true; }
     if (what !== "add" || !variantId) return false;
 
     // The price offered: a message of its own, or a card in the carousel.
-    const { data: offers } = await admin.from("whatsapp_messages").select("payload")
+    const { data: offers } = await admin.from("whatsapp_messages").select("payload, sent_at")
         .eq("order_id", orderId).eq("direction", "out").eq("payload->>kind", "upsell").order("sent_at", { ascending: false }).limit(20);
+    // The offer is open for `offer_hours` (2 by default); after that the order is final.
+    if (offers?.length && Date.now() - Date.parse(offers[0].sent_at) > hours * 3_600_000) {
+        await say(businessId, phone, "العرض ده خلص للأسف 🙏 طلبك اتجهز زي ما هو. لو حابب تطلب المنتج ده ابعتلنا هنا ونعملهولك في طلب جديد.", orderId);
+        return true;
+    }
     let price = 0;
     for (const o of offers || []) {
         const pl = o.payload as { variant_id?: string; price?: number; cards?: { variant_id: string; price: number }[] } | null;

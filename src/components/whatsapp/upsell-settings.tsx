@@ -55,6 +55,13 @@ export function UpsellSettings({ businessId, value, onChange, onSave, saving, ma
                     </select>
                 </label>
                 <label className="space-y-1.5">
+                    <span className="text-sm font-semibold">العرض مفتوح لمدة</span>
+                    <span className="flex items-center gap-2">
+                        <Input type="number" min={1} max={24} className="w-20" value={value.offer_hours} disabled={!manager}
+                            onChange={e => onChange({ ...value, offer_hours: Math.min(24, Math.max(1, Number(e.target.value) || 2)) })} />ساعة
+                    </span>
+                </label>
+                <label className="space-y-1.5">
                     <span className="text-sm font-semibold">الرفايع لحد</span>
                     <span className="flex items-center gap-2">
                         <Input type="number" min={10} className="w-24" value={value.cheap_max} disabled={!manager}
@@ -69,6 +76,7 @@ export function UpsellSettings({ businessId, value, onChange, onSave, saving, ma
                 )}
             </div>
             {manager && <Button onClick={onSave} disabled={saving}>{saving && <Loader2 className="me-2 h-4 w-4 animate-spin" />}احفظ</Button>}
+            <OfferPerformance businessId={businessId} />
             <BoughtTogether businessId={businessId} />
         </section>
     );
@@ -122,6 +130,58 @@ function BoughtTogether({ businessId }: { businessId: string }) {
                     )}
                 </>
             )}
+        </div>
+    );
+}
+
+interface PerfRow { variant_id: string; name: string; image: string | null; stock: number | null; shown: number; added: number; rate: number; learning: boolean }
+
+/**
+ * «العملاء بيضيفوا إيه»: what the offer learned — each product's shows,
+ * adds and rate; «بيتجرب» while it has been shown too few times to judge.
+ */
+function OfferPerformance({ businessId }: { businessId: string }) {
+    const [data, setData] = useState<{ rows: PerfRow[]; shown: number; added: number } | null>(null);
+    const [loading, setLoading] = useState(false);
+    const load = async () => {
+        setLoading(true);
+        const res = await fetch(`/api/whatsapp/upsell-stats?business_id=${businessId}`);
+        const body = await res.json().catch(() => null);
+        setLoading(false);
+        if (res.ok && body) setData(body);
+    };
+    return (
+        <div className="space-y-3 border-t pt-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                    <p className="font-semibold">العملاء بيضيفوا إيه</p>
+                    <p className="text-xs text-muted-foreground">السيستم بيعرض أكتر المنتجات اللي العملاء بيضيفوها، وبيفضل يجرب منتجات جديدة فيها ستوك عشان يلاقي الأحسن.</p>
+                </div>
+                {!data && <Button variant="outline" size="sm" onClick={load} disabled={loading}>{loading && <Loader2 className="me-2 h-4 w-4 animate-spin" />}اعرض</Button>}
+            </div>
+            {data && (data.rows.length === 0 ? <p className="text-sm text-muted-foreground">لسه محدش اتعرض عليه عرض.</p> : (
+                <>
+                    <p className="text-sm text-muted-foreground">آخر 90 يوم: {data.shown} مرة اتعرض منتج، و{data.added} مرة اتضاف ({data.shown ? Math.round((data.added / data.shown) * 100) : 0}%).</p>
+                    <ul className="divide-y">
+                        {data.rows.slice(0, 25).map(r => (
+                            <li key={r.variant_id} className="flex items-center gap-3 py-2">
+                                {r.image
+                                    // eslint-disable-next-line @next/next/no-img-element
+                                    ? <img src={r.image} alt="" className="h-10 w-10 shrink-0 rounded-lg object-cover" />
+                                    : <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-muted">📦</span>}
+                                <span className="min-w-0 flex-1 text-sm [contain:inline-size]">
+                                    <span className="block truncate font-medium">{r.name}</span>
+                                    <span className="text-xs text-muted-foreground">{r.stock === null ? "" : `في المخزن: ${r.stock}`}</span>
+                                </span>
+                                <span className="shrink-0 text-end text-sm">
+                                    <b className="block tabular-nums">{r.added} من {r.shown}</b>
+                                    <span className={r.learning ? "text-xs text-amber-700" : "text-xs text-[#0b7a3e]"}>{r.learning ? "بيتجرب" : `${Math.round(r.rate * 100)}%`}</span>
+                                </span>
+                            </li>
+                        ))}
+                    </ul>
+                </>
+            ))}
         </div>
     );
 }

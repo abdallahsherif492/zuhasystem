@@ -1,5 +1,6 @@
 "use client";
 
+import { OpenOfferBadge, useOpenOffers } from "@/components/whatsapp/open-offer";
 import { useCallback, useEffect, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
@@ -107,6 +108,7 @@ import { useActionFeedback } from "@/contexts/ActionFeedbackContext";
 
 function LogisticsContent() {
     const { activeBusiness, currentUser } = useBusiness();
+    const openOffer = useOpenOffers(activeBusiness?.id);
 
     const { t, language } = useLanguage();
     const ar = language !== "en";
@@ -932,6 +934,7 @@ function LogisticsContent() {
                                     <TableCell className="hidden xl:table-cell">{new Date(order.created_at).toLocaleDateString()}</TableCell>
                                     <TableCell>
                                         <div className="font-medium">{order.customer_info?.name || "N/A"}</div>
+                                        {openOffer(order.id) && <OpenOfferBadge until={openOffer(order.id)!} />}
                                         <div className="text-xs text-muted-foreground">{order.customer_info?.phone}</div>
                                         <div className="xl:hidden text-xs text-muted-foreground font-mono">
                                             {order.id.slice(0, 8)} · {new Date(order.created_at).toLocaleDateString()}
