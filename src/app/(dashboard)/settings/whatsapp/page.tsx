@@ -7,6 +7,7 @@ import { useBusiness } from "@/contexts/BusinessContext";
 import { Button } from "@/components/ui/button";
 import { WHATSAPP_MIGRATION } from "@/lib/whatsapp/config";
 import { WhatsAppTemplatesAndRules } from "@/components/whatsapp/whatsapp-settings";
+import { WhatsAppBulkSend } from "@/components/whatsapp/bulk-send";
 
 /**
  * Settings → WhatsApp: connect the business's WhatsApp number to the system.
@@ -96,6 +97,7 @@ export default function WhatsAppSettingsPage() {
                 </section>
             )}
             {accounts && accounts.length > 0 && businessId && <WhatsAppTemplatesAndRules businessId={businessId} manager={manager} />}
+            {accounts && accounts.length > 0 && businessId && manager && <WhatsAppBulkSend businessId={businessId} />}
         </div>
     );
 }

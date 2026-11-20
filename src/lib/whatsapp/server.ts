@@ -61,6 +61,8 @@ export function sendError(body: { error?: { code?: number; message?: string; err
     if (e.code === 132001) return "القالب لسه مش متوافق عليه من Meta، أو اسمه غلط.";
     if (e.code === 131026) return "الرقم ده مش عليه واتساب.";
     if (e.code === 131056) return "بعتّ رسايل كتير للرقم ده في وقت قصير. استنى شوية.";
+    if (e.code === 130429) return "وصلنا للحد المسموح من Meta دلوقتي. كمّل بعد شوية.";
+    if (e.code === 131048) return "Meta وقفت الإرسال مؤقتاً عشان جودة الرقم. استنى شوية قبل ما تكمّل.";
     if (e.code === 190) return "توكن الواتساب مش شغال. راجع WHATSAPP_TOKEN في Netlify.";
     return `الرسالة ما اتبعتتش: ${e.error_data?.details || e.message || "خطأ من Meta"}`;
 }

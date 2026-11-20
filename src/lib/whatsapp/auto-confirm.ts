@@ -108,7 +108,71 @@ export async function handleReply(businessId: string, m: Incoming) {
         return;
     }
 
+    if (await shippingAnswer(businessId, m, text)) return;
+
     if (YES.test(text) && settings.auto_confirm) await confirm(businessId, m, settings);
+}
+
+/**
+ * The answer to a shipping message's button, recorded as a follow-up on the
+ * shipping problems page (shipping_followups, by "whatsapp-auto") so the team
+ * sees it and acts on it there, and acknowledged to the customer:
+ *  - «المندوب ماقدرش يوصله»: بكرة / بعد بكرة → a delivery day; كلّموني → call today.
+ *  - «الشحنة راجعة»: ابعتوه تاني → still wants it; مش عايزه → refused.
+ *  - «اتسلم»: فيه مشكلة → asked what is wrong (the chat then waits for a reply).
+ */
+const SHIPPING_ANSWERS: Record<string, Record<string, { outcome?: string; days?: number; reply: (day: string) => string }>> = {
+    delivery_failed: {
+        "بكرة": { outcome: "reached_rescheduled", days: 1, reply: d => `تمام 🌸 هنبلّغ شركة الشحن يبعتوه ${d}، والمندوب هيكلمك قبل ما يوصل.` },
+        "بعد بكرة": { outcome: "reached_rescheduled", days: 2, reply: d => `تمام 🌸 هنبلّغ شركة الشحن يبعتوه ${d}، والمندوب هيكلمك قبل ما يوصل.` },
+        "كلموني": { outcome: "call_later", days: 0, reply: () => "تمام، هنكلمك النهارده 🌸" },
+    },
+    order_returning: {
+        "ابعتوه تاني": { outcome: "reached_confirmed", reply: () => "تمام 🌸 هنرتب ميعاد جديد ونكلمك نأكد معاك." },
+        "مش عايزه": { outcome: "customer_refused", reply: () => "تمام، شكراً لوقتك 🌸 لو غيرت رأيك في أي وقت ابعتلنا هنا." },
+    },
+    order_delivered: {
+        "فيه مشكلة": { reply: () => "آسفين جداً 🙏 احكيلنا إيه المشكلة، ولو تقدر ابعت صورة، وهنحلها على طول." },
+    },
+};
+const plain = (s: string) => s.replace(/[ّ]/g, "").replace(/[أإآ]/g, "ا").replace(/ة/g, "ه").trim();
+
+async function shippingAnswer(businessId: string, m: Incoming, text: string): Promise<boolean> {
+    const said = plain(text);
+    const answers = Object.values(SHIPPING_ANSWERS).flatMap(a => Object.keys(a));
+    if (!answers.some(k => plain(k) === said)) return false;
+
+    // The message answered: the one replied to, else our latest template in 3 days.
+    let asked: { order_id: string | null; template_name: string | null } | null = null;
+    if (m.context_id) {
+        const { data } = await admin.from("whatsapp_messages").select("order_id, template_name").eq("wa_message_id", m.context_id).maybeSingle();
+        asked = data;
+    }
+    if (!asked?.template_name) {
+        const { data } = await admin.from("whatsapp_messages").select("order_id, template_name")
+            .eq("business_id", businessId).eq("customer_phone", m.customer_phone).eq("direction", "out").not("template_name", "is", null)
+            .gte("sent_at", new Date(Date.now() - 3 * 86_400_000).toISOString()).order("sent_at", { ascending: false }).limit(1);
+        asked = data?.[0] ?? null;
+    }
+    const table = asked?.template_name ? SHIPPING_ANSWERS[asked.template_name] : null;
+    const key = table && Object.keys(table).find(k => plain(k) === said);
+    if (!table || !key || !asked?.order_id) return false;
+    const a = table[key];
+
+    // The day as people say it, in Cairo.
+    const at = new Date(Date.now() + (a.days ?? 0) * 86_400_000);
+    const ymd = at.toLocaleDateString("en-CA", { timeZone: "Africa/Cairo" });
+    const dayName = a.days === 1 ? "بكرة" : at.toLocaleDateString("ar-EG", { weekday: "long", timeZone: "Africa/Cairo" }).replace(/^/, "يوم ");
+
+    if (a.outcome) {
+        const { error } = await admin.from("shipping_followups").insert({
+            business_id: businessId, order_id: asked.order_id, outcome: a.outcome,
+            note: `العميل ردّ على الواتساب: «${key}»`, next_action_at: a.days !== undefined ? ymd : null, created_by: "whatsapp-auto",
+        });
+        if (error) console.error("whatsapp shipping answer", error.message);
+    }
+    await say(businessId, m.customer_phone, a.reply(dayName), asked.order_id);
+    return true;
 }
 
 async function confirm(businessId: string, m: Incoming, s: WhatsAppSettings) {
