@@ -45,9 +45,12 @@ async function owed(businessId: string, kind: Kind, days: number): Promise<{ id:
     // What each already got.
     const got = new Map<string, Set<string>>();
     for (let i = 0; i < rows.length; i += 300) {
-        const { data } = await admin.from("whatsapp_messages").select("order_id, template_name")
+        const { data } = await admin.from("whatsapp_messages").select("order_id, template_name, status, error")
             .in("order_id", rows.slice(i, i + 300).map(o => o.id)).eq("direction", "out").not("template_name", "is", null);
         for (const m of data || []) {
+            // A message that failed on our side (a photo Meta refused) was not received: still owed.
+            // One that failed because the number has no WhatsApp counts, so it is not tried again.
+            if (m.status === "failed" && !JSON.stringify(m.error || "").includes("131026")) continue;
             if (!got.has(m.order_id)) got.set(m.order_id, new Set());
             got.get(m.order_id)!.add(m.template_name);
         }

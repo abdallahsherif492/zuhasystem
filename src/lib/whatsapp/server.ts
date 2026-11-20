@@ -66,3 +66,38 @@ export function sendError(body: { error?: { code?: number; message?: string; err
     if (e.code === 190) return "توكن الواتساب مش شغال. راجع WHATSAPP_TOKEN في Netlify.";
     return `الرسالة ما اتبعتتش: ${e.error_data?.details || e.message || "خطأ من Meta"}`;
 }
+
+/**
+ * A photo uploaded to Meta, for a message's image: its media id. The store's
+ * photos are served as "image/jpg", which Meta rejects when given the link
+ * (131053), so the bytes are sent with their real type instead. Null when it
+ * cannot be fetched or is not a JPEG, PNG or WebP. Cached per photo for a day
+ * (Meta keeps an upload for 30).
+ */
+const uploaded = new Map<string, { id: string; at: number }>();
+export async function uploadImage(account: WaAccount, url: string): Promise<string | null> {
+    const key = `${account.phone_number_id}:${url}`;
+    const hit = uploaded.get(key);
+    if (hit && Date.now() - hit.at < 86_400_000) return hit.id;
+    try {
+        const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
+        if (!res.ok) return null;
+        const bytes = new Uint8Array(await res.arrayBuffer());
+        const type = bytes[0] === 0xff && bytes[1] === 0xd8 ? "image/jpeg"
+            : bytes[0] === 0x89 && bytes[1] === 0x50 ? "image/png"
+            : bytes[8] === 0x57 && bytes[9] === 0x45 && bytes[10] === 0x42 && bytes[11] === 0x50 ? "image/webp" : null;
+        if (!type || bytes.length > 5_000_000) return null;
+        const form = new FormData();
+        form.append("messaging_product", "whatsapp");
+        form.append("type", type);
+        form.append("file", new Blob([bytes], { type }), `photo.${type.split("/")[1]}`);
+        const up = await fetch(`${GRAPH}/${account.phone_number_id}/media`, {
+            method: "POST", headers: { Authorization: `Bearer ${account.token}` }, body: form, signal: AbortSignal.timeout(20000),
+        }).then(r => r.json()).catch(() => null) as { id?: string } | null;
+        if (!up?.id) return null;
+        uploaded.set(key, { id: up.id, at: Date.now() });
+        return up.id;
+    } catch {
+        return null;
+    }
+}

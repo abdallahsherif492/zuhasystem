@@ -1,7 +1,7 @@
 import { arabicProductLabel } from "@/lib/orders/product-label";
 import { plainEnglish } from "@/lib/orders/arabic-names";
 import { translateToArabic } from "@/lib/translate-ar";
-import { accountOf, admin, graph, sendError, waNumber } from "@/lib/whatsapp/server";
+import { accountOf, admin, graph, sendError, uploadImage, waNumber } from "@/lib/whatsapp/server";
 import { renderTemplate, templateDef } from "@/lib/whatsapp/templates";
 import type { OrderEvent } from "@/lib/whatsapp/settings";
 
@@ -81,7 +81,12 @@ export async function sendOrderMessage(businessId: string, orderId: string, kind
     let lastError = "الرسالة ما اتبعتتش.";
     for (const t of tries) {
         const components: Record<string, unknown>[] = [];
-        if (t.image) components.push({ type: "header", parameters: [{ type: "image", image: { link: t.image } }] });
+        if (t.image) {
+            // Uploaded with its real type (the store's links say "image/jpg", which Meta refuses).
+            const mediaId = await uploadImage(account, t.image);
+            if (!mediaId) continue; // no usable photo: the confirmation without it
+            components.push({ type: "header", parameters: [{ type: "image", image: { id: mediaId } }] });
+        }
         components.push({ type: "body", parameters: t.params.map(p => ({ type: "text", text: p.replace(/[\r\n\t]+/g, " ").replace(/ {4,}/g, "   ").trim() || "-" })) });
         const res = await graph(`${account.phone_number_id}/messages`, account.token, {
             method: "POST",

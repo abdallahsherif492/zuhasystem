@@ -56,7 +56,10 @@ export function useChatStates(businessId: string | undefined) {
             if (m.direction === "out" && m.template_name && (!s.lastTemplate || m.sent_at >= s.lastTemplate.at)) {
                 s.lastTemplate = { name: m.template_name, at: m.sent_at, status: m.status, noWhatsApp: failedNoWa };
             }
-            if (m.direction === "out" && m.template_name && CONFIRM_TEMPLATES.includes(m.template_name) && (!s.confirmSentAt || m.sent_at >= s.confirmSentAt)) {
+            // A confirmation that failed on our side (a photo Meta refused) never arrived: as if not sent.
+            const lostOnOurSide = m.status === "failed" && !failedNoWa;
+            if (lostOnOurSide && s.confirmSentAt === m.sent_at) { s.confirmSentAt = null; s.confirmStatus = null; }
+            if (m.direction === "out" && m.template_name && !lostOnOurSide && [...CONFIRM_TEMPLATES, "order_confirm_photo"].includes(m.template_name) && (!s.confirmSentAt || m.sent_at >= s.confirmSentAt)) {
                 s.confirmSentAt = m.sent_at;
                 s.confirmStatus = m.status;
                 s.noWhatsApp = failedNoWa;

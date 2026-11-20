@@ -1,4 +1,4 @@
-import { admin } from "@/lib/whatsapp/server";
+import { accountOf, admin, uploadImage } from "@/lib/whatsapp/server";
 import { reply, say } from "@/lib/whatsapp/system-text";
 import { arabicProductName } from "@/lib/whatsapp/order-messages";
 import { whatsappSettingsOf } from "@/lib/whatsapp/settings";
@@ -21,7 +21,8 @@ const ACTIVE = ["pending", "processing", "prepared"];
 interface Pick { variantId: string; productId: string; name: string; description: string | null; option: string | null; image: string; price: number; cost: number }
 
 /** Which product to offer: bought together with the order's products, else a best seller. */
-export async function pickProduct(businessId: string, productIds: string[]): Promise<Pick | null> {
+/** What to offer: the products most bought together with the order's, else best sellers; `count` of them. */
+export async function pickProducts(businessId: string, productIds: string[], count: number): Promise<Pick[]> {
     const since = new Date(Date.now() - 180 * DAY).toISOString();
     const score = new Map<string, number>();
 
@@ -41,18 +42,21 @@ export async function pickProduct(businessId: string, productIds: string[]): Pro
             }
         }
     }
-    if (!score.size) {
-        // Nothing bought together yet: what sold most in the last month.
+    if (score.size < count) {
+        // Not enough bought together yet: topped up with what sold most in the last month.
+        const together = new Set(score.keys());
         const { data: recent } = await admin.from("order_items").select("quantity, variants(product_id), orders!inner(created_at, status)")
             .eq("business_id", businessId).gte("orders.created_at", new Date(Date.now() - 30 * DAY).toISOString()).limit(3000);
         for (const it of recent || []) {
             const pid = (it.variants as unknown as { product_id: string } | null)?.product_id;
-            if (pid && !productIds.includes(pid) && !/cancel/i.test(String((it.orders as unknown as { status: string })?.status))) score.set(pid, (score.get(pid) || 0) + (Number(it.quantity) || 1));
+            if (pid && !productIds.includes(pid) && !together.has(pid) && !/cancel/i.test(String((it.orders as unknown as { status: string })?.status)))
+                score.set(pid, (score.get(pid) || 0) - 1_000_000 + (Number(it.quantity) || 1)); // after every bought-together one
         }
     }
 
-    const ranked = [...score.entries()].sort((a, b) => b[1] - a[1]).slice(0, 15).map(([pid]) => pid);
-    if (!ranked.length) return null;
+    const ranked = [...score.entries()].sort((a, b) => b[1] - a[1]).slice(0, count * 6).map(([pid]) => pid);
+    if (!ranked.length) return [];
+    const out: Pick[] = [];
     const { data: products } = await admin.from("products")
         .select("id, name, description, image_url, archived, variants(id, title, sale_price, cost_price, track_inventory, stock_qty, archived)")
         .in("id", ranked).eq("business_id", businessId);
@@ -64,9 +68,10 @@ export async function pickProduct(businessId: string, productIds: string[]): Pro
         if (!p || p.archived || !p.image_url) continue;
         const v = (p.variants || []).find(x => !x.archived && Number(x.sale_price) > 0 && (!x.track_inventory || Number(x.stock_qty) > 0));
         if (!v) continue;
-        return { variantId: v.id, productId: p.id, name: p.name, description: p.description, option: (p.variants.length > 1 ? v.title : null), image: p.image_url, price: Number(v.sale_price), cost: Number(v.cost_price) || 0 };
+        out.push({ variantId: v.id, productId: p.id, name: p.name, description: p.description, option: (p.variants.length > 1 ? v.title : null), image: p.image_url, price: Number(v.sale_price), cost: Number(v.cost_price) || 0 });
+        if (out.length >= count) break;
     }
-    return null;
+    return out;
 }
 
 /** The offer's price: the discount, rounded down to a round 5 pounds. */
@@ -100,27 +105,41 @@ export async function offerUpsell(businessId: string, orderId: string, phone: st
         .eq("business_id", businessId).eq("id", orderId).maybeSingle();
     if (!order || !ACTIVE.includes(String(order.status).toLowerCase())) return "order not active";
     const productIds = (order.order_items || []).map(i => (i.variants as unknown as { product_id: string } | null)?.product_id).filter(Boolean) as string[];
-    const pick = await pickProduct(businessId, productIds);
-    if (!pick) return "nothing to offer";
+    const picks = await pickProducts(businessId, productIds, Math.min(5, Math.max(1, s.count)));
+    if (!picks.length) return "nothing to offer";
 
-    const name = await arabicProductName(pick.name, pick.description, pick.option);
-    const price = offerPrice(pick.price, s.discount_percent);
+    // One message per product: its photo, the price, and its own «ضيفه لطلبي».
+    // The first says what it is; the last also has «لا شكراً».
+    const account = await accountOf(businessId);
+    if (!account) return "no account";
     const first = String((order.customer_info as { name?: string } | null)?.name || "").trim().split(/\s+/)[0];
-    const text = `🎁 عرض لطلبك بس${first ? ` يا ${first}` : ""}\n\n${name}\nبدل ${Math.round(pick.price)} جنيه بـ ${price} جنيه بس (خصم ${s.discount_percent}%)\n\nبيوصلك مع نفس الطلب، من غير مصاريف شحن زيادة.`;
-    const buttons = ["ضيفه لطلبي", "لا شكراً"];
-    await reply(businessId, phone, {
-        type: "interactive",
-        interactive: {
-            type: "button",
-            header: { type: "image", image: { link: pick.image } },
-            body: { text },
-            action: { buttons: [
-                { type: "reply", reply: { id: `upsell:add:${orderId}:${pick.variantId}`, title: buttons[0] } },
-                { type: "reply", reply: { id: `upsell:no:${orderId}`, title: buttons[1] } },
-            ] },
-        },
-    }, text, orderId, { kind: "upsell", header_image: pick.image, buttons, variant_id: pick.variantId, price });
-    return `offered ${pick.variantId}`;
+    let sent = 0;
+    for (const [i, pick] of picks.entries()) {
+        const mediaId = await uploadImage(account, pick.image);
+        if (!mediaId) continue; // no usable photo, not offered
+        const name = await arabicProductName(pick.name, pick.description, pick.option);
+        const price = offerPrice(pick.price, s.discount_percent);
+        const intro = sent === 0
+            ? `🎁 عروض لطلبك بس${first ? ` يا ${first}` : ""}، بخصم ${s.discount_percent}% وبتوصلك مع نفس الطلب من غير شحن زيادة:\n\n`
+            : "";
+        const text = `${intro}${name}\nبدل ${Math.round(pick.price)} جنيه بـ ${price} جنيه بس`;
+        const last = i === picks.length - 1;
+        const buttons = last ? ["ضيفه لطلبي", "لا شكراً"] : ["ضيفه لطلبي"];
+        const ok = await reply(businessId, phone, {
+            type: "interactive",
+            interactive: {
+                type: "button",
+                header: { type: "image", image: { id: mediaId } },
+                body: { text },
+                action: { buttons: [
+                    { type: "reply", reply: { id: `upsell:add:${orderId}:${pick.variantId}`, title: buttons[0] } },
+                    ...(last ? [{ type: "reply", reply: { id: `upsell:no:${orderId}`, title: buttons[1] } }] : []),
+                ] },
+            },
+        }, text, orderId, { kind: "upsell", header_image: pick.image, buttons, variant_id: pick.variantId, price });
+        if (ok) sent++;
+    }
+    return `offered ${sent}`;
 }
 
 /** The customer's button on the offer. True when it was one. */
