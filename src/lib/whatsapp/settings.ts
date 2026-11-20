@@ -1,4 +1,5 @@
 import type { Flow } from "@/lib/whatsapp/flow-types";
+import type { MessageCase, SavedTemplate } from "@/lib/whatsapp/template-fields";
 /**
  * WhatsApp settings, kept in businesses.theme_config.whatsapp and set from
  * Settings → WhatsApp. Defaults are what the owner asked for.
@@ -17,6 +18,10 @@ export interface WhatsAppSettings {
     flows: Flow[];
     /** After confirming: one product often bought with the order, with its photo, at a discount (lib/whatsapp/upsell.ts). */
     upsell: { enabled: boolean; discount_percent: number; count: number; cheap_max: number; offer_hours: number };
+    /** Templates made or edited from the settings: their text and which detail each {{n}} is. */
+    templates: Record<string, SavedTemplate>;
+    /** The template chosen for each automatic case; none: the system's own. */
+    case_templates: Partial<Record<MessageCase, string>>;
 }
 
 export type OrderEvent = "new_order" | "confirmed" | "shipped" | "hold" | "returning" | "delivered";
@@ -38,11 +43,13 @@ export const WHATSAPP_DEFAULTS: WhatsAppSettings = {
     events: { new_order: true, confirmed: true, shipped: true, hold: true, returning: true, delivered: true },
     flows: [],
     upsell: { enabled: true, discount_percent: 10, count: 6, cheap_max: 150, offer_hours: 2 },
+    templates: {},
+    case_templates: {},
 };
 
 export function whatsappSettingsOf(themeConfig: { whatsapp?: Partial<WhatsAppSettings> } | null | undefined): WhatsAppSettings {
     const saved = themeConfig?.whatsapp || {};
-    return { ...WHATSAPP_DEFAULTS, ...saved, events: { ...WHATSAPP_DEFAULTS.events, ...(saved.events || {}) }, flows: Array.isArray(saved.flows) ? saved.flows : [], upsell: { ...WHATSAPP_DEFAULTS.upsell, ...(saved.upsell || {}) } };
+    return { ...WHATSAPP_DEFAULTS, ...saved, events: { ...WHATSAPP_DEFAULTS.events, ...(saved.events || {}) }, flows: Array.isArray(saved.flows) ? saved.flows : [], upsell: { ...WHATSAPP_DEFAULTS.upsell, ...(saved.upsell || {}) }, templates: saved.templates || {}, case_templates: saved.case_templates || {} };
 }
 
 /** The confirmation templates: the current one (with «إلغاء الطلب») first. */

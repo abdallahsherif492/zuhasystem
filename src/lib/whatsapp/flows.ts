@@ -192,7 +192,8 @@ export async function runTimedFlows() {
             const until = new Date(Date.now() - hours * 3_600_000).toISOString();
             const from = new Date(Date.now() - (hours + 48) * 3_600_000).toISOString();
             const { data: sent } = await admin.from("whatsapp_messages").select("order_id, customer_phone, sent_at")
-                .eq("business_id", b.id).eq("direction", "out").in("template_name", [...CONFIRM_TEMPLATES, "order_confirm_photo"])
+                .eq("business_id", b.id).eq("direction", "out")
+                .or(`template_name.in.(${[...CONFIRM_TEMPLATES, "order_confirm_photo"].join(",")}),payload->>event.eq.confirm`)
                 .gte("sent_at", from).lte("sent_at", until).not("order_id", "is", null).limit(500);
             for (const s of sent || []) {
                 const { count: answered } = await admin.from("whatsapp_messages").select("id", { count: "exact", head: true })

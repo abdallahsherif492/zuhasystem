@@ -16,7 +16,7 @@ export interface WaMessage {
     media_id: string | null;
     media_mime: string | null;
     context_id?: string | null;
-    payload?: { params?: string[]; buttons?: string[]; header_image?: string | null; cards?: { image: string; title: string; price: number; old_price: number; variant_id: string }[]; reaction?: { emoji: string; message_id: string }; location?: { latitude: number; longitude: number }; document?: { filename?: string } } | null;
+    payload?: { params?: string[]; buttons?: string[]; header_image?: string | null; cards?: { image: string; title: string; price: number; old_price: number; variant_id: string }[]; event?: string; reaction?: { emoji: string; message_id: string }; location?: { latitude: number; longitude: number }; document?: { filename?: string } } | null;
     template_name: string | null;
     status: string;
     error: unknown;
@@ -62,8 +62,10 @@ export function chatsOf(messages: WaMessage[], me: string | null): Chat[] {
         const lastIn = [...list].reverse().find(m => m.direction === "in") || null;
         const name = [...list].reverse().find(m => m.contact_name)?.contact_name || null;
         const mine = !!me && list.some(m => m.direction === "out" && m.sent_by?.toLowerCase() === me.toLowerCase());
-        const lastTemplate = [...list].reverse().find(m => m.direction === "out" && m.template_name)?.template_name || "";
-        const topic = CONFIRM.has(lastTemplate) ? "confirm" : SHIPPING_PROBLEM.has(lastTemplate) ? "shipping" : null;
+        const lastT = [...list].reverse().find(m => m.direction === "out" && m.template_name);
+        const tName = lastT?.template_name || "", ev = lastT?.payload?.event || "";
+        const topic = CONFIRM.has(tName) || ev === "confirm" || ev === "reminder" ? "confirm"
+            : SHIPPING_PROBLEM.has(tName) || ev === "hold" || ev === "returning" ? "shipping" : null;
         out.push({ phone, name, last, waiting, unread, lastIn, mine, topic });
     }
     return out.sort((a, b) => Date.parse(b.last.sent_at) - Date.parse(a.last.sent_at));

@@ -177,18 +177,21 @@ async function shippingAnswer(businessId: string, m: Incoming, text: string): Pr
     if (!answers.some(k => plain(k) === said)) return false;
 
     // The message answered: the one replied to, else our latest template in 3 days.
-    let asked: { order_id: string | null; template_name: string | null } | null = null;
+    let asked: { order_id: string | null; template_name: string | null; payload?: unknown } | null = null;
     if (m.context_id) {
-        const { data } = await admin.from("whatsapp_messages").select("order_id, template_name").eq("wa_message_id", m.context_id).maybeSingle();
+        const { data } = await admin.from("whatsapp_messages").select("order_id, template_name, payload").eq("wa_message_id", m.context_id).maybeSingle();
         asked = data;
     }
     if (!asked?.template_name) {
-        const { data } = await admin.from("whatsapp_messages").select("order_id, template_name")
+        const { data } = await admin.from("whatsapp_messages").select("order_id, template_name, payload")
             .eq("business_id", businessId).eq("customer_phone", m.customer_phone).eq("direction", "out").not("template_name", "is", null)
             .gte("sent_at", new Date(Date.now() - 3 * 86_400_000).toISOString()).order("sent_at", { ascending: false }).limit(1);
         asked = data?.[0] ?? null;
     }
-    const table = asked?.template_name ? SHIPPING_ANSWERS[asked.template_name] : null;
+    // A template picked in the settings for the case answers like the system's own.
+    const byCase: Record<string, string> = { hold: "delivery_failed", returning: "order_returning", delivered: "order_delivered" };
+    const event = (asked?.payload as { event?: string } | null)?.event || "";
+    const table = asked?.template_name ? SHIPPING_ANSWERS[asked.template_name] || SHIPPING_ANSWERS[byCase[event]] || null : null;
     const key = table && Object.keys(table).find(k => plain(k) === said);
     if (!table || !key || !asked?.order_id) return false;
     const a = table[key];
@@ -214,7 +217,8 @@ async function confirm(businessId: string, m: Incoming, s: WhatsAppSettings) {
     if (!orderId) return;
     // Only an answer to a confirmation template counts as confirming.
     const { count: asked } = await admin.from("whatsapp_messages").select("id", { count: "exact", head: true })
-        .eq("order_id", orderId).eq("direction", "out").in("template_name", [...CONFIRM_TEMPLATES, "confirmation_reminder"]);
+        .eq("order_id", orderId).eq("direction", "out")
+        .or(`template_name.in.(${[...CONFIRM_TEMPLATES, "confirmation_reminder"].join(",")}),payload->>event.in.(confirm,reminder)`);
     if (!asked) return;
     const order = await waitingOrder(businessId, orderId);
     if (!order) return;

@@ -3,7 +3,8 @@ import { plainEnglish } from "@/lib/orders/arabic-names";
 import { translateToArabic } from "@/lib/translate-ar";
 import { accountOf, admin, graph, sendError, uploadImage, waNumber } from "@/lib/whatsapp/server";
 import { renderTemplate, templateDef } from "@/lib/whatsapp/templates";
-import type { OrderEvent } from "@/lib/whatsapp/settings";
+import { whatsappSettingsOf, type OrderEvent } from "@/lib/whatsapp/settings";
+import { BUILTIN_PARAMS, type FieldKey, type MessageCase } from "@/lib/whatsapp/template-fields";
 
 /**
  * The template message for an order, built and sent on the server: the
@@ -54,38 +55,58 @@ export async function sendOrderMessage(businessId: string, orderId: string, kind
         .eq("business_id", businessId).eq("id", orderId).maybeSingle();
     const o = data as unknown as OrderRow | null;
     if (!o) return { ok: false, error: "الأوردر مش موجود." };
+    const { data: biz } = await admin.from("businesses").select("name, theme_config").eq("id", businessId).maybeSingle();
+    const settings = whatsappSettingsOf(biz?.theme_config);
     if (!o.customer_info?.phone) return { ok: false, error: "مفيش رقم للعميل." };
 
-    // Which templates to try, in order, and their values.
-    let tries: { name: string; params: string[]; image?: string | null }[];
-    if (kind === "confirm" || kind === "new_order") {
-        const names = await Promise.all((o.order_items || []).map(arabicName));
-        const line = (o.order_items || []).map((it, i) => `${names[i]} (عدد ${it.quantity || 1})`).join("، ");
-        const params = [firstName(o), line || "طلبك", due(o)];
-        const image = (o.order_items || []).map(i => i.variants?.products?.image_url).find(Boolean) || null;
-        tries = [
-            ...(image ? [{ name: "order_confirm_photo", params, image }] : []),
-            { name: "order_confirm", params },
-            { name: "order_confirmation", params },
-        ];
-    } else if (kind === "reminder") {
-        const names = await Promise.all((o.order_items || []).map(arabicName));
-        tries = [{ name: "confirmation_reminder", params: [firstName(o), names.join("، ") || "طلبك"] }];
-    } else if (kind === "confirmed") tries = [{ name: "order_confirmed", params: [firstName(o), ref(o), due(o)] }];
-    else if (kind === "shipped") tries = [{ name: "order_shipped", params: [firstName(o), o.shipping_companies?.name || "شركة الشحن", o.courier_code || ref(o), due(o)] }];
-    else if (kind === "hold" || kind === "returning") {
-        // The product's name and photo when it has one (the photo templates),
-        // else the plain ones Meta approved first.
-        const names = await Promise.all((o.order_items || []).map(arabicName));
-        const line = (o.order_items || []).map((it, i) => `${names[i]} (عدد ${it.quantity || 1})`).join("، ") || "طلبك";
-        const image = (o.order_items || []).map(i => i.variants?.products?.image_url).find(Boolean) || null;
-        const [photo, plain] = kind === "hold" ? ["delivery_failed_photo", "delivery_failed"] : ["order_returning_photo", "order_returning"];
-        tries = [
-            ...(image ? [{ name: photo, params: [firstName(o), line, ref(o)], image }] : []),
-            { name: plain, params: [firstName(o), ref(o)] },
-        ];
+    // Every detail a template can carry (lib/whatsapp/template-fields.ts).
+    const theCase: MessageCase = kind === "new_order" ? "confirm" : kind;
+    const builtins: Record<MessageCase, string[]> = {
+        confirm: ["order_confirm_photo", "order_confirm", "order_confirmation"],
+        reminder: ["confirmation_reminder"],
+        confirmed: ["order_confirmed"],
+        shipped: ["order_shipped"],
+        hold: ["delivery_failed_photo", "delivery_failed"],
+        returning: ["order_returning_photo", "order_returning"],
+        delivered: ["order_delivered"],
+    };
+    const chosen = settings.case_templates[theCase];
+    const names2 = [...new Set([...(chosen ? [chosen] : []), ...builtins[theCase]])];
+    // The products' Arabic names only when a template carries them (they may need translating).
+    const needsItems = names2.some(n => (settings.templates[n]?.params || BUILTIN_PARAMS[n] || []).includes("items"));
+    const names = needsItems ? await Promise.all((o.order_items || []).map(arabicName)) : [];
+    const info = (o.customer_info || {}) as { governorate?: string; address?: string };
+    const values: Record<FieldKey, string> = {
+        first_name: firstName(o),
+        items: (o.order_items || []).map((it, i) => `${names[i]} (عدد ${it.quantity || 1})`).join("، ") || "طلبك",
+        due: due(o),
+        total: String(Math.round(Number(o.total_amount) || 0)),
+        ref: ref(o),
+        courier: o.shipping_companies?.name || "شركة الشحن",
+        tracking: o.courier_code || ref(o),
+        store: storeName || biz?.name || "Zuha Store",
+        governorate: info.governorate || "-",
+        address: info.address || "-",
+    };
+    const image = (o.order_items || []).map(i => i.variants?.products?.image_url).find(Boolean) || null;
+
+    // Which templates to try, in order: the one chosen in the settings for
+    // this case, then the system's own (with the photo first when there is one).
+    const tries: { name: string; params: string[]; image?: string | null; body: string | null; buttons: string[] }[] = [];
+    for (const name of names2) {
+        const saved = settings.templates[name];
+        const def = templateDef(name);
+        const params = saved?.params || BUILTIN_PARAMS[name];
+        if (!params) continue; // a template whose details the system does not know
+        const wantsImage = saved ? saved.image : !!def?.imageHeader;
+        if (wantsImage && !image) continue;
+        const body = saved?.body ?? def?.body ?? null;
+        tries.push({
+            name, params: params.map(k => values[k] ?? "-"), image: wantsImage ? image : null,
+            body: body ? body.replace(/\{\{(\d+)\}\}/g, (_, n) => values[params[Number(n) - 1]] ?? "") : null,
+            buttons: saved?.buttons || def?.buttons || [],
+        });
     }
-    else tries = [{ name: "order_delivered", params: [firstName(o), storeName || "Zuha Store"] }];
 
     const to = waNumber(o.customer_info.phone);
     let lastError = "الرسالة ما اتبعتتش.";
@@ -112,8 +133,8 @@ export async function sendOrderMessage(businessId: string, orderId: string, kind
         const row = {
             business_id: businessId, phone_number_id: account.phone_number_id, wa_message_id: res.body?.messages?.[0]?.id || null,
             direction: "out", customer_phone: local, customer_wa_id: res.body?.contacts?.[0]?.wa_id || to,
-            type: "template", template_name: t.name, body: renderTemplate(t.name, t.params), status: "pending",
-            payload: { params: t.params, buttons: templateDef(t.name)?.buttons || [], header_image: t.image || null },
+            type: "template", template_name: t.name, body: t.body ?? renderTemplate(t.name, t.params), status: "pending",
+            payload: { params: t.params, buttons: t.buttons, header_image: t.image || null, event: theCase },
             sent_by: sentBy, order_id: o.id, sent_at: new Date().toISOString(),
         };
         const { data: saved } = await admin.from("whatsapp_messages").insert(row).select("*").single();

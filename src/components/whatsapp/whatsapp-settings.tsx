@@ -4,13 +4,14 @@ import { useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/lib/supabase";
-import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { TEMPLATES } from "@/lib/whatsapp/templates";
 import { FlowsEditor } from "@/components/whatsapp/flows-editor";
+import { TemplatesManager, type MetaTemplate } from "@/components/whatsapp/templates-manager";
+import { CASES, type MessageCase } from "@/lib/whatsapp/template-fields";
 import { UpsellSettings } from "@/components/whatsapp/upsell-settings";
 import { CONFIRM_TEMPLATES, ORDER_EVENTS, whatsappSettingsOf, type WhatsAppSettings } from "@/lib/whatsapp/settings";
 
@@ -20,16 +21,9 @@ import { CONFIRM_TEMPLATES, ORDER_EVENTS, whatsappSettingsOf, type WhatsAppSetti
  * are handled (businesses.theme_config.whatsapp).
  */
 
-const STATUS: Record<string, { label: string; tone: string }> = {
-    APPROVED: { label: "متوافق عليه", tone: "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300" },
-    PENDING: { label: "بيتراجع", tone: "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300" },
-    IN_APPEAL: { label: "بيتراجع", tone: "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300" },
-    REJECTED: { label: "مرفوض", tone: "bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300" },
-    PAUSED: { label: "متوقف", tone: "bg-zinc-200 text-zinc-700" },
-};
 
 export function WhatsAppTemplatesAndRules({ businessId, manager }: { businessId: string; manager: boolean }) {
-    const [meta, setMeta] = useState<{ name: string; status: string; rejected_reason?: string }[] | null>(null);
+    const [meta, setMeta] = useState<MetaTemplate[] | null>(null);
     const [submitting, setSubmitting] = useState(false);
     const [settings, setSettings] = useState<WhatsAppSettings | null>(null);
     const [saving, setSaving] = useState(false);
@@ -75,42 +69,36 @@ export function WhatsAppTemplatesAndRules({ businessId, manager }: { businessId:
     const missing = TEMPLATES.filter(t => !byName.has(t.name)).length;
     const set = (patch: Partial<WhatsAppSettings>) => setSettings(s => (s ? { ...s, ...patch } : s));
 
+    // The template used for an automatic case: the system's own, or one picked here.
+    const usable = (meta || []).filter(t => t.name !== "hello_world" && t.status !== "REJECTED");
+    const caseTemplate = (theCase: MessageCase) => {
+        const value = settings?.case_templates[theCase] || "";
+        const picked = usable.find(t => t.name === value);
+        return (
+            <label className="mt-1.5 flex flex-wrap items-center gap-2 text-sm">
+                <span className="text-muted-foreground">القالب:</span>
+                <select value={value} disabled={!manager || !settings}
+                    onChange={e => settings && set({ case_templates: { ...settings.case_templates, [theCase]: e.target.value || undefined } })}
+                    className="h-8 min-w-0 max-w-full rounded-md border bg-background px-2 text-sm">
+                    <option value="">الأساسي ({CASES.find(c => c.key === theCase)?.builtin})</option>
+                    {usable.map(t => <option key={t.id} value={t.name}>{t.name}{t.status === "APPROVED" ? "" : " (لسه بيتراجع)"}</option>)}
+                </select>
+                {picked && picked.status !== "APPROVED" && <span className="text-xs text-amber-700">لحد ما يتوافق عليه بيتبعت الأساسي.</span>}
+            </label>
+        );
+    };
+
     return (
         <>
-            <section className="space-y-3 rounded-2xl border bg-card p-5">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                    <h2 className="text-lg font-bold">القوالب</h2>
-                    {manager && missing > 0 && (
-                        <Button onClick={submit} disabled={submitting} className="gap-2">
-                            {submitting && <Loader2 className="h-4 w-4 animate-spin" />}ابعت {missing} قالب لـ Meta
-                        </Button>
-                    )}
-                </div>
-                <p className="text-sm text-muted-foreground">أول رسالة لأي عميل لازم تكون قالب Meta وافقت عليه. المراجعة بتاخد من دقايق لكام ساعة.</p>
-                {meta === null ? <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /> : (
-                    <ul className="divide-y">
-                        {TEMPLATES.map(t => {
-                            const m = byName.get(t.name);
-                            const st = m ? STATUS[m.status] || { label: m.status, tone: "bg-muted" } : { label: "مش متبعت", tone: "bg-muted text-muted-foreground" };
-                            return (
-                                <li key={t.name} className="flex items-start justify-between gap-3 py-2.5">
-                                    <div className="min-w-0">
-                                        <p className="font-semibold">{t.purpose}</p>
-                                        <p className="font-mono text-xs text-muted-foreground" dir="ltr">{t.name}</p>
-                                        {m?.rejected_reason && m.rejected_reason !== "NONE" && <p className="text-xs text-red-700">سبب الرفض: {m.rejected_reason}</p>}
-                                    </div>
-                                    <span className={cn("shrink-0 rounded-full px-2.5 py-0.5 text-xs font-semibold", st.tone)}>{st.label}</span>
-                                </li>
-                            );
-                        })}
-                    </ul>
-                )}
-            </section>
+            {settings && (
+                <TemplatesManager businessId={businessId} manager={manager} meta={meta} setMeta={setMeta} settings={settings} set={set}
+                    missing={missing} submitting={submitting} submitMissing={submit} />
+            )}
 
             {settings && (
                 <section className="space-y-3 rounded-2xl border bg-card p-5">
                     <h2 className="text-lg font-bold">رسايل بتتبعت لوحدها</h2>
-                    <p className="text-sm text-muted-foreground">أول ما حالة الأوردر تتغير، العميل بتوصله الرسالة في خلال دقيقة من رقم الشركة. الأوردر الواحد مابيوصلوش نفس الرسالة مرتين.</p>
+                    <p className="text-sm text-muted-foreground">أول ما حالة الأوردر تتغير، العميل بتوصله الرسالة في خلال دقيقة من رقم الشركة. الأوردر الواحد مابيوصلوش نفس الرسالة مرتين. اختار القالب لكل حالة: لو القالب اللي اخترته لسه ماتوافقش عليه أو وقع، بيتبعت الأساسي.</p>
                     <ul className="divide-y">
                         {ORDER_EVENTS.map(e => {
                             const ready = (e.key === "new_order" ? CONFIRM_TEMPLATES : [e.template, `${e.template}_photo`]).some(n => byName.get(n)?.status === "APPROVED");
@@ -124,9 +112,15 @@ export function WhatsAppTemplatesAndRules({ businessId, manager }: { businessId:
                                         <Switch checked={settings.events[e.key]} disabled={!manager}
                                             onCheckedChange={v => set({ events: { ...settings.events, [e.key]: v } })} />
                                     </label>
+                                    {caseTemplate(e.key === "new_order" ? "confirm" : e.key)}
                                 </li>
                             );
                         })}
+                        <li className="py-3">
+                            <span className="block font-semibold">تذكير بالتأكيد</span>
+                            <span className="block text-xs text-muted-foreground">بيتبعت من قواعد الأتمتة (العميل مردش بعد X ساعة).</span>
+                            {caseTemplate("reminder")}
+                        </li>
                     </ul>
                     {manager && <Button onClick={save} disabled={saving}>{saving && <Loader2 className="me-2 h-4 w-4 animate-spin" />}احفظ</Button>}
                 </section>

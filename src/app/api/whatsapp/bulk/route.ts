@@ -45,7 +45,7 @@ async function owed(businessId: string, kind: Kind, days: number): Promise<{ id:
     // What each already got.
     const got = new Map<string, Set<string>>();
     for (let i = 0; i < rows.length; i += 300) {
-        const { data } = await admin.from("whatsapp_messages").select("order_id, template_name, status, error")
+        const { data } = await admin.from("whatsapp_messages").select("order_id, template_name, status, error, event:payload->>event")
             .in("order_id", rows.slice(i, i + 300).map(o => o.id)).eq("direction", "out").not("template_name", "is", null);
         for (const m of data || []) {
             // A message that failed on our side (a photo Meta refused) was not received: still owed.
@@ -53,6 +53,11 @@ async function owed(businessId: string, kind: Kind, days: number): Promise<{ id:
             if (m.status === "failed" && !JSON.stringify(m.error || "").includes("131026")) continue;
             if (!got.has(m.order_id)) got.set(m.order_id, new Set());
             got.get(m.order_id)!.add(m.template_name);
+            // A template picked in the settings counts as the case it was sent for.
+            const ev = (m as { event?: string | null }).event;
+            if (ev === "confirm") got.get(m.order_id)!.add("order_confirm");
+            if (ev === "hold") got.get(m.order_id)!.add("delivery_failed");
+            if (ev === "returning") got.get(m.order_id)!.add("order_returning");
         }
     }
     const out: { id: string; kind: OrderMessageKind }[] = [];

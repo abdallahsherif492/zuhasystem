@@ -30,7 +30,7 @@ export interface ChatState {
     lastTemplate: { name: string; at: string; status: string; noWhatsApp: boolean } | null;
 }
 
-interface Msg { customer_phone: string; direction: "in" | "out"; type: string; template_name: string | null; status: string; error: unknown; sent_at: string }
+interface Msg { customer_phone: string; direction: "in" | "out"; type: string; template_name: string | null; status: string; error: unknown; sent_at: string; event?: string | null; payload?: { event?: string } | null }
 
 const last10 = (p: string | null | undefined) => (p || "").replace(/\D/g, "").slice(-10);
 
@@ -53,13 +53,16 @@ export function useChatStates(businessId: string | undefined) {
                 s.lastAt = m.sent_at;
             }
             const failedNoWa = m.status === "failed" && JSON.stringify(m.error || "").includes("131026");
+            const ev = m.event ?? m.payload?.event ?? null;
+            // A template picked in the settings is known by the case it was sent for.
+            const asName = ev === "hold" ? "delivery_failed" : ev === "returning" ? "order_returning" : ev === "confirm" ? "order_confirm" : ev === "reminder" ? "confirmation_reminder" : null;
             if (m.direction === "out" && m.template_name && (!s.lastTemplate || m.sent_at >= s.lastTemplate.at)) {
-                s.lastTemplate = { name: m.template_name, at: m.sent_at, status: m.status, noWhatsApp: failedNoWa };
+                s.lastTemplate = { name: SHIPPING_TEMPLATES[m.template_name] || !asName ? m.template_name : asName, at: m.sent_at, status: m.status, noWhatsApp: failedNoWa };
             }
             // A confirmation that failed on our side (a photo Meta refused) never arrived: as if not sent.
             const lostOnOurSide = m.status === "failed" && !failedNoWa;
             if (lostOnOurSide && s.confirmSentAt === m.sent_at) { s.confirmSentAt = null; s.confirmStatus = null; }
-            if (m.direction === "out" && m.template_name && !lostOnOurSide && [...CONFIRM_TEMPLATES, "order_confirm_photo"].includes(m.template_name) && (!s.confirmSentAt || m.sent_at >= s.confirmSentAt)) {
+            if (m.direction === "out" && m.template_name && !lostOnOurSide && ([...CONFIRM_TEMPLATES, "order_confirm_photo"].includes(m.template_name) || ev === "confirm") && (!s.confirmSentAt || m.sent_at >= s.confirmSentAt)) {
                 s.confirmSentAt = m.sent_at;
                 s.confirmStatus = m.status;
                 s.noWhatsApp = failedNoWa;
@@ -70,7 +73,7 @@ export function useChatStates(businessId: string | undefined) {
         (async () => {
             const since = new Date(Date.now() - 14 * 86_400_000).toISOString();
             const { data, error } = await supabase.from("whatsapp_messages")
-                .select("customer_phone, direction, type, template_name, status, error, sent_at")
+                .select("customer_phone, direction, type, template_name, status, error, sent_at, event:payload->>event")
                 .eq("business_id", businessId).gte("sent_at", since).order("sent_at", { ascending: true }).limit(5000);
             if (gone || error) return;
             for (const m of (data || []) as Msg[]) apply(m);
