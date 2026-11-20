@@ -16,6 +16,7 @@ import { telLink } from "@/lib/orders/contact";
 import { logBusinessAction } from "@/lib/logs/actions-logger";
 import { QUICK_REPLIES, chatsOf, preview, windowUntil, type Chat, type WaMessage } from "@/lib/whatsapp/chats";
 import { clockLabel } from "@/lib/orders/confirm-queue";
+import { CONFIRM_TEMPLATE } from "@/lib/whatsapp/settings";
 
 /**
  * المحادثات: every customer who wrote to the business's WhatsApp number or
@@ -217,7 +218,7 @@ function ChatView({ chat, messages, businessId, me, now, others, onBack, onSent 
         const due = Math.max(0, (Number(o.total_amount) || 0) - (Number(o.paid_amount) || 0));
         const first = String(o.customer_info?.name || "").trim().split(/\s+/)[0] || "عميلنا";
         await send({
-            template: { name: "order_confirmation", language: "ar", params: [first, items, String(Math.round(due))] },
+            template: { name: CONFIRM_TEMPLATE, language: "ar", params: [first, items, String(Math.round(due))] },
             order_id: o.id,
             preview: `رسالة التأكيد: ${items} · ${egp(due)}`,
         });

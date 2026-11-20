@@ -39,6 +39,7 @@ import { deliveryRateOf } from "@/lib/easyorders-delivery-rate";
 import { fetchDeliveryRatesAction } from "./delivery-rate-actions";
 import { MISSED_ORDERS_IN_QUEUE, MissedOrderNote } from "@/components/orders/missed-order";
 import { OrderSummary, egp } from "@/components/orders/order-summary";
+import { SendConfirmationButton } from "@/components/whatsapp/send-confirmation";
 import { governorateArabic } from "@/lib/governorates";
 import { CancelOrderDialog } from "@/components/orders/cancel-order-dialog";
 import {
@@ -1417,6 +1418,7 @@ function PlatformOrdersContent() {
                             <FlowInstruction order={order} me={me} missed={isMissed(order)} now={now}>
                                 <ContactActions order={order as any} storeName={storeName} size="default" big
                                     inverse={queueStateOf(order, now) !== "scheduled"} onContact={() => claim(order)} />
+                                {activeBusiness && <SendConfirmationButton order={order as any} businessId={activeBusiness.id} />}
                             </FlowInstruction>
 
                             {/* 3. What to keep in mind, and what happened last time. */}

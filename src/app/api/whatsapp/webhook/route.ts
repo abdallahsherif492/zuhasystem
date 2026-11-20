@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 import { WHATSAPP_VERIFY_TOKEN } from "@/lib/whatsapp/config";
-import { handleConfirmReply } from "@/lib/whatsapp/auto-confirm";
+import { handleReply } from "@/lib/whatsapp/auto-confirm";
 
 /**
  * WhatsApp's webhook (app: Zuha System). GET answers Meta's check when the
@@ -65,9 +65,17 @@ function bodyOf(m: WaMessage): { body: string | null; media?: { id: string; mime
     }
 }
 
+/** A line in Settings → integration logs, so a webhook that is not arriving can be seen. */
+async function trace(status: "success" | "error" | "info", message: string, details: Record<string, unknown>, businessId: string | null = null) {
+    await admin.from("integration_logs").insert({ business_id: businessId, integration_name: "WhatsApp", status, message, details }).then(() => undefined, () => undefined);
+}
+
 export async function POST(request: Request) {
     const raw = await request.text();
     if (!signedByMeta(raw, request.headers.get("x-hub-signature-256"))) {
+        await trace("error", "Webhook signature did not match WHATSAPP_APP_SECRET", {
+            secret_set: !!process.env.WHATSAPP_APP_SECRET, signature_sent: !!request.headers.get("x-hub-signature-256"), bytes: raw.length,
+        });
         return new Response("bad signature", { status: 401 });
     }
     let payload: { entry?: { changes?: { field: string; value: Record<string, unknown> }[] }[] };
@@ -94,7 +102,7 @@ export async function POST(request: Request) {
             const phoneNumberId = v.metadata?.phone_number_id;
             if (!phoneNumberId) continue;
             const businessId = await business(phoneNumberId);
-            if (!businessId) continue;
+            if (!businessId) { await trace("info", "Webhook for a number not connected", { phone_number_id: phoneNumberId }); continue; }
 
             const names = new Map((v.contacts || []).map(c => [c.wa_id, c.profile?.name || null]));
             const rows = (v.messages || []).map(m => {
@@ -119,12 +127,15 @@ export async function POST(request: Request) {
             });
             if (rows.length) {
                 const { error } = await admin.from("whatsapp_messages").upsert(rows, { onConflict: "wa_message_id", ignoreDuplicates: true });
-                if (error) console.error("whatsapp webhook: messages not saved", error.message);
+                if (error) {
+                    console.error("whatsapp webhook: messages not saved", error.message);
+                    await trace("error", `Messages not saved: ${error.message}`, { count: rows.length }, businessId);
+                }
             }
-            // «تأكيد» on the confirmation message confirms the order.
+            // Answers to the confirmation message: confirm, cancel, a cancel reason.
             for (const r of rows) {
-                try { await handleConfirmReply(businessId, r.customer_phone, r.body, r.context_id); }
-                catch (e) { console.error("whatsapp auto-confirm failed", e); }
+                try { await handleReply(businessId, r); }
+                catch (e) { console.error("whatsapp auto reply failed", e); }
             }
 
             // Our messages: sent -> delivered -> read, or failed.
