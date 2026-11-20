@@ -4,7 +4,7 @@ import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "rea
 import { useSearchParams } from "next/navigation";
 import {
     ArrowDown, ArrowRight, Check, CheckCheck, Clock, Copy, CornerUpLeft, FileText, Loader2, MapPin, MessageCircle, MessageSquareDot,
-    Paperclip, Phone, Search, Send, Smile, TriangleAlert, X,
+    Paperclip, Phone, Search, Send, Smile, TriangleAlert, User, X,
 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/lib/supabase";
@@ -199,7 +199,7 @@ function Chats() {
 function Avatar({ name, size = 44 }: { name: string; size?: number }) {
     return (
         <span style={{ width: size, height: size }} className="flex shrink-0 items-center justify-center rounded-full bg-[#dfe5e7] text-base font-bold text-[#54656f] dark:bg-[#2a3942] dark:text-[#aebac1]">
-            {name.trim().charAt(0)}
+            {/^[\d+\s]+$/.test(name.trim()) ? <User className="h-[55%] w-[55%]" /> : name.trim().charAt(0)}
         </span>
     );
 }
@@ -229,10 +229,24 @@ function ChatView({ phone, chat, messages, businessId, me, now, others, onBack, 
     }, [messages]);
     const visible = messages.filter(m => m.type !== "reaction");
 
+    // Stays on the latest message while it is in view: when a message comes,
+    // and when the box or its content changes size (the orders strip loading
+    // above, a photo loading, the keyboard opening on a phone).
+    const pinned = useRef(true);
+    useEffect(() => { pinned.current = atBottom; }, [atBottom]);
     useEffect(() => {
         const el = scroller.current;
         if (el && atBottom) el.scrollTop = el.scrollHeight;
     }, [visible.length, atBottom]);
+    useEffect(() => {
+        const el = scroller.current;
+        if (!el) return;
+        const stick = () => { if (pinned.current) el.scrollTop = el.scrollHeight; };
+        const ro = new ResizeObserver(stick);
+        ro.observe(el);
+        el.addEventListener("load", stick, true);
+        return () => { ro.disconnect(); el.removeEventListener("load", stick, true); };
+    }, []);
 
     useEffect(() => {
         const unread = messages.filter(m => m.direction === "in" && m.status === "received" && m.type !== "reaction");
@@ -366,7 +380,7 @@ function ChatView({ phone, chat, messages, businessId, me, now, others, onBack, 
                     return (
                         <div key={m.id}>
                             {showDay && <div className="my-3 flex justify-center"><span className="rounded-lg bg-white px-3 py-1 text-xs text-[#54656f] shadow-sm dark:bg-[#182229] dark:text-[#8696a0]">{dayLabel(m.sent_at)}</span></div>}
-                            <Bubble m={m} tail={tail} businessId={businessId} quoted={m.context_id ? byWaId.get(m.context_id) : undefined}
+                            <Bubble m={m} tail={tail} businessId={businessId} me={me} quoted={m.context_id ? byWaId.get(m.context_id) : undefined}
                                 reaction={m.wa_message_id ? reactions.get(m.wa_message_id) : undefined} onReply={() => setReplyTo(m)} />
                         </div>
                     );
@@ -431,8 +445,8 @@ function ChatView({ phone, chat, messages, businessId, me, now, others, onBack, 
     );
 }
 
-function Bubble({ m, tail, businessId, quoted, reaction, onReply }: {
-    m: WaMessage; tail: boolean; businessId: string; quoted?: WaMessage; reaction?: string; onReply: () => void;
+function Bubble({ m, tail, businessId, me, quoted, reaction, onReply }: {
+    m: WaMessage; tail: boolean; businessId: string; me: string | null; quoted?: WaMessage; reaction?: string; onReply: () => void;
 }) {
     const out = m.direction === "out";
     const media = m.media_id ? `/api/whatsapp/media/${m.media_id}?business_id=${businessId}` : null;
@@ -470,7 +484,7 @@ function Bubble({ m, tail, businessId, quoted, reaction, onReply }: {
                     {m.body && m.type !== "document" && <p className="whitespace-pre-wrap break-words">{m.body}</p>}
                     {!m.body && !media && !header && m.type !== "location" && <p className="italic text-muted-foreground">{preview(m)}</p>}
                     <span className="mt-0.5 flex items-center justify-end gap-1 text-[11px] text-[#667781] dark:text-[#8696a0]">
-                        {out && m.sent_by && <span>{m.sent_by === "system" ? "تلقائي" : teamName(m.sent_by)} ·</span>}
+                        {out && m.sent_by && <span>{m.sent_by === "system" ? "تلقائي" : m.sent_by.toLowerCase() === me ? "انت" : teamName(m.sent_by)} ·</span>}
                         {time(m.sent_at)}
                         {out && <Ticks status={m.status} />}
                     </span>

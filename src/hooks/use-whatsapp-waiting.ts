@@ -6,7 +6,8 @@ import { supabase } from "@/lib/supabase";
 /**
  * How many WhatsApp chats are waiting for a reply (the customer wrote last),
  * for the menu badge. Live: a customer's message updates it at once, and the
- * tab's title shows it too, so it is seen from another tab. Nothing before
+ * tab's title shows it too, so it is seen from another tab. Read once, then
+ * kept current from the live feed (no polling). Nothing before
  * 20261124 is run, or for a business with no number.
  */
 export function useWhatsAppWaiting(businessId: string | undefined) {
@@ -14,21 +15,28 @@ export function useWhatsAppWaiting(businessId: string | undefined) {
     useEffect(() => {
         if (!businessId) return;
         let gone = false;
-        const load = async () => {
+        // Who wrote last in each chat: loaded once, then kept up to date from
+        // the live feed, so nothing is read again on each message.
+        const last = new Map<string, { direction: string; at: string }>();
+        const recount = () => { if (!gone) setCount([...last.values()].filter(v => v.direction === "in").length); };
+        (async () => {
             const since = new Date(Date.now() - 7 * 86_400_000).toISOString();
             const { data, error } = await supabase.from("whatsapp_messages").select("customer_phone, direction, type, sent_at")
                 .eq("business_id", businessId).gte("sent_at", since).order("sent_at", { ascending: false }).limit(3000);
             if (gone || error) return;
-            const last = new Map<string, string>();
-            for (const m of data || []) if (m.type !== "reaction" && !last.has(m.customer_phone)) last.set(m.customer_phone, m.direction);
-            setCount([...last.values()].filter(d => d === "in").length);
-        };
-        load();
-        const timer = setInterval(load, 120_000);
+            for (const m of data || []) if (m.type !== "reaction" && !last.has(m.customer_phone)) last.set(m.customer_phone, { direction: m.direction, at: m.sent_at });
+            recount();
+        })();
         const channel = supabase.channel(`wa-waiting-${businessId}`)
-            .on("postgres_changes", { event: "INSERT", schema: "public", table: "whatsapp_messages", filter: `business_id=eq.${businessId}` }, () => load())
+            .on("postgres_changes", { event: "INSERT", schema: "public", table: "whatsapp_messages", filter: `business_id=eq.${businessId}` }, payload => {
+                const m = payload.new as { customer_phone: string; direction: string; type: string; sent_at: string };
+                if (!m?.customer_phone || m.type === "reaction") return;
+                const prev = last.get(m.customer_phone);
+                if (!prev || prev.at <= m.sent_at) last.set(m.customer_phone, { direction: m.direction, at: m.sent_at });
+                recount();
+            })
             .subscribe();
-        return () => { gone = true; clearInterval(timer); supabase.removeChannel(channel); };
+        return () => { gone = true; supabase.removeChannel(channel); };
     }, [businessId]);
 
     // The count in the tab's title, so it shows from any other tab.

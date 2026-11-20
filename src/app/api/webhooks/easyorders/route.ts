@@ -1,3 +1,5 @@
+import { firstWorkingImage, productPhotoCandidates } from "@/lib/product-photos";
+import { processOutbox } from "@/lib/whatsapp/outbox";
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { logIntegrationActivity } from '@/lib/logs/integration-logger';
@@ -450,18 +452,26 @@ export async function POST(request: Request) {
 
         // The product's photo, from the store, for the WhatsApp confirmation
         // and the chats (products.image_url, 20261125). Only where none is set.
+        // EasyOrders' `thumb` link is not public (403); its `images` are, so
+        // the first that opens is kept. Products that have one are skipped.
         try {
-            const photos = new Map<string, string>();
+            const wanted = new Map<string, unknown[]>();
             for (const item of rawItems) {
                 const sku = normalizeStr(item.variant?.taager_code || item.product?.sku || item.sku || "");
-                const thumb = item.product?.thumb || item.product?.images?.[0] || item.thumb;
                 const v = sku ? variantsMap.get(sku) : null;
-                if (v?.product_id && typeof thumb === "string" && /^https:\/\//.test(thumb)) photos.set(v.product_id, thumb);
+                if (v?.product_id && !wanted.has(v.product_id)) wanted.set(v.product_id, [...productPhotoCandidates(item.product), item.thumb]);
             }
-            for (const [productId, url] of photos) {
-                await supabase.from("products").update({ image_url: url }).eq("id", productId).eq("business_id", businessId).is("image_url", null);
+            if (wanted.size) {
+                const { data: bare } = await supabase.from("products").select("id").in("id", [...wanted.keys()]).is("image_url", null);
+                for (const { id } of bare || []) {
+                    const url = await firstWorkingImage(wanted.get(id) as string[]);
+                    if (url) await supabase.from("products").update({ image_url: url }).eq("id", id).eq("business_id", businessId).is("image_url", null);
+                }
             }
         } catch { /* before 20261125: no column yet */ }
+
+        // The WhatsApp confirmation, now that the items are in (20261125).
+        try { await processOutbox({ orderId: newOrder.id }); } catch (e) { console.error("WhatsApp confirmation:", e); }
 
         // Whoever was a "missed order" with this phone has now ordered
         // (20261025_missed_leads.sql; harmless before it is run).
