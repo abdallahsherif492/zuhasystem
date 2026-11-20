@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 import { WHATSAPP_VERIFY_TOKEN } from "@/lib/whatsapp/config";
+import { handleConfirmReply } from "@/lib/whatsapp/auto-confirm";
 
 /**
  * WhatsApp's webhook (app: Zuha System). GET answers Meta's check when the
@@ -119,6 +120,11 @@ export async function POST(request: Request) {
             if (rows.length) {
                 const { error } = await admin.from("whatsapp_messages").upsert(rows, { onConflict: "wa_message_id", ignoreDuplicates: true });
                 if (error) console.error("whatsapp webhook: messages not saved", error.message);
+            }
+            // «تأكيد» on the confirmation message confirms the order.
+            for (const r of rows) {
+                try { await handleConfirmReply(businessId, r.customer_phone, r.body, r.context_id); }
+                catch (e) { console.error("whatsapp auto-confirm failed", e); }
             }
 
             // Our messages: sent -> delivered -> read, or failed.
