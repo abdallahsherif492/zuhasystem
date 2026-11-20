@@ -3,6 +3,7 @@ import { admin } from "@/lib/whatsapp/server";
 import { reply, say } from "@/lib/whatsapp/system-text";
 import { runReplyFlows } from "@/lib/whatsapp/flows";
 import { offerUpsell, upsellAnswer } from "@/lib/whatsapp/upsell";
+import { creditFollowUp } from "@/lib/whatsapp/credit";
 import { CANCEL_CHOICES, CONFIRM_TEMPLATES, whatsappSettingsOf, type WhatsAppSettings } from "@/lib/whatsapp/settings";
 
 /**
@@ -94,6 +95,7 @@ async function builtIn(businessId: string, m: Incoming) {
                 .eq("business_id", businessId).eq("id", orderId).ilike("status", "waiting").select("id");
             if (!moved?.length) return;
             await log(businessId, orderId, `Cancelled (العميل لغى من الواتساب: ${choice.title})`);
+            await creditFollowUp(businessId, orderId, m.customer_phone, "cancelled");
         } else return;
         await say(businessId, m.customer_phone, choice.reason === "other"
             ? "شكراً 🌸 لو حابب تقولنا السبب اكتبهولنا هنا، يهمنا نعرف."
@@ -111,6 +113,7 @@ async function builtIn(businessId: string, m: Incoming) {
             .eq("business_id", businessId).eq("id", orderId).ilike("status", "waiting").select("id");
         if (!moved?.length) return;
         await log(businessId, orderId, "Cancelled (العميل لغى من الواتساب)");
+        await creditFollowUp(businessId, orderId, m.customer_phone, "cancelled");
         const body = "تم إلغاء طلبك. ممكن تقولنا السبب؟ يهمنا نعرف 🌸\nولو ضغطت بالغلط ابعتلنا هنا ونرجّعه.";
         await reply(businessId, m.customer_phone, {
             type: "interactive",
@@ -259,6 +262,7 @@ async function confirm(businessId: string, m: Incoming, s: WhatsAppSettings) {
         .eq("business_id", businessId).eq("id", orderId).ilike("status", "waiting").select("id");
     if (!moved?.length) return;
     await log(businessId, orderId, "Pending (العميل أكد على الواتساب)");
+    await creditFollowUp(businessId, orderId, phone, "confirmed");
     await say(businessId, phone, "تم تأكيد طلبك ✅ هيتجهز ويتشحن خلال يومين عمل، وهنبعتلك رقم البوليصة أول ما يتشحن.", orderId);
     // The offer with a product's photo (Settings → WhatsApp → «عرض بعد التأكيد»).
     try { await offerUpsell(businessId, orderId, phone); } catch (e) { console.error("whatsapp upsell", e); }

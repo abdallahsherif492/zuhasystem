@@ -333,6 +333,23 @@ function ChatView({ phone, chat, messages, businessId, me, now, others, onBack, 
     const shippingKind = (o: OrderLite) => { const st = o.status?.toLowerCase() || ""; return st.includes("hold") ? "hold" : st === "returning" ? "returning" : null; };
     const sendShipping = (o: OrderLite) => post("/api/whatsapp/send-order", JSON.stringify({ business_id: businessId, order_id: o.id, kind: shippingKind(o) }));
     const problemOrder = orders?.find(o => shippingKind(o)) || null;
+    // «تم الإرسال لشركة الشحن»: the moderator passed the customer's answer to
+    // the courier — a follow-up in their name on the shipping problems page,
+    // which their daily target counts.
+    const [sentToCourier, setSentToCourier] = useState<Set<string>>(new Set());
+    const markSentToCourier = async (o: OrderLite) => {
+        const { error } = await supabase.from("shipping_followups").insert({
+            business_id: businessId, order_id: o.id, outcome: "courier_contacted",
+            note: "اتبعت لشركة الشحن بعد المتابعة مع العميل على الواتساب", next_action_at: null, created_by: me || currentUser?.email || "Staff",
+        });
+        if (error) { toast.error("ما اتسجلش، جرّب تاني."); return; }
+        setSentToCourier(prev => new Set(prev).add(o.id));
+        logBusinessAction({
+            businessId, userEmail: currentUser?.email || "Staff", actionType: "edit", entityType: "order", entityId: o.id,
+            entityName: `Order #${o.id.slice(0, 8)}`, changes: [{ field: "Shipping follow-up", old_value: null, new_value: "اتبعت لشركة الشحن (من الواتساب)" }],
+        });
+        toast.success("اتسجل إنك تابعت الأوردر ده مع شركة الشحن.");
+    };
 
     // «الغي الأوردر»: the same reasons as the confirmations page.
     const [cancelling, setCancelling] = useState<OrderLite | null>(null);
@@ -407,9 +424,13 @@ function ChatView({ phone, chat, messages, businessId, me, now, others, onBack, 
                                     <p className="truncate font-semibold">{egp(o.total_amount)}</p>
                                     <p className="truncate text-xs text-muted-foreground">{o.order_items.map(i => `${i.variants?.products?.name || i.unmapped_name || "منتج"} ×${i.quantity}`).join("، ")}</p>
                                     {shippingKind(o) && (
-                                        <div className="mt-1 flex gap-1.5">
+                                        <div className="mt-1 flex flex-wrap gap-1.5">
                                             <button type="button" disabled={sending} onClick={() => sendShipping(o)} className="rounded-md border px-2.5 py-1 text-xs font-semibold hover:bg-muted">
                                                 {shippingKind(o) === "hold" ? "ابعت «المندوب ماقدرش يوصله»" : "ابعت «الشحنة راجعة»"}
+                                            </button>
+                                            <button type="button" disabled={sentToCourier.has(o.id)} onClick={() => markSentToCourier(o)}
+                                                className="rounded-md bg-[#008069] px-2.5 py-1 text-xs font-bold text-white hover:bg-[#006e5a] disabled:opacity-60">
+                                                {sentToCourier.has(o.id) ? "✓ اتبعت لشركة الشحن" : "تم الإرسال لشركة الشحن"}
                                             </button>
                                         </div>
                                     )}

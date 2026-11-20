@@ -305,7 +305,7 @@ export async function upsellAnswer(businessId: string, phone: string, buttonId: 
         subtotal: Number(order.subtotal || 0) + price, total_amount: total, total_cost: Number(order.total_cost || 0) + cost,
     }).eq("id", orderId);
     await admin.from("actions_log").insert({
-        business_id: businessId, user_email: "whatsapp-auto", action_type: "update", entity_type: "order", entity_id: orderId,
+        business_id: businessId, user_email: "whatsapp-auto", action_type: "edit", entity_type: "order", entity_id: orderId,
         entity_name: `Order #${orderId.slice(0, 8)}`, changes: [{ field: "Items", old_value: null, new_value: `+1 من العرض على الواتساب (${price} جنيه)` }],
         metadata: { source: "whatsapp-upsell", variant_id: variantId, price },
     });

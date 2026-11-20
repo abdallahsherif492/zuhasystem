@@ -1,6 +1,7 @@
 import { admin } from "@/lib/whatsapp/server";
 import { sendOrderMessage } from "@/lib/whatsapp/order-messages";
 import { say } from "@/lib/whatsapp/system-text";
+import { creditFollowUp } from "@/lib/whatsapp/credit";
 import { whatsappSettingsOf } from "@/lib/whatsapp/settings";
 import { CONFIRM_TEMPLATES } from "@/lib/whatsapp/settings";
 import { deliveryRateOf } from "@/lib/easyorders-delivery-rate";
@@ -113,6 +114,7 @@ async function act(a: FlowAction, x: Ctx, flow: Flow): Promise<string> {
                 : { status: "Cancelled", cancelled_by: "whatsapp-auto", cancel_note: `قاعدة «${flow.name}»` };
             const { data } = await admin.from("orders").update(patch).eq("id", x.orderId).ilike("status", "waiting").select("id");
             if (data?.length) {
+                await creditFollowUp(x.businessId, x.orderId, x.phone, a.status === "Pending" ? "confirmed" : "cancelled");
                 await admin.from("actions_log").insert({
                     business_id: x.businessId, user_email: "whatsapp-auto", action_type: "update_status", entity_type: "order", entity_id: x.orderId,
                     entity_name: `Order #${x.orderId.slice(0, 8)}`, changes: [{ field: "Status", old_value: "Waiting", new_value: `${a.status} (قاعدة «${flow.name}»)` }],
