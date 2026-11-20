@@ -87,10 +87,14 @@ export async function POST(request: Request) {
     if (!wabaId || !phoneId) {
         const dbg = await fetch(`${GRAPH}/debug_token?input_token=${token}&access_token=${WHATSAPP_APP_ID}|${encodeURIComponent(secret)}`).then(r => r.json()).catch(() => null) as
             { data?: { granular_scopes?: { scope: string; target_ids?: string[] }[] } } | null;
-        wabaId = wabaId || dbg?.data?.granular_scopes?.find(s => s.scope === "whatsapp_business_management")?.target_ids?.[0] || "";
-        if (wabaId && !phoneId) {
-            const nums = await graph(`${wabaId}/phone_numbers`, token);
-            phoneId = nums.body?.data?.[0]?.id || "";
+        // The token may reach more than one WhatsApp account (one linked from
+        // the phone app, one on the API): the number on the Cloud API wins.
+        const wabas = wabaId ? [wabaId] : (dbg?.data?.granular_scopes?.find(s => s.scope === "whatsapp_business_management")?.target_ids || []);
+        for (const w of wabas) {
+            const nums = await graph(`${w}/phone_numbers?fields=id,display_phone_number,platform_type,status`, token);
+            const list = (nums.body?.data || []) as { id: string; platform_type?: string }[];
+            const pick = list.find(n => n.id === phoneId) || list.find(n => n.platform_type === "CLOUD_API");
+            if (pick) { wabaId = w; phoneId = pick.id; break; }
         }
     }
     if (!wabaId || !phoneId) return NextResponse.json({ error: "Meta ما رجعتش رقم الواتساب. جرّب تاني." }, { status: 502 });
