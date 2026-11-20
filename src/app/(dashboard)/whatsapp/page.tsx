@@ -33,7 +33,7 @@ import { clockLabel } from "@/lib/orders/confirm-queue";
  * a tap away. Voice notes and calls are not sent from here.
  */
 
-type Filter = "unread" | "waiting" | "mine" | "all";
+type Filter = "unread" | "waiting" | "mine" | "all" | "confirm" | "shipping";
 
 interface OrderLite {
     id: string; status: string; total_amount: number; paid_amount: number | null; created_at: string; closed_by?: string | null;
@@ -125,9 +125,10 @@ function Chats() {
     const chats = useMemo(() => chatsOf(messages || [], me), [messages, me]);
     const q = query.trim();
     const shown = chats.filter(c =>
-        (filter === "all" || (filter === "unread" ? c.unread > 0 || c.phone === open : filter === "waiting" ? c.last.direction === "in" : c.mine))
+        (filter === "all" || (filter === "unread" ? c.unread > 0 || c.phone === open : filter === "waiting" ? c.last.direction === "in"
+            : filter === "confirm" ? c.topic === "confirm" : filter === "shipping" ? c.topic === "shipping" : c.mine))
         && (!q || c.phone.includes(q.replace(/\D/g, "") || "~") || (c.name || "").includes(q) || (c.last.body || "").includes(q)));
-    const counts = { unread: chats.filter(c => c.unread > 0).length, waiting: chats.filter(c => c.last.direction === "in").length, mine: chats.filter(c => c.mine).length, all: chats.length };
+    const counts = { confirm: chats.filter(c => c.topic === "confirm").length, shipping: chats.filter(c => c.topic === "shipping").length, unread: chats.filter(c => c.unread > 0).length, waiting: chats.filter(c => c.last.direction === "in").length, mine: chats.filter(c => c.mine).length, all: chats.length };
     const current: Chat | null = chats.find(c => c.phone === open) || null;
     const others = (phone: string) => Object.entries(typing).filter(([email, p]) => p === phone && email !== me).map(([email]) => teamName(email));
     const addSent = useCallback((m: WaMessage) => setMessages(prev => (prev && !prev.some(x => x.id === m.id) ? [m, ...prev] : prev)), []);
@@ -143,7 +144,7 @@ function Chats() {
                             className="h-10 w-full rounded-lg bg-background pe-9 ps-3 text-base outline-none ring-1 ring-border focus:ring-2 focus:ring-[#25d366] sm:text-sm" />
                     </div>
                     <div className="-mx-3 flex gap-1.5 overflow-x-auto px-3 [scrollbar-width:none]">
-                        {([["all", "الكل"], ["unread", "غير مقروءة"], ["waiting", "مستنيين رد"], ["mine", "بتوعي"]] as [Filter, string][]).map(([k, label]) => (
+                        {([["all", "الكل"], ["unread", "غير مقروءة"], ["waiting", "مستنيين رد"], ["confirm", "التأكيدات"], ["shipping", "مشاكل الشحن"], ["mine", "بتوعي"]] as [Filter, string][]).map(([k, label]) => (
                             <button key={k} type="button" onClick={() => setFilter(k)}
                                 className={cn("shrink-0 rounded-full px-3 py-1.5 text-sm font-medium", filter === k ? "bg-[#d9fdd3] text-[#008069] dark:bg-[#0a332c] dark:text-[#25d366]" : "bg-background text-muted-foreground ring-1 ring-border hover:bg-muted")}>
                                 {label}{counts[k] > 0 && <span className="ms-1 tabular-nums">{counts[k]}</span>}

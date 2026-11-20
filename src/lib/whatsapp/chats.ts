@@ -35,7 +35,12 @@ export interface Chat {
     unread: number;
     lastIn: WaMessage | null;
     mine: boolean;
+    /** What the last template we sent was about: the confirmation, or a shipping problem. */
+    topic: "confirm" | "shipping" | null;
 }
+
+const CONFIRM = new Set(["order_confirm", "order_confirm_photo", "order_confirmation", "confirmation_reminder"]);
+const SHIPPING_PROBLEM = new Set(["delivery_failed", "delivery_failed_photo", "order_returning", "order_returning_photo"]);
 
 const DAY = 24 * 3_600_000;
 
@@ -57,7 +62,9 @@ export function chatsOf(messages: WaMessage[], me: string | null): Chat[] {
         const lastIn = [...list].reverse().find(m => m.direction === "in") || null;
         const name = [...list].reverse().find(m => m.contact_name)?.contact_name || null;
         const mine = !!me && list.some(m => m.direction === "out" && m.sent_by?.toLowerCase() === me.toLowerCase());
-        out.push({ phone, name, last, waiting, unread, lastIn, mine });
+        const lastTemplate = [...list].reverse().find(m => m.direction === "out" && m.template_name)?.template_name || "";
+        const topic = CONFIRM.has(lastTemplate) ? "confirm" : SHIPPING_PROBLEM.has(lastTemplate) ? "shipping" : null;
+        out.push({ phone, name, last, waiting, unread, lastIn, mine, topic });
     }
     return out.sort((a, b) => Date.parse(b.last.sent_at) - Date.parse(a.last.sent_at));
 }
