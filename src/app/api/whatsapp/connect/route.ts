@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { createServerClient } from "@supabase/ssr";
 import { createClient } from "@supabase/supabase-js";
-import { GRAPH, WHATSAPP_APP_ID } from "@/lib/whatsapp/config";
+import { GRAPH, WHATSAPP_APP_ID, WHATSAPP_PHONE_NUMBER_ID, WHATSAPP_WABA_ID } from "@/lib/whatsapp/config";
 
 /**
  * Settings → WhatsApp. GET: which number this business has connected.
@@ -97,7 +97,16 @@ export async function POST(request: Request) {
             if (pick) { wabaId = w; phoneId = pick.id; break; }
         }
     }
+    // A system user's token does not always list its accounts; the number
+    // set up for this system is known.
+    if (fromEnv && (!wabaId || !phoneId)) { wabaId = WHATSAPP_WABA_ID; phoneId = WHATSAPP_PHONE_NUMBER_ID; }
     if (!wabaId || !phoneId) return NextResponse.json({ error: "Meta ما رجعتش رقم الواتساب. جرّب تاني." }, { status: 502 });
+
+    // The token must reach the number, or nothing will send.
+    const check = await graph(`${phoneId}?fields=display_phone_number,verified_name`, token);
+    if (!check.ok) {
+        return NextResponse.json({ error: `التوكن مش شغال على الرقم: ${check.body?.error?.message || "Meta رفضت"}` }, { status: 502 });
+    }
 
     // 3. Messages to the app; the Business app's contacts and chats synced.
     const setup: Record<string, unknown> = {};
