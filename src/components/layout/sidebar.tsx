@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils";
 import { canOpenPage } from "@/lib/navigation-access";
 import { useStarterMode, STARTER_PAGES } from "@/hooks/use-starter-mode";
 import { Button } from "@/components/ui/button";
-import { LayoutDashboard, AlertTriangle, Package, ShoppingCart, Settings, Users, Truck, Banknote, LineChart, ShoppingBag, Megaphone, Box, DollarSign, ShieldCheck, FileText, Ticket, CreditCard, Clock, Inbox, Calendar, LogOut, Globe, ChevronDown, ChevronRight, BarChart3, PieChart, History, BookOpen, Wallet, Upload, LifeBuoy, XCircle, Layers, Target } from "lucide-react";
+import { LayoutDashboard, AlertTriangle, Package, ShoppingCart, Settings, Users, Truck, Banknote, LineChart, ShoppingBag, Megaphone, Box, DollarSign, ShieldCheck, FileText, Ticket, CreditCard, Clock, Inbox, Calendar, LogOut, Globe, ChevronDown, ChevronRight, BarChart3, PieChart, History, BookOpen, Wallet, Upload, LifeBuoy, XCircle, Layers, Target, MessageCircle } from "lucide-react";
 
 import Image from "next/image";
 import { useState, useEffect } from "react";
@@ -164,6 +164,7 @@ export function SidebarContent({ onLinkClick }: { onLinkClick?: () => void }) {
                         { title: t("Shipping problems"), href: "/logistics/issues", icon: LifeBuoy },
                     ]
                 },
+                { title: t("WhatsApp"), href: "/whatsapp", icon: MessageCircle },
                 { title: t("Customers"), href: "/customers", icon: Users },
                 { title: t("Support"), href: "/support", icon: Ticket },
             ]

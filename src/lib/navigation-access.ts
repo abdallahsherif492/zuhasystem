@@ -5,6 +5,8 @@ export function canOpenPage(path: string, role: string | null, allowed: string[]
     // Settings opens for everyone: staff see only their own preferences there.
     if (["/dashboard", "/guide", "/getting-started", "/settings"].includes(path) || path === "/my-hr" || path.startsWith("/my-hr/")) return true;
     const normalize = (route: string) => route.replace(/^\/easy-orders(?=\/|$)/, "/platform-orders");
+    // The WhatsApp conversations go with confirming store orders.
+    if (path === "/whatsapp" || path.startsWith("/whatsapp/")) path = "/platform-orders";
     return allowed.some(route => {
         const prefix = normalize(route);
         const target = normalize(path);
