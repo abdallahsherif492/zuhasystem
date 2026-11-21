@@ -3,6 +3,7 @@ import { resolveCronCaller } from "../auto-sync/cron-auth";
 import { admin } from "@/lib/whatsapp/server";
 import { processOutbox } from "@/lib/whatsapp/outbox";
 import { runTimedFlows } from "@/lib/whatsapp/flows";
+import { answerMissedTaps } from "@/lib/whatsapp/upsell";
 
 /**
  * Sends the queued WhatsApp messages (lib/whatsapp/outbox.ts).
@@ -20,7 +21,10 @@ export async function GET(request: Request) {
     const r = await processOutbox();
     // The rules «العميل مردش بعد N ساعة» (hourly is enough for hours).
     try { await runTimedFlows(); } catch (e) { console.error("whatsapp timed rules", e); }
-    return NextResponse.json(r, { status: r.ok ? 200 : 500 });
+    // Offer buttons tapped but not answered (lib/whatsapp/upsell.ts).
+    let taps: string[] = [];
+    try { taps = await answerMissedTaps(); } catch (e) { console.error("whatsapp missed taps", e); }
+    return NextResponse.json({ ...r, taps }, { status: r.ok ? 200 : 500 });
 }
 
 export async function POST(request: Request) {

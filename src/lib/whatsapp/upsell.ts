@@ -357,3 +357,41 @@ export async function upsellAnswer(businessId: string, phone: string, buttonId: 
     await say(businessId, phone, `تمام 🌸 ضفنا ${name} لطلبك.\nالمطلوب عند الاستلام بقى ${Math.round(total - paid)} جنيه.`, orderId);
     return true;
 }
+
+/**
+ * The hourly safety net: an offer button tapped in the last 24 hours (while
+ * a free reply is still allowed) that got no answer — the webhook missed it,
+ * or it came before carousel taps were understood — is answered now:
+ * «ضيفه لطلبي» gets its «أضيفه؟», «أيوه ضيفه» is added. Each tap once.
+ */
+export async function answerMissedTaps(): Promise<string[]> {
+    const done: string[] = [];
+    const since = new Date(Date.now() - 23 * 3_600_000).toISOString();
+    const settled = new Date(Date.now() - 5 * 60_000).toISOString(); // not one the webhook is handling right now
+    const { data: taps } = await admin.from("whatsapp_messages").select("business_id, customer_phone, payload, sent_at")
+        .eq("direction", "in").gte("sent_at", since).lte("sent_at", settled)
+        .or("payload->interactive->button_reply->>id.like.upsell:*,payload->button->>payload.like.upsell:*").limit(200);
+    for (const t of taps || []) {
+        const id = tappedButtonId(t.payload);
+        const [, what, orderId, variantId] = id.split(":");
+        if (!orderId || !variantId || (what !== "add" && what !== "yes")) continue;
+        // Already in the order (added then, or by hand): nothing to say.
+        const { count: inOrder } = await admin.from("order_items").select("id", { count: "exact", head: true }).eq("order_id", orderId).eq("variant_id", variantId);
+        if (inOrder) continue;
+        if (what === "add") {
+            // Answered: a «أضيفه؟» for this product after the tap.
+            const { count } = await admin.from("whatsapp_messages").select("id", { count: "exact", head: true })
+                .eq("order_id", orderId).eq("direction", "out").eq("payload->>kind", "upsell_confirm").eq("payload->>variant_id", variantId).gte("sent_at", t.sent_at);
+            if (count) continue;
+        } else {
+            // Answered: a reply went out after the tap.
+            const { count: replied } = await admin.from("whatsapp_messages").select("id", { count: "exact", head: true })
+                .eq("order_id", orderId).eq("direction", "out").eq("sent_by", "system").gt("sent_at", t.sent_at);
+            if (replied) continue;
+        }
+        try {
+            if (await upsellAnswer(t.business_id, t.customer_phone, id, Date.parse(t.sent_at))) done.push(`${what} ${orderId.slice(0, 8)}`);
+        } catch (e) { console.error("missed offer tap", e); }
+    }
+    return done;
+}
