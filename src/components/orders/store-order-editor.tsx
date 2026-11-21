@@ -56,6 +56,8 @@ export interface EditableOrder {
     total_amount: number;
     total_cost?: number | null;
     shipping_cost: number;
+    /** The coupon's discount (from EasyOrders), taken off the total. */
+    discount?: number | null;
     payment_status: string;
     paid_amount: number;
     closed_by?: string | null;
@@ -482,7 +484,21 @@ export function StoreOrderEditor<O extends EditableOrder>({ order, businessId, p
                                     onCommit={v => {
                                         const val = parseFloat(v) || 0;
                                         const subtotal = edit.currentSubtotal(order.id) ?? order.subtotal;
-                                        edit.updateOrderFields(order, { shipping_cost: val, total_amount: subtotal + val });
+                                        edit.updateOrderFields(order, { shipping_cost: val, total_amount: Math.max(0, subtotal + val - (Number(order.discount) || 0)) });
+                                    }}
+                                />
+                            </div>
+                            <div className="flex justify-between items-center text-xs">
+                                <span className="text-muted-foreground">الخصم{order.discount ? "" : " (مفيش)"}</span>
+                                <AutosaveField
+                                    type="number"
+                                    inputMode="decimal"
+                                    className="w-24 h-7 text-xs text-right"
+                                    value={String(order.discount || 0)}
+                                    onCommit={v => {
+                                        const d = Math.max(0, parseFloat(v) || 0);
+                                        const subtotal = edit.currentSubtotal(order.id) ?? order.subtotal;
+                                        edit.updateOrderFields(order, { discount: d, total_amount: Math.max(0, subtotal + Number(order.shipping_cost || 0) - d) });
                                     }}
                                 />
                             </div>

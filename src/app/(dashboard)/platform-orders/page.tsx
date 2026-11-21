@@ -117,6 +117,7 @@ interface Order {
     total_amount: number;
     total_cost?: number | null;
     shipping_cost: number;
+    discount?: number | null;
     easyorders_id?: string;
     shopify_id?: string;
     tags?: any;
@@ -720,7 +721,8 @@ function PlatformOrdersContent() {
 
         const newItems = mutate(order.order_items);
         const newSubtotal = newItems.reduce((sum, i) => sum + (i.price_at_sale * i.quantity), 0);
-        const newTotal = newSubtotal + order.shipping_cost;
+        // Less the coupon's discount, as EasyOrders charged it (orders.discount).
+        const newTotal = Math.max(0, newSubtotal + order.shipping_cost - (Number(order.discount) || 0));
         // The cost follows the lines too. It used to stay as the order arrived,
         // so an order whose unknown item was swapped for real products kept a
         // cost of 0, and every quantity change left it stale; profit is

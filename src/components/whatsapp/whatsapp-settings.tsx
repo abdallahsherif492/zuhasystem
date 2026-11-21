@@ -13,6 +13,7 @@ import { ConditionsEditor, FlowsEditor } from "@/components/whatsapp/flows-edito
 import { TemplatesManager, type MetaTemplate } from "@/components/whatsapp/templates-manager";
 import { CASES, type MessageCase } from "@/lib/whatsapp/template-fields";
 import { UpsellSettings } from "@/components/whatsapp/upsell-settings";
+import { OfferResults } from "@/components/whatsapp/offer-results";
 import { CONFIRM_TEMPLATES, ORDER_EVENTS, whatsappSettingsOf, type WhatsAppSettings } from "@/lib/whatsapp/settings";
 
 /**
@@ -171,6 +172,8 @@ export function WhatsAppTemplatesAndRules({ businessId, manager }: { businessId:
                     {manager && <Button onClick={save} disabled={saving}>{saving && <Loader2 className="me-2 h-4 w-4 animate-spin" />}احفظ</Button>}
                 </section>
             )}
+
+            <OfferResults businessId={businessId} />
 
             {settings && (
                 <UpsellSettings businessId={businessId} value={settings.upsell} manager={manager} saving={saving}

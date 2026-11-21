@@ -18,7 +18,7 @@ import { itemsCost, type EditableItem, type EditableOrder, type OrderEditActions
  * changed.
  */
 
-const ORDER_COLS = "id, status, customer_info, subtotal, total_amount, total_cost, shipping_cost, payment_status, paid_amount, closed_by, notes, order_items(id, variant_id, quantity, price_at_sale, cost_at_sale, unmapped_name, unmapped_sku, bundle_variant_id, variants(title, sku, product_id, products(name)))";
+const ORDER_COLS = "id, status, customer_info, subtotal, total_amount, total_cost, shipping_cost, discount, payment_status, paid_amount, closed_by, notes, order_items(id, variant_id, quantity, price_at_sale, cost_at_sale, unmapped_name, unmapped_sku, bundle_variant_id, variants(title, sku, product_id, products(name)))";
 
 export type ChatOrder = EditableOrder & { status: string };
 
@@ -79,7 +79,7 @@ export function useOrderEditor(businessId: string | undefined, orderId: string |
         if (!o) return;
         const items = mutate(o.order_items);
         const subtotal = items.reduce((sum, i) => sum + i.price_at_sale * i.quantity, 0);
-        const total = subtotal + Number(o.shipping_cost || 0);
+        const total = Math.max(0, subtotal + Number(o.shipping_cost || 0) - (Number(o.discount) || 0));
         const cost = itemsCost(items);
         set({ ...o, order_items: items, subtotal, total_amount: total, total_cost: cost });
         try { await save(() => updateOrder({ subtotal, total_amount: total, total_cost: cost })); }

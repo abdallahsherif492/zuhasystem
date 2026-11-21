@@ -232,7 +232,15 @@ export async function POST(request: Request) {
         }
 
         // 4. Calculate Shipping and Total
-        const shippingCost = parseFloat(payload.shipping_cost || payload.shipping || 0);
+        // The coupon: EasyOrders sends its name (a code like «zuha10», or an
+        // automatic offer's title), the money it took off, and what shipping is
+        // left after it (a free-shipping coupon makes it 0).
+        const coupon = (payload.coupon_result || {}) as { total_discount?: number; order_discount?: number; final_shipping?: number };
+        const couponDiscount = Math.round((Number(coupon.total_discount ?? payload.coupon_discount ?? 0) || 0) * 100) / 100;
+        const couponCode = String(payload.coupon_code || "").trim();
+        const shippingCost = coupon.final_shipping !== undefined && coupon.final_shipping !== null
+            ? Number(coupon.final_shipping) || 0
+            : parseFloat(payload.shipping_cost || payload.shipping || 0);
 
         // What the courier charges us, as opposed to shippingCost which is what
         // the customer was charged. Nothing set this for platform orders, so the
@@ -363,7 +371,10 @@ export async function POST(request: Request) {
             });
         }
 
-        const totalAmount = calculatedSubtotal + shippingCost;
+        // What the customer pays: the lines and shipping, less the coupon (the
+        // discount column; orders/[id] and the waybill read it the same way).
+        const discountOnLines = Math.max(0, couponDiscount - (Number((payload.coupon_result || {}).shipping_discount) || 0));
+        const totalAmount = Math.max(0, Math.round((calculatedSubtotal + shippingCost - discountOnLines) * 100) / 100);
 
         // EasyOrders states its own total. Ours is derived from the lines we
         // managed to parse, so a disagreement means we misread the payload —
@@ -407,7 +418,13 @@ export async function POST(request: Request) {
                 created_at: payload.created_at || payload.date || payload.order_date || new Date().toISOString(),
                 status: 'Waiting',
                 channel: 'Website',
-                tags: totalMismatch ? ['easyorders', 'total-mismatch'] : ['easyorders'],
+                tags: [
+                    'easyorders',
+                    ...(totalMismatch ? ['total-mismatch'] : []),
+                    // The coupon, so offers can be followed (whatsapp delivered-offer stats).
+                    ...(couponCode ? [`coupon:${couponCode.toLowerCase()}`] : []),
+                ],
+                discount: discountOnLines,
                 subtotal: calculatedSubtotal,
                 shipping_cost: shippingCost,
                 actual_shipping_cost: actualShippingCost,
