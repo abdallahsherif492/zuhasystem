@@ -20,7 +20,7 @@ import { CancelOrderDialog } from "@/components/orders/cancel-order-dialog";
 import { OrderEditDialog } from "@/components/whatsapp/order-edit-dialog";
 import { SavedRepliesManager, fillReply, useSavedReplies } from "@/components/whatsapp/saved-replies";
 import { CANCEL_REASON_FALLBACK, FLOW_CANCEL_REASONS, cancelReasonLabel, type CancelReason } from "@/lib/orders/cancel-reasons";
-import { chatsOf, preview, tappedButtonId, windowUntil, type Chat, type WaMessage } from "@/lib/whatsapp/chats";
+import { applyToChats, chatFromRow, chatsOf, type ChatListRow, preview, tappedButtonId, windowUntil, type Chat, type WaMessage } from "@/lib/whatsapp/chats";
 import { clockLabel } from "@/lib/orders/confirm-queue";
 
 /**
@@ -74,7 +74,11 @@ function Chats() {
     const params = useSearchParams();
     const businessId = activeBusiness?.id;
     const me = currentUser?.email?.toLowerCase() ?? null;
-    const [messages, setMessages] = useState<WaMessage[] | null>(null);
+    // The list: one row per chat, worked out in the database (whatsapp_chat_list,
+    // 20261129). The open chat's messages are read when it opens. Both follow
+    // the live feed without reading anything again.
+    const [chats, setChats] = useState<Chat[] | null>(null);
+    const [thread, setThread] = useState<WaMessage[] | null>(null);
     const [problem, setProblem] = useState<string | null>(null);
     const [filter, setFilter] = useState<Filter>(params.get("phone") ? "all" : "waiting");
     const [topic, setTopic] = useState<Topic>("all");
@@ -83,37 +87,61 @@ function Chats() {
     const [now, setNow] = useState(() => Date.now());
     const [typing, setTyping] = useState<Record<string, string>>({});
     useEffect(() => { const t = setInterval(() => setNow(Date.now()), 60_000); return () => clearInterval(t); }, []);
+    const openRef = useRef(open);
+    useEffect(() => { openRef.current = open; }, [open]);
 
     useEffect(() => {
         if (!businessId) return;
         let gone = false;
         (async () => {
-            const since = new Date(Date.now() - 45 * 86_400_000).toISOString();
-            const { data, error } = await supabase.from("whatsapp_messages").select("*")
-                .eq("business_id", businessId).gte("sent_at", since).order("sent_at", { ascending: false }).limit(4000);
+            const rpc = await supabase.rpc("whatsapp_chat_list", { p_business: businessId, p_days: 60 });
             if (gone) return;
-            if (error) { setProblem(/whatsapp_messages/.test(error.message) ? "شغّل ملف 20261124_whatsapp_messages.sql في Supabase الأول." : error.message); setMessages([]); return; }
-            setMessages((data || []) as WaMessage[]);
+            if (!rpc.error) { setChats(((rpc.data || []) as ChatListRow[]).map(chatFromRow)); return; }
+            // Before 20261129: the latest messages, light columns (PostgREST gives at most 1,000).
+            const { data, error } = await supabase.from("whatsapp_messages")
+                .select("id, business_id, wa_message_id, direction, customer_phone, contact_name, type, body, media_id, media_mime, context_id, template_name, status, sent_by, order_id, sent_at")
+                .eq("business_id", businessId).order("sent_at", { ascending: false }).limit(1000);
+            if (gone) return;
+            if (error) { setProblem(/whatsapp_messages/.test(error.message) ? "شغّل ملف 20261124_whatsapp_messages.sql في Supabase الأول." : error.message); setChats([]); return; }
+            setChats(chatsOf((data || []) as WaMessage[], me));
         })();
         const channel = supabase.channel(`wa-messages-${businessId}`)
             .on("postgres_changes", { event: "*", schema: "public", table: "whatsapp_messages", filter: `business_id=eq.${businessId}` }, payload => {
                 const row = payload.new as WaMessage;
                 if (!row?.id) return;
-                setMessages(prev => {
+                const isNew = payload.eventType === "INSERT";
+                setChats(prev => (prev ? applyToChats(prev, row, isNew, me) : prev));
+                if (row.customer_phone !== openRef.current) return;
+                setThread(prev => {
                     if (!prev) return prev;
                     const i = prev.findIndex(m => m.id === row.id || (row.wa_message_id && m.wa_message_id === row.wa_message_id));
                     if (i === -1) {
                         // Our own message arriving before its send answered: it takes the stand-in's place.
-                        const stand = row.direction === "out" ? prev.findIndex(m => m.id.startsWith("tmp-") && m.customer_phone === row.customer_phone && (m.body || "") === (row.body || "")) : -1;
+                        const stand = row.direction === "out" ? prev.findIndex(m => m.id.startsWith("tmp-") && (m.body || "") === (row.body || "")) : -1;
                         if (stand !== -1) { const next = prev.slice(); next[stand] = row; return next; }
-                        return [row, ...prev];
+                        return [...prev, row];
                     }
                     const next = prev.slice(); next[i] = { ...prev[i], ...row }; return next;
                 });
             })
             .subscribe();
         return () => { gone = true; supabase.removeChannel(channel); };
-    }, [businessId]);
+    }, [businessId, me]);
+
+    // The open chat's messages (the last 300), read when it opens.
+    useEffect(() => {
+        if (!businessId || !open) return;
+        let gone = false;
+        (async () => {
+            const { data } = await supabase.from("whatsapp_messages").select("*")
+                .eq("business_id", businessId).eq("customer_phone", open).order("sent_at", { ascending: false }).limit(300);
+            if (gone) return;
+            setThread(((data || []) as WaMessage[]).reverse());
+            // Opened: its messages are read (the read call marks them; the list follows at once).
+            setChats(prev => prev?.map(c => (c.phone === open ? { ...c, unread: 0 } : c)) ?? prev);
+        })();
+        return () => { gone = true; };
+    }, [businessId, open]);
 
     const presence = useRef<ReturnType<typeof supabase.channel> | null>(null);
     useEffect(() => {
@@ -130,47 +158,50 @@ function Chats() {
     }, [businessId, me]);
     useEffect(() => { presence.current?.track({ phone: open }); }, [open]);
 
-    const chats = useMemo(() => chatsOf(messages || [], me), [messages, me]);
+    const all = chats || [];
     const q = query.trim();
-    const shown = chats.filter(c =>
+    const shown = all.filter(c =>
         (topic === "all" || c.topic === topic)
         && (filter === "all" || (filter === "unread" ? c.unread > 0 || c.phone === open : filter === "waiting" ? c.last.direction === "in" : c.mine))
         && (!q || c.phone.includes(q.replace(/\D/g, "") || "~") || (c.name || "").includes(q) || (c.last.body || "").includes(q)));
     // The section (all / confirmations / shipping problems) narrows every filter below it.
-    const inTopic = (t: Topic) => chats.filter(c => t === "all" || c.topic === t);
+    const inTopic = (t: Topic) => all.filter(c => t === "all" || c.topic === t);
     const scoped = inTopic(topic);
     const counts = { unread: scoped.filter(c => c.unread > 0).length, waiting: scoped.filter(c => c.last.direction === "in").length, mine: scoped.filter(c => c.mine).length, all: scoped.length };
     const topicUnread = (t: Topic) => inTopic(t).filter(c => c.unread > 0 || c.last.direction === "in").length;
-    const current: Chat | null = chats.find(c => c.phone === open) || null;
+    const current: Chat | null = all.find(c => c.phone === open) || null;
     const others = (phone: string) => Object.entries(typing).filter(([email, p]) => p === phone && email !== me).map(([email]) => teamName(email));
-    const addSent = useCallback((m: WaMessage) => setMessages(prev => (prev && !prev.some(x => x.id === m.id) ? [m, ...prev] : prev)), []);
+    const addSent = useCallback((m: WaMessage) => {
+        setThread(prev => (prev && !prev.some(x => x.id === m.id) ? [...prev, m] : prev));
+        setChats(prev => (prev ? applyToChats(prev, m, true, me) : prev));
+    }, [me]);
     /**
      * A message shown the moment it is sent (a stand-in, id "tmp-…"), then the
      * saved one in its place; on failure the stand-in shows «ما وصلتش».
      */
-    const settleSent = useCallback((tempId: string, real: WaMessage | null) => setMessages(prev => {
+    const settleSent = useCallback((tempId: string, real: WaMessage | null) => setThread(prev => {
         if (!prev) return prev;
         if (!real) return prev.map(m => (m.id === tempId ? { ...m, status: "failed" } : m));
-        const rest = prev.filter(m => m.id !== tempId);
-        return rest.some(m => m.id === real.id) ? rest : [real, ...rest];
+        if (prev.some(m => m.id === real.id)) return prev.filter(m => m.id !== tempId);
+        return prev.map(m => (m.id === tempId ? real : m));
     }), []);
 
     return (
         <div dir="rtl" className="-m-4 flex h-[calc(100dvh-4rem)] min-h-0 overflow-hidden border-t sm:-m-6">
             <aside className={cn("flex w-full min-w-0 flex-col border-s bg-background lg:w-[360px] lg:shrink-0", open && "hidden lg:flex")}>
-                <div className="space-y-2.5 bg-muted/40 px-3 pb-2.5 pt-3">
-                    <h1 className="flex items-center gap-2 text-xl font-bold"><MessageCircle className="h-5 w-5 text-[#25d366]" />المحادثات</h1>
+                <div className="space-y-2 bg-muted/40 px-3 pb-2 pt-2.5 sm:space-y-2.5 sm:pt-3">
+                    <h1 className="flex items-center gap-2 text-lg font-bold sm:text-xl"><MessageCircle className="h-5 w-5 text-[#25d366]" />المحادثات</h1>
                     <div className="relative">
                         <Search className="absolute end-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                         <input value={query} onChange={e => setQuery(e.target.value)} placeholder="دوّر برقم أو اسم أو كلمة"
                             className="h-10 w-full rounded-lg bg-background pe-9 ps-3 text-base outline-none ring-1 ring-border focus:ring-2 focus:ring-[#25d366] sm:text-sm" />
                     </div>
                     <div className="grid grid-cols-3 rounded-lg bg-background p-0.5 ring-1 ring-border">
-                        {([["all", "كل المحادثات"], ["confirm", "التأكيدات"], ["shipping", "مشاكل الشحن"]] as [Topic, string][]).map(([k, label]) => (
+                        {([["all", "كل المحادثات", "الكل"], ["confirm", "التأكيدات", "التأكيدات"], ["shipping", "مشاكل الشحن", "الشحن"]] as [Topic, string, string][]).map(([k, label, short]) => (
                             <button key={k} type="button" onClick={() => setTopic(k)}
                                 className={cn("flex items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-sm font-semibold",
                                     topic === k ? "bg-[#008069] text-white dark:bg-[#00a884]" : "text-muted-foreground hover:bg-muted")}>
-                                {label}
+                                <span className="hidden whitespace-nowrap sm:inline">{label}</span><span className="whitespace-nowrap sm:hidden">{short}</span>
                                 {k !== "all" && topicUnread(k) > 0 && <span className={cn("rounded-full px-1.5 text-[11px] tabular-nums", topic === k ? "bg-white/25" : "bg-[#25d366] text-white")}>{topicUnread(k)}</span>}
                             </button>
                         ))}
@@ -185,14 +216,14 @@ function Chats() {
                     </div>
                 </div>
                 <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
-                    {messages === null ? <div className="flex h-24 items-center justify-center"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
+                    {chats === null ? <div className="flex h-24 items-center justify-center"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
                         : problem ? <p className="p-4 text-sm font-medium text-amber-700">{problem}</p>
                         : shown.length === 0 ? <p className="p-6 text-center text-sm text-muted-foreground">{filter === "waiting" ? "مفيش حد مستني رد هنا 👌" : filter === "unread" ? "مفيش رسايل غير مقروءة هنا 👌" : "مفيش محادثات هنا."}</p>
                         : shown.map(c => {
                             const unreadNow = c.unread > 0 && c.phone !== open;
                             const waitingNow = c.last.direction === "in" && c.waiting > 0;
                             return (
-                                <button key={c.phone} type="button" onClick={() => setOpen(c.phone)}
+                                <button key={c.phone} type="button" onClick={() => { if (c.phone !== open) { setThread(null); setOpen(c.phone); } }}
                                     className={cn("flex w-full items-center gap-3 px-3 text-start active:bg-muted hover:bg-muted/60", open === c.phone && "bg-muted")}>
                                     <Avatar name={c.name || c.phone} />
                                     <span className="min-w-0 flex-1 border-b py-3">
@@ -221,7 +252,7 @@ function Chats() {
                 {open && businessId
                     ? <ChatView key={open} phone={open} chat={current} businessId={businessId} me={me} now={now}
                         others={others(open)} onBack={() => setOpen(null)} onSent={addSent} onSettled={settleSent}
-                        messages={(messages || []).filter(m => m.customer_phone === open).sort((a, b) => Date.parse(a.sent_at) - Date.parse(b.sent_at))} />
+                        messages={thread || []} loading={thread === null} />
                     : <div className="flex flex-1 flex-col items-center justify-center gap-2 bg-muted/30 p-6 text-center text-muted-foreground">
                         <MessageCircle className="h-12 w-12 text-[#25d366]/60" />
                         <p className="text-lg font-semibold text-foreground">واتساب {activeBusiness?.name || ""}</p>
@@ -243,8 +274,8 @@ function Avatar({ name, size = 44 }: { name: string; size?: number }) {
     );
 }
 
-function ChatView({ phone, chat, messages, businessId, me, now, others, onBack, onSent, onSettled }: {
-    phone: string; chat: Chat | null; messages: WaMessage[]; businessId: string; me: string | null; now: number;
+function ChatView({ phone, chat, messages, loading, businessId, me, now, others, onBack, onSent, onSettled }: {
+    phone: string; chat: Chat | null; messages: WaMessage[]; loading: boolean; businessId: string; me: string | null; now: number;
     others: string[]; onBack: () => void; onSent: (m: WaMessage) => void; onSettled: (tempId: string, real: WaMessage | null) => void;
 }) {
     const { currentUser } = useBusiness();
@@ -486,7 +517,7 @@ function ChatView({ phone, chat, messages, businessId, me, now, others, onBack, 
                         const img = o.order_items.map(i => i.variants?.products?.image_url).find(Boolean);
                         return (
                             <div key={o.id} className="flex w-[85%] max-w-sm shrink-0 snap-start items-center gap-2.5 rounded-xl border p-2 sm:w-auto sm:min-w-[300px]">
-                                {img ? /* eslint-disable-next-line @next/next/no-img-element */ <img src={img} alt="" className="h-12 w-12 shrink-0 rounded-lg object-cover" />
+                                {img ? /* eslint-disable-next-line @next/next/no-img-element */ <img loading="lazy" decoding="async" src={img} alt="" className="h-12 w-12 shrink-0 rounded-lg object-cover" />
                                     : <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-muted text-lg">📦</span>}
                                 <div className="min-w-0 flex-1 text-sm">
                                     <p className="flex items-center gap-2 truncate">
@@ -528,7 +559,8 @@ function ChatView({ phone, chat, messages, businessId, me, now, others, onBack, 
                 onDrop={e => { if (takeFile(e.dataTransfer?.files)) e.preventDefault(); }}
                 className="relative min-h-0 flex-1 overflow-y-auto overscroll-contain bg-[#efeae2] px-2 py-3 dark:bg-[#0b141a] sm:px-[6%]"
                 style={{ backgroundImage: "radial-gradient(rgba(0,0,0,0.035) 1px, transparent 1px)", backgroundSize: "18px 18px" }}>
-                {visible.length === 0 && <p className="mx-auto mt-6 w-fit rounded-lg bg-[#fff5c4] px-3 py-1.5 text-center text-xs text-[#54656f] shadow-sm dark:bg-[#182229] dark:text-[#ffd279]">مفيش رسايل لسه. ابدأ برسالة التأكيد.</p>}
+                {loading && <div className="flex h-24 items-center justify-center"><Loader2 className="h-6 w-6 animate-spin text-[#25d366]" /></div>}
+                {!loading && visible.length === 0 && <p className="mx-auto mt-6 w-fit rounded-lg bg-[#fff5c4] px-3 py-1.5 text-center text-xs text-[#54656f] shadow-sm dark:bg-[#182229] dark:text-[#ffd279]">مفيش رسايل لسه. ابدأ برسالة التأكيد.</p>}
                 {visible.map((m, i) => {
                     const prev = visible[i - 1];
                     const showDay = !prev || dayKey(prev.sent_at) !== dayKey(m.sent_at);
@@ -593,7 +625,7 @@ function ChatView({ phone, chat, messages, businessId, me, now, others, onBack, 
                         })()}
                         <div className="flex items-end gap-1">
                             <Popover>
-                                <PopoverTrigger asChild><Button variant="ghost" size="icon" className="h-10 w-10 shrink-0" aria-label="إيموجي"><Smile className="h-6 w-6 text-[#54656f]" /></Button></PopoverTrigger>
+                                <PopoverTrigger asChild><Button variant="ghost" size="icon" className="hidden h-10 w-10 shrink-0 sm:inline-flex" aria-label="إيموجي"><Smile className="h-6 w-6 text-[#54656f]" /></Button></PopoverTrigger>
                                 <PopoverContent align="start" className="grid w-64 grid-cols-8 gap-1 p-2">
                                     {EMOJIS.map(e => <button key={e} type="button" className="rounded p-1 text-xl hover:bg-muted" onClick={() => setText(t => t + e)}>{e}</button>)}
                                 </PopoverContent>
@@ -725,7 +757,7 @@ function Bubble({ m, tail, businessId, me, quoted, reaction, onReply }: {
                         // The customer tapped one card of the offer: that product, not the offer's text.
                         <div className="mb-1 flex items-center gap-2 rounded-md border-s-4 border-[#06cf9c] bg-[#f0f2f5] p-1.5 text-xs dark:bg-[#1d282f]">
                             {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img src={picked.image} alt="" className="h-12 w-12 shrink-0 rounded object-cover" />
+                            <img loading="lazy" decoding="async" src={picked.image} alt="" className="h-12 w-12 shrink-0 rounded object-cover" />
                             <span className="min-w-0">
                                 <span className="block font-semibold text-[#008069] dark:text-[#06cf9c]">من العرض</span>
                                 <span className="block truncate text-[13px] font-medium text-[#111b21] dark:text-[#e9edef]">{picked.title}</span>
@@ -738,11 +770,11 @@ function Bubble({ m, tail, businessId, me, quoted, reaction, onReply }: {
                             <p className="line-clamp-2 text-[#54656f] dark:text-[#aebac1]">{preview(quoted)}</p>
                         </div>
                     )}
-                    {header && /* eslint-disable-next-line @next/next/no-img-element */ <img src={header} alt="" className="mb-1 max-h-72 w-full rounded-md object-cover" />}
-                    {m.type === "image" && media && <a href={media} target="_blank" rel="noreferrer">{/* eslint-disable-next-line @next/next/no-img-element */}<img src={media} alt="صورة" className="mb-1 max-h-80 rounded-md" /></a>}
-                    {m.type === "sticker" && media && /* eslint-disable-next-line @next/next/no-img-element */ <img src={media} alt="ملصق" className="h-32 w-32" />}
-                    {m.type === "audio" && media && <audio controls src={media} className="my-1 w-64 max-w-full" />}
-                    {m.type === "video" && media && <video controls src={media} className="mb-1 max-h-80 rounded-md" />}
+                    {header && /* eslint-disable-next-line @next/next/no-img-element */ <img loading="lazy" decoding="async" src={header} alt="" className="mb-1 max-h-72 w-full rounded-md object-cover" />}
+                    {m.type === "image" && media && <a href={media} target="_blank" rel="noreferrer">{/* eslint-disable-next-line @next/next/no-img-element */}<img loading="lazy" decoding="async" src={media} alt="صورة" className="mb-1 max-h-80 rounded-md" /></a>}
+                    {m.type === "sticker" && media && /* eslint-disable-next-line @next/next/no-img-element */ <img loading="lazy" decoding="async" src={media} alt="ملصق" className="h-32 w-32" />}
+                    {m.type === "audio" && media && <audio controls preload="none" src={media} className="my-1 w-64 max-w-full" />}
+                    {m.type === "video" && media && <video controls preload="metadata" src={media} className="mb-1 max-h-80 rounded-md" />}
                     {m.type === "document" && media && (
                         <a href={media} target="_blank" rel="noreferrer" className="mb-1 flex items-center gap-2 rounded-md bg-black/5 p-2 dark:bg-white/5">
                             <FileText className="h-8 w-8 shrink-0 text-[#54656f]" /><span className="min-w-0 truncate text-sm">{m.body || "ملف"}</span>
@@ -778,7 +810,7 @@ function Bubble({ m, tail, businessId, me, quoted, reaction, onReply }: {
                         {m.payload.cards.map(c => (
                             <div key={c.variant_id} className={cn("w-44 shrink-0 snap-start overflow-hidden rounded-lg shadow-sm", out ? "bg-[#d9fdd3] dark:bg-[#005c4b]" : "bg-white dark:bg-[#202c33]")}>
                                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                                <img src={c.image} alt="" className="h-36 w-full object-cover" />
+                                <img loading="lazy" decoding="async" src={c.image} alt="" className="h-36 w-full object-cover" />
                                 <div className="space-y-0.5 p-2 text-[13px] leading-snug">
                                     <p className="line-clamp-2 font-medium">{c.title}</p>
                                     <p><span className="text-[#667781] line-through">{c.old_price}</span> <b>{c.price} جنيه</b></p>

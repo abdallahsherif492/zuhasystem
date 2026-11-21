@@ -98,3 +98,55 @@ export const QUICK_REPLIES = [
     "هنبلّغ المندوب بالميعاد اللي يناسبك.",
     "تحت أمرك في أي وقت 🌸",
 ];
+
+const TOPIC_CONFIRM = new Set(["order_confirm", "order_confirm_photo", "order_confirmation", "confirmation_reminder"]);
+const TOPIC_SHIPPING = new Set(["delivery_failed", "delivery_failed_photo", "order_returning", "order_returning_photo"]);
+const topicOf = (m: Pick<WaMessage, "template_name" | "payload">): Chat["topic"] => {
+    const ev = m.payload?.event || "";
+    if (TOPIC_CONFIRM.has(m.template_name || "") || ev === "confirm" || ev === "reminder") return "confirm";
+    if (TOPIC_SHIPPING.has(m.template_name || "") || ev === "hold" || ev === "returning") return "shipping";
+    return null;
+};
+
+/** A row of whatsapp_chat_list (20261129): one chat, worked out in the database. */
+export interface ChatListRow {
+    customer_phone: string; contact_name: string | null; last: WaMessage;
+    waiting: number; unread: number; mine: boolean; last_in_at: string | null; topic: Chat["topic"];
+}
+export const chatFromRow = (r: ChatListRow): Chat => ({
+    phone: r.customer_phone, name: r.contact_name, last: r.last, waiting: r.waiting, unread: r.unread, mine: r.mine,
+    lastIn: r.last_in_at ? ({ sent_at: r.last_in_at } as WaMessage) : null, topic: r.topic,
+});
+
+/**
+ * A message from the live feed applied to the chats list, without reading
+ * anything again: a new message moves its chat to the top and updates what
+ * is waiting and unread; a changed one (ticks, read) updates its counts.
+ */
+export function applyToChats(chats: Chat[], m: WaMessage, isNew: boolean, me: string | null): Chat[] {
+    if (m.type === "reaction") return chats;
+    const i = chats.findIndex(c => c.phone === m.customer_phone);
+    const c: Chat = i === -1
+        ? { phone: m.customer_phone, name: m.contact_name, last: m, waiting: 0, unread: 0, lastIn: null, mine: false, topic: null }
+        : { ...chats[i] };
+    if (isNew) {
+        const before = i === -1 ? null : chats[i].last.direction;
+        if (Date.parse(m.sent_at) >= Date.parse(c.last.sent_at) || i === -1) c.last = m;
+        if (m.direction === "in") {
+            // Waiting: customer messages since our last reply.
+            c.waiting = before === "in" ? c.waiting + 1 : 1;
+            if (m.status === "received") c.unread += 1;
+            c.lastIn = m;
+            if (m.contact_name) c.name = m.contact_name;
+        } else {
+            c.waiting = 0;
+            if (me && m.sent_by?.toLowerCase() === me) c.mine = true;
+            if (m.template_name) c.topic = topicOf(m) ?? c.topic;
+        }
+    } else {
+        if (c.last.id === m.id) c.last = { ...c.last, ...m };
+        if (m.direction === "in" && m.status === "read" && c.unread > 0) c.unread -= 1;
+    }
+    const rest = i === -1 ? chats : chats.filter((_, j) => j !== i);
+    return isNew ? [c, ...rest] : chats.map((x, j) => (j === i ? c : x));
+}

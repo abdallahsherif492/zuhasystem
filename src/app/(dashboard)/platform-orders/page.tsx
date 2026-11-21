@@ -980,7 +980,7 @@ function PlatformOrdersContent() {
     const [busy, setBusy] = useState<{ id: string; what: AttemptReason | "confirm" } | null>(null);
     const [focusId, setFocusId] = useState<string | null>(null);
     const [now, setNow] = useState(() => Date.now());
-    const chatStates = useChatStates(activeBusiness?.id);
+    const chatStates = useChatStates(activeBusiness?.id, orders.map(o => o.customer_info?.phone));
     useEffect(() => {
         const timer = setInterval(() => setNow(Date.now()), 60_000);
         return () => clearInterval(timer);

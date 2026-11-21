@@ -56,7 +56,7 @@ export default function ShippingIssuesPage() {
     const [busy, setBusy] = useState<string | null>(null);
     // Worked out again each minute, so a retry whose time comes moves to "today".
     const [now, setNow] = useState(() => Date.now());
-    const chatStates = useChatStates(activeBusiness?.id);
+    const chatStates = useChatStates(activeBusiness?.id, rows.map(r => r.customer_phone));
     useEffect(() => {
         const timer = setInterval(() => setNow(Date.now()), 60_000);
         return () => clearInterval(timer);

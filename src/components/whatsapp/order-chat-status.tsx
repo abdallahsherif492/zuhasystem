@@ -35,8 +35,14 @@ interface Msg { customer_phone: string; direction: "in" | "out"; type: string; t
 const last10 = (p: string | null | undefined) => (p || "").replace(/\D/g, "").slice(-10);
 
 /** Live: a new message or a changed status shows at once. */
-export function useChatStates(businessId: string | undefined) {
+/**
+ * `phones`: the customers on the page. Only their messages are read (in small
+ * batches: a single read stops at 1,000 rows, which left older customers
+ * without their line), so the page stays light.
+ */
+export function useChatStates(businessId: string | undefined, phones?: (string | null | undefined)[]) {
     const [states, setStates] = useState<Map<string, ChatState>>(new Map());
+    const wanted = [...new Set((phones || []).map(last10).filter(p => p.length === 10))].sort().join(",");
     useEffect(() => {
         if (!businessId) return;
         let gone = false;
@@ -71,12 +77,16 @@ export function useChatStates(businessId: string | undefined) {
         };
         const publish = () => { if (!gone) setStates(new Map(out)); };
         (async () => {
-            const since = new Date(Date.now() - 14 * 86_400_000).toISOString();
-            const { data, error } = await supabase.from("whatsapp_messages")
+            const since = new Date(Date.now() - 30 * 86_400_000).toISOString();
+            const locals = wanted ? wanted.split(",").map(p => `0${p}`) : [];
+            const batches: string[][] = [];
+            for (let i = 0; i < locals.length; i += 40) batches.push(locals.slice(i, i + 40));
+            const results = await Promise.all(batches.map(b => supabase.from("whatsapp_messages")
                 .select("customer_phone, direction, type, template_name, status, error, sent_at, event:payload->>event")
-                .eq("business_id", businessId).gte("sent_at", since).order("sent_at", { ascending: true }).limit(5000);
-            if (gone || error) return;
-            for (const m of (data || []) as Msg[]) apply(m);
+                .eq("business_id", businessId).in("customer_phone", b).gte("sent_at", since).order("sent_at", { ascending: true }).limit(1000)));
+            if (gone) return;
+            const rows = results.flatMap(r => (r.data || []) as Msg[]).sort((x, y) => x.sent_at.localeCompare(y.sent_at));
+            for (const m of rows) apply(m);
             publish();
         })();
         const channel = supabase.channel(`wa-order-states-${businessId}`)
@@ -88,7 +98,7 @@ export function useChatStates(businessId: string | undefined) {
             })
             .subscribe();
         return () => { gone = true; supabase.removeChannel(channel); };
-    }, [businessId]);
+    }, [businessId, wanted]);
     return states;
 }
 
