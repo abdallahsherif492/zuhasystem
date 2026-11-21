@@ -254,7 +254,8 @@ export function SidebarContent({ onLinkClick }: { onLinkClick?: () => void }) {
                     ]
                 },
                 { title: t("Actions Log"), href: "/actions-log", icon: History, adminOnly: true },
-                { title: t("Settings"), href: "/settings", icon: Settings },
+                { title: t("WhatsApp settings"), href: "/settings/whatsapp", icon: MessageCircle },
+                { title: t("Settings"), href: "/settings", icon: Settings, exactMatch: true },
             ]
         }
 

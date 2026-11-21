@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { Cairo } from "next/font/google";
+import { CairoFont, cairo } from "@/components/fonts/cairo";
 import { format } from "date-fns";
 import Barcode from "react-barcode";
 import { arabicProductLabel } from "@/lib/orders/product-label";
@@ -11,8 +11,7 @@ import { refusalNoteFor, waybillSettingsOf, type WaybillTemplate } from "@/lib/o
 // The waybill is read by couriers, most of whom read Arabic first, and it is
 // printed on whatever office printer is at hand. A font the page brings with
 // it, in weights that survive a cheap laser, rather than whichever Arabic
-// fallback the printing PC happens to have.
-const waybillFont = Cairo({ subsets: ["arabic", "latin"], weight: ["600", "700", "800", "900"], display: "swap" });
+// fallback the printing PC happens to have (components/fonts/cairo.tsx).
 
 export type WaybillOrder = {
     id: string;
@@ -182,7 +181,8 @@ export function WaybillCard({ order, business }: { order: WaybillOrder, isFirstO
 
     const template: WaybillTemplate = waybill.template;
     return (
-        <section dir="rtl" className={`wb wb-${template} ${waybillFont.className}`}>
+        <section dir="rtl" style={cairo} className={`wb wb-${template}`}>
+            <CairoFont />
             <style>{WAYBILL_CSS}</style>
             {template === "courier" && (
                 <>

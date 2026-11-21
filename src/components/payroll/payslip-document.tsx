@@ -1,10 +1,9 @@
 "use client";
 
 import Image from "next/image";
-import { Cairo } from "next/font/google";
+import { CairoFont, cairo } from "@/components/fonts/cairo";
 import { kindInfo, monthLabel, type Adjustment, type PayTotals } from "@/lib/payroll";
 
-const font = Cairo({ subsets: ["arabic", "latin"], weight: ["400", "600", "700", "800"], display: "swap" });
 
 const egp = (v: number) => `${v.toLocaleString("en", { minimumFractionDigits: 0, maximumFractionDigits: 2 })} ج.م`;
 const shortDate = (d: string) => `${d.slice(8, 10)}/${d.slice(5, 7)}/${d.slice(0, 4)}`;
@@ -42,7 +41,8 @@ export function PayslipDocument({ business, employee, period, totals, items, set
     const negative = totals.net < 0;
 
     return (
-        <div dir="rtl" className={`${font.className} relative mx-auto w-full max-w-[800px] bg-white p-8 text-[13px] text-black print:max-w-none print:p-6`}>
+        <div dir="rtl" style={cairo} className="relative mx-auto w-full max-w-[800px] bg-white p-8 text-[13px] text-black print:max-w-none print:p-6">
+            <CairoFont />
             {!settled && (
                 <div className="pointer-events-none absolute inset-0 flex items-center justify-center overflow-hidden">
                     <span className="-rotate-[25deg] select-none text-[110px] font-extrabold text-black/[0.06]">مسودة</span>
