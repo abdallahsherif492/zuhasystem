@@ -196,6 +196,10 @@ export async function runReplyFlows(businessId: string, orderId: string | null, 
  * whose customer has not written since.
  */
 export async function runTimedFlows() {
+    // Not at night: between 22:00 and 09:00 in Cairo nothing goes; the window
+    // below reaches back 48 hours, so those orders are picked up in the morning.
+    const hour = Number(new Date().toLocaleString("en-US", { hour: "numeric", hour12: false, timeZone: "Africa/Cairo" }));
+    if (hour < 9 || hour >= 22) return;
     const { data: businesses } = await admin.from("businesses").select("id, theme_config").not("theme_config->whatsapp->flows", "is", null);
     for (const b of businesses || []) {
         const flows = whatsappSettingsOf(b.theme_config).flows.filter(f => f.enabled && f.trigger.type === "no_reply");
@@ -206,7 +210,9 @@ export async function runTimedFlows() {
             const { data: sent } = await admin.from("whatsapp_messages").select("order_id, customer_phone, sent_at")
                 .eq("business_id", b.id).eq("direction", "out")
                 .or(`template_name.in.(${[...CONFIRM_TEMPLATES, "order_confirm_photo"].join(",")}),payload->>event.eq.confirm`)
-                .gte("sent_at", from).lte("sent_at", until).not("order_id", "is", null).limit(500);
+                .gte("sent_at", from).lte("sent_at", until).not("order_id", "is", null)
+                .neq("status", "failed") // never reached the customer (no WhatsApp): a reminder would not either
+                .limit(500);
             for (const s of sent || []) {
                 const { count: answered } = await admin.from("whatsapp_messages").select("id", { count: "exact", head: true })
                     .eq("business_id", b.id).eq("customer_phone", s.customer_phone).eq("direction", "in").gte("sent_at", s.sent_at);

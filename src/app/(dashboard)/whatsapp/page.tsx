@@ -298,6 +298,18 @@ function ChatView({ phone, chat, messages, loading, businessId, me, now, others,
         return out;
     }, [messages]);
     const visible = messages.filter(m => m.type !== "reaction");
+    // Meta could not deliver to this number (131026: no WhatsApp, an old app,
+    // or it blocked us) and the customer has not written since: call them.
+    const undelivered = (() => {
+        for (let i = messages.length - 1; i >= 0; i--) {
+            const m = messages[i];
+            if (m.direction === "in") return null;
+            if (m.direction === "out" && m.status === "failed" && JSON.stringify(m.error || "").includes("131026")) return m;
+        }
+        return null;
+    })();
+    const undeliveredWhat = undelivered && (/confirm/.test(undelivered.template_name || "") || undelivered.payload?.event === "confirm" || undelivered.payload?.event === "reminder")
+        ? "رسالة التأكيد" : undelivered?.template_name ? "رسالة الشحن" : "الرسالة";
 
     // Stays on the latest message while it is in view: when a message comes,
     // and when the box or its content changes size (the orders strip loading
@@ -510,6 +522,18 @@ function ChatView({ phone, chat, messages, loading, businessId, me, now, others,
                 </div>
             </header>
 
+            {undelivered && (
+                <div className="flex items-center gap-3 border-b border-red-200 bg-red-50 px-3 py-2.5 dark:border-red-900 dark:bg-red-950/50">
+                    <TriangleAlert className="h-6 w-6 shrink-0 text-red-600" />
+                    <p className="min-w-0 flex-1 text-sm leading-snug text-red-900 dark:text-red-100">
+                        <b className="block text-[15px]">{undeliveredWhat} ما وصلتش للعميل</b>
+                        الرقم ده غالباً مش عليه واتساب. لازم تكلّمه تليفون.
+                    </p>
+                    <a href={telLink(phone)} className="inline-flex h-10 shrink-0 items-center gap-1.5 rounded-lg bg-red-600 px-3 text-sm font-bold text-white hover:bg-red-700">
+                        <Phone className="h-4 w-4" />اتصل
+                    </a>
+                </div>
+            )}
             {orders && orders.length > 0 && (
                 <div className="flex shrink-0 snap-x gap-2 overflow-x-auto border-b bg-background px-2 py-2 sm:px-3">
                     {orders.slice(0, 3).map(o => {
@@ -717,7 +741,7 @@ function ChatView({ phone, chat, messages, loading, businessId, me, now, others,
                 ) : (
                     <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-[#fff5c4] p-3 text-sm text-[#54656f] dark:bg-[#182229] dark:text-[#ffd279]">
                         <span>{chat?.lastIn ? "عدّت 24 ساعة من آخر رسالة من العميل، فواتساب مش بيسمح برسالة عادية. اتصل بيه أو ابعتله قالب." : "العميل لسه ما بعتش حاجة. ابدأ بقالب، ولما يرد تقدر تكتب عادي."}</span>
-                        {waitingOrder ? <Button size="sm" disabled={sending} onClick={() => sendConfirmation(waitingOrder)} className="bg-[#25d366] text-white hover:bg-[#1fb855]">ابعت رسالة التأكيد</Button>
+                        {waitingOrder && !undelivered ? <Button size="sm" disabled={sending} onClick={() => sendConfirmation(waitingOrder)} className="bg-[#25d366] text-white hover:bg-[#1fb855]">ابعت رسالة التأكيد</Button>
                             : problemOrder && <Button size="sm" disabled={sending} onClick={() => sendShipping(problemOrder)} className="bg-[#25d366] text-white hover:bg-[#1fb855]">{shippingKind(problemOrder) === "hold" ? "ابعت «المندوب ماقدرش يوصله»" : "ابعت «الشحنة راجعة»"}</Button>}
                     </div>
                 )}
