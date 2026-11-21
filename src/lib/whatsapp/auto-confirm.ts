@@ -176,6 +176,7 @@ const SHIPPING_ANSWERS: Record<string, Record<string, { outcome?: string; days?:
 // The photo versions take the same answers.
 SHIPPING_ANSWERS.delivery_failed_photo = SHIPPING_ANSWERS.delivery_failed;
 SHIPPING_ANSWERS.order_returning_photo = SHIPPING_ANSWERS.order_returning;
+SHIPPING_ANSWERS.order_delivered_photo = SHIPPING_ANSWERS.order_delivered;
 const plain = (s: string) => s.replace(/[ّ]/g, "").replace(/[أإآ]/g, "ا").replace(/ة/g, "ه").trim();
 
 async function shippingAnswer(businessId: string, m: Incoming, text: string): Promise<boolean> {

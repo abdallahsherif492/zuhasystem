@@ -11,7 +11,15 @@ export interface TemplateDef {
     buttons?: string[];
     /** A product photo above the text. */
     imageHeader?: boolean;
+    /** The same picture every time above the text, instead of the product's (a path on the site, or a full link). */
+    fixedImage?: string;
+    /** Buttons that open a link (after the reply buttons). */
+    urlButtons?: { text: string; url: string }[];
 }
+
+/** Where the site's own pictures are served (public/whatsapp/…). */
+export const SITE_URL = "https://www.e-commerx.com";
+export const imageLink = (path: string) => (/^https?:\/\//.test(path) ? path : `${SITE_URL}${path}`);
 
 const CONFIRM_BODY = "أهلاً {{1}}\nشكراً إنك طلبت من Zuha Store.\n\nبرجاء تأكيد طلبك:\n{{2}}\n\nالمطلوب عند الاستلام: {{3}} جنيه\n\nالرجاء الرد بكلمة «تأكيد» لتأكيد الأوردر.";
 
@@ -66,6 +74,15 @@ export const TEMPLATES: TemplateDef[] = [
         buttons: ["ابعتوه تاني", "مش عايزه"],
     },
     {
+        name: "order_delivered_photo", purpose: "الأوردر اتسلم (بصورة زُهى وزرار تصفح المنتجات)",
+        body: "طلبك وصل يا {{1}} ✅\nشكراً إنك اخترت {{2}}، ونتمنى المنتجات تعجبك.\nلو فيه أي حاجة في الطلب مش مظبوطة، دوس «فيه مشكلة» وهنحلها على طول.",
+        example: ["ساره", "Zuha Store"],
+        buttons: ["فيه مشكلة"],
+        urlButtons: [{ text: "تصفح المنتجات", url: "https://www.zuhastore.com" }],
+        imageHeader: true,
+        fixedImage: "/whatsapp/zuha-order-delivered.jpg",
+    },
+    {
         name: "order_delivered", purpose: "الأوردر اتسلم",
         body: "طلبك وصل يا {{1}} ✅ شكراً إنك اخترت {{2}}.\nلو فيه أي حاجة في الطلب مش مظبوطة، دوس «فيه مشكلة» وهنحلها على طول.",
         example: ["ساره", "Zuha Store"],
@@ -93,6 +110,10 @@ export function templatePayload(t: TemplateDef, headerHandle?: string) {
     const components: Record<string, unknown>[] = [];
     if (t.imageHeader && headerHandle) components.push({ type: "HEADER", format: "IMAGE", example: { header_handle: [headerHandle] } });
     components.push({ type: "BODY", text: t.body, example: { body_text: [t.example] } });
-    if (t.buttons?.length) components.push({ type: "BUTTONS", buttons: t.buttons.map(text => ({ type: "QUICK_REPLY", text })) });
+    const buttons = [
+        ...(t.buttons || []).map(text => ({ type: "QUICK_REPLY", text })),
+        ...(t.urlButtons || []).map(b => ({ type: "URL", text: b.text, url: b.url })),
+    ];
+    if (buttons.length) components.push({ type: "BUTTONS", buttons });
     return { name: t.name, language: "ar", category: "UTILITY", components };
 }

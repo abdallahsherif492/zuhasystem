@@ -2,7 +2,7 @@ import { arabicProductLabel } from "@/lib/orders/product-label";
 import { plainEnglish } from "@/lib/orders/arabic-names";
 import { translateToArabic } from "@/lib/translate-ar";
 import { accountOf, admin, graph, sendError, uploadImage, waNumber } from "@/lib/whatsapp/server";
-import { renderTemplate, templateDef } from "@/lib/whatsapp/templates";
+import { imageLink, renderTemplate, templateDef } from "@/lib/whatsapp/templates";
 import { whatsappSettingsOf, type OrderEvent } from "@/lib/whatsapp/settings";
 import { BUILTIN_PARAMS, type FieldKey, type MessageCase } from "@/lib/whatsapp/template-fields";
 
@@ -68,7 +68,7 @@ export async function sendOrderMessage(businessId: string, orderId: string, kind
         shipped: ["order_shipped"],
         hold: ["delivery_failed_photo", "delivery_failed"],
         returning: ["order_returning_photo", "order_returning"],
-        delivered: ["order_delivered"],
+        delivered: ["order_delivered_photo", "order_delivered"],
     };
     const chosen = settings.case_templates[theCase];
     const names2 = [...new Set([...(chosen ? [chosen] : []), ...builtins[theCase]])];
@@ -99,12 +99,14 @@ export async function sendOrderMessage(businessId: string, orderId: string, kind
         const params = saved?.params || BUILTIN_PARAMS[name];
         if (!params) continue; // a template whose details the system does not know
         const wantsImage = saved ? saved.image : !!def?.imageHeader;
-        if (wantsImage && !image) continue;
+        // A template with its own picture (fixedImage) does not need the product's.
+        const picture = def?.fixedImage ? imageLink(def.fixedImage) : image;
+        if (wantsImage && !picture) continue;
         const body = saved?.body ?? def?.body ?? null;
         tries.push({
-            name, params: params.map(k => values[k] ?? "-"), image: wantsImage ? image : null,
+            name, params: params.map(k => values[k] ?? "-"), image: wantsImage ? picture : null,
             body: body ? body.replace(/\{\{(\d+)\}\}/g, (_, n) => values[params[Number(n) - 1]] ?? "") : null,
-            buttons: saved?.buttons || def?.buttons || [],
+            buttons: saved?.buttons || [...(def?.buttons || []), ...(def?.urlButtons || []).map(b => b.text)],
         });
     }
 

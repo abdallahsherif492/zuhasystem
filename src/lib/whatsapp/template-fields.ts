@@ -36,6 +36,7 @@ export const BUILTIN_PARAMS: Record<string, FieldKey[]> = {
     order_returning: ["first_name", "ref"],
     order_returning_photo: ["first_name", "items", "ref"],
     order_delivered: ["first_name", "store"],
+    order_delivered_photo: ["first_name", "store"],
     confirmation_reminder: ["first_name", "items"],
 };
 
@@ -70,7 +71,7 @@ export const CASES: { key: MessageCase; label: string; builtin: string }[] = [
     { key: "shipped", label: "الأوردر اتشحن", builtin: "order_shipped" },
     { key: "hold", label: "المندوب ماقدرش يوصله", builtin: "delivery_failed_photo ← delivery_failed" },
     { key: "returning", label: "الشحنة راجعة", builtin: "order_returning_photo ← order_returning" },
-    { key: "delivered", label: "الأوردر اتسلم", builtin: "order_delivered" },
+    { key: "delivered", label: "الأوردر اتسلم", builtin: "order_delivered_photo ← order_delivered" },
 ];
 
 /** A template as the system keeps it: its text, which detail each number is, buttons, photo. */

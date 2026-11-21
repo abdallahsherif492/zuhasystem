@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { accountOf, admin, graph, memberOf } from "@/lib/whatsapp/server";
-import { TEMPLATES, templatePayload } from "@/lib/whatsapp/templates";
+import { TEMPLATES, imageLink, templatePayload } from "@/lib/whatsapp/templates";
 import { toMetaBody, type SavedTemplate } from "@/lib/whatsapp/template-fields";
 import { whatsappSettingsOf } from "@/lib/whatsapp/settings";
 import { GRAPH, WHATSAPP_APP_ID } from "@/lib/whatsapp/config";
@@ -20,8 +20,8 @@ async function statuses(wabaId: string, token: string) {
 }
 
 /** A product photo uploaded to Meta as the sample a photo-header template needs. */
-async function sampleImageHandle(businessId: string, token: string): Promise<string | null> {
-    const { data } = await admin.from("products").select("image_url").eq("business_id", businessId).not("image_url", "is", null).limit(1);
+async function sampleImageHandle(businessId: string, token: string, fixed?: string): Promise<string | null> {
+    const { data } = fixed ? { data: [{ image_url: fixed }] } : await admin.from("products").select("image_url").eq("business_id", businessId).not("image_url", "is", null).limit(1);
     const url = data?.[0]?.image_url as string | undefined;
     if (!url) return null;
     const img = await fetch(url, { signal: AbortSignal.timeout(15000) }).catch(() => null);
@@ -124,7 +124,7 @@ export async function POST(request: Request) {
         if (have.has(t.name)) continue;
         let handle: string | undefined;
         if (t.imageHeader) {
-            handle = (await sampleImageHandle(businessId, account.token)) || undefined;
+            handle = (await sampleImageHandle(businessId, account.token, t.fixedImage ? imageLink(t.fixedImage) : undefined)) || undefined;
             if (!handle) { results.push({ name: t.name, ok: false, error: "مفيش صورة منتج لسه (بتتجاب مع أول أوردر من المتجر)" }); continue; }
         }
         const res = await graph(`${account.waba_id}/message_templates`, account.token, { method: "POST", body: JSON.stringify(templatePayload(t, handle)) });
