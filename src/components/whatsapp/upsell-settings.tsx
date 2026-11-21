@@ -18,11 +18,14 @@ export function UpsellSettings({ businessId, value, onChange, onSave, saving, ma
         let gone = false;
         (async () => {
             const since = new Date(Date.now() - 30 * 86_400_000).toISOString();
-            const [o, a] = await Promise.all([
+            // Added: «أيوه ضيفه»; before that question (21 Nov 2026), «ضيفه لطلبي» added at once.
+            const askSince = "2026-11-21T01:00:00Z";
+            const [o, yes, old] = await Promise.all([
                 supabase.from("whatsapp_messages").select("order_id").eq("business_id", businessId).eq("payload->>kind", "upsell").gte("sent_at", since).limit(5000),
-                supabase.from("whatsapp_messages").select("id", { count: "exact", head: true }).eq("business_id", businessId).eq("direction", "in").eq("body", "ضيفه لطلبي").gte("sent_at", since),
+                supabase.from("whatsapp_messages").select("id", { count: "exact", head: true }).eq("business_id", businessId).eq("direction", "in").eq("body", "أيوه ضيفه").gte("sent_at", since),
+                supabase.from("whatsapp_messages").select("id", { count: "exact", head: true }).eq("business_id", businessId).eq("direction", "in").eq("body", "ضيفه لطلبي").gte("sent_at", since).lt("sent_at", askSince),
             ]);
-            if (!gone) setStats({ offered: new Set((o.data || []).map(r => r.order_id)).size, added: a.count || 0 });
+            if (!gone) setStats({ offered: new Set((o.data || []).map(r => r.order_id)).size, added: (yes.count || 0) + (old.count || 0) });
         })();
         return () => { gone = true; };
     }, [businessId]);

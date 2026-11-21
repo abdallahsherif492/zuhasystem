@@ -25,6 +25,16 @@ export interface WaMessage {
     sent_at: string;
 }
 
+/**
+ * The id behind a button the customer tapped: a reply button's
+ * (interactive.button_reply.id), or a template's or a carousel card's
+ * quick reply (button.payload).
+ */
+export function tappedButtonId(payload: unknown): string {
+    const p = payload as { interactive?: { button_reply?: { id?: string } }; button?: { payload?: string } } | null;
+    return p?.interactive?.button_reply?.id || p?.button?.payload || "";
+}
+
 export interface Chat {
     phone: string;
     name: string | null;

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Gift } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { whatsappSettingsOf } from "@/lib/whatsapp/settings";
+import { tappedButtonId } from "@/lib/whatsapp/chats";
 
 /**
  * Orders whose customer still has the offer open (lib/whatsapp/upsell.ts):
@@ -25,11 +26,11 @@ export function useOpenOffers(businessId: string | undefined) {
                 supabase.from("whatsapp_messages").select("order_id, sent_at").eq("business_id", businessId).eq("direction", "out")
                     .eq("payload->>kind", "upsell").gte("sent_at", new Date(Date.now() - 86_400_000).toISOString()).limit(1000),
                 supabase.from("whatsapp_messages").select("payload").eq("business_id", businessId).eq("direction", "in")
-                    .like("payload->interactive->button_reply->>id", "upsell:no:%").gte("sent_at", new Date(Date.now() - 86_400_000).toISOString()).limit(1000),
+                    .or("payload->interactive->button_reply->>id.like.upsell:no:*,payload->button->>payload.like.upsell:no:*").gte("sent_at", new Date(Date.now() - 86_400_000).toISOString()).limit(1000),
             ]);
             if (gone) return;
             const hours = whatsappSettingsOf(b?.theme_config).upsell.offer_hours;
-            const no = new Set((declined || []).map(d => String((d.payload as { interactive?: { button_reply?: { id?: string } } })?.interactive?.button_reply?.id || "").split(":")[2]));
+            const no = new Set((declined || []).map(d => tappedButtonId(d.payload).split(":")[2]));
             const out = new Map<string, number>();
             for (const m of sent || []) {
                 if (!m.order_id || no.has(m.order_id)) continue;

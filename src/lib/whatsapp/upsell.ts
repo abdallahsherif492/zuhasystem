@@ -1,6 +1,7 @@
 import { accountOf, admin, uploadImage } from "@/lib/whatsapp/server";
 import { reply, say } from "@/lib/whatsapp/system-text";
 import { arabicProductName } from "@/lib/whatsapp/order-messages";
+import { tappedButtonId } from "@/lib/whatsapp/chats";
 import { whatsappSettingsOf } from "@/lib/whatsapp/settings";
 
 /**
@@ -16,6 +17,8 @@ import { whatsappSettingsOf } from "@/lib/whatsapp/settings";
  */
 
 const DAY = 86_400_000;
+/** From here «ضيفه لطلبي» asks first; before, it added at once. */
+const ASK_SINCE = Date.parse("2026-11-21T01:00:00Z");
 const ACTIVE = ["pending", "processing", "prepared"];
 
 interface Pick { variantId: string; productId: string; name: string; description: string | null; option: string | null; image: string; price: number; cost: number }
@@ -52,12 +55,20 @@ export async function offerStats(businessId: string): Promise<Map<string, { show
         const pl = m.payload as { variant_id?: string; cards?: { variant_id: string }[] } | null;
         for (const v of pl?.cards?.map(c => c.variant_id) || (pl?.variant_id ? [pl.variant_id] : [])) bump(v, "shown");
     }
-    const { data: taps } = await admin.from("whatsapp_messages").select("payload")
-        .eq("business_id", businessId).eq("direction", "in").like("payload->interactive->button_reply->>id", "upsell:add:%").gte("sent_at", since).limit(3000);
+    // Added = «أيوه ضيفه» (upsell:yes). Before that question existed, «ضيفه لطلبي» (upsell:add)
+    // added at once, so those count too — for orders with no «أيوه» of their own.
+    const { data: taps } = await admin.from("whatsapp_messages").select("payload, sent_at")
+        .eq("business_id", businessId).eq("direction", "in")
+        .or("payload->interactive->button_reply->>id.like.upsell:yes:*,payload->button->>payload.like.upsell:yes:*,payload->interactive->button_reply->>id.like.upsell:add:*,payload->button->>payload.like.upsell:add:*")
+        .gte("sent_at", since).lt("sent_at", new Date().toISOString()).limit(3000);
+    const asked = new Set((taps || []).map(m => tappedButtonId(m.payload)).filter(id => id.startsWith("upsell:yes:")).map(id => id.split(":").slice(2).join(":")));
     const counted = new Set<string>();
     for (const m of taps || []) {
-        const id = String((m.payload as { interactive?: { button_reply?: { id?: string } } })?.interactive?.button_reply?.id || "");
-        const [, , orderId, variantId] = id.split(":");
+        const id = tappedButtonId(m.payload);
+        const [, what, orderId, variantId] = id.split(":");
+        // An «add» that was then confirmed counts once, through its «yes»; an «add» alone counts
+        // only from before the question (when it added at once).
+        if (what === "add" && (asked.has(`${orderId}:${variantId}`) || Date.parse(String((m as { sent_at?: string }).sent_at || 0)) > ASK_SINCE)) continue;
         if (!variantId || counted.has(`${orderId}:${variantId}`)) continue; // a double tap counts once
         counted.add(`${orderId}:${variantId}`);
         bump(variantId, "added");
@@ -254,19 +265,28 @@ export async function offerUpsell(businessId: string, orderId: string, phone: st
 }
 
 /** The customer's button on the offer. True when it was one. */
-export async function upsellAnswer(businessId: string, phone: string, buttonId: string): Promise<boolean> {
+/**
+ * The customer's buttons on the offer:
+ *  - «ضيفه لطلبي» (upsell:add): asked to make sure — the product, its offer
+ *    price and the new amount due — with «أيوه ضيفه» / «لأ»;
+ *  - «أيوه ضيفه» (upsell:yes): added to the order at the offer price;
+ *  - «لا شكراً» / «لأ» (upsell:no): nothing added.
+ * `tappedAt`: when the customer tapped; the offer's window is measured to it.
+ */
+export async function upsellAnswer(businessId: string, phone: string, buttonId: string, tappedAt = Date.now()): Promise<boolean> {
     const [, what, orderId, variantId] = buttonId.split(":");
     if (!orderId) return false;
+    if (what === "no") { await say(businessId, phone, "ولا يهمك 🌸 طلبك هيتجهز ويتشحن قريب.", orderId); return true; }
+    if ((what !== "add" && what !== "yes") || !variantId) return false;
     const { data: biz } = await admin.from("businesses").select("theme_config").eq("id", businessId).maybeSingle();
     const hours = whatsappSettingsOf(biz?.theme_config).upsell.offer_hours;
-    if (what === "no") { await say(businessId, phone, "ولا يهمك 🌸 طلبك هيتجهز ويتشحن قريب.", orderId); return true; }
-    if (what !== "add" || !variantId) return false;
 
     // The price offered: a message of its own, or a card in the carousel.
     const { data: offers } = await admin.from("whatsapp_messages").select("payload, sent_at")
         .eq("order_id", orderId).eq("direction", "out").eq("payload->>kind", "upsell").order("sent_at", { ascending: false }).limit(20);
     // The offer is open for `offer_hours` (2 by default); after that the order is final.
-    if (offers?.length && Date.now() - Date.parse(offers[0].sent_at) > hours * 3_600_000) {
+    // «أيوه ضيفه» answers a question asked inside the window, so it is not held to it.
+    if (what === "add" && offers?.length && tappedAt - Date.parse(offers[0].sent_at) > hours * 3_600_000) {
         await say(businessId, phone, "العرض ده خلص للأسف 🙏 طلبك اتجهز زي ما هو. لو حابب تطلب المنتج ده ابعتلنا هنا ونعملهولك في طلب جديد.", orderId);
         return true;
     }
@@ -289,8 +309,34 @@ export async function upsellAnswer(businessId: string, phone: string, buttonId: 
         await say(businessId, phone, "للأسف طلبك اتسلم لشركة الشحن خلاص 🙏 لو حابب ناخده في طلب جديد ابعتلنا هنا.", orderId);
         return true;
     }
-    const { data: v } = await admin.from("variants").select("id, cost_price, products(name, description)").eq("id", variantId).eq("business_id", businessId).maybeSingle();
+    const { data: v } = await admin.from("variants").select("id, cost_price, products(name, description, image_url)").eq("id", variantId).eq("business_id", businessId).maybeSingle();
     if (!v) return true;
+    const p = v.products as unknown as { name: string; description: string | null; image_url: string | null } | null;
+    const name = await arabicProductName(p?.name, p?.description);
+    const paid = Number(order.paid_amount) || 0;
+    const total = Number(order.total_amount) + price;
+
+    if (what === "add") {
+        // Make sure first: which product, at what price, and what they will pay.
+        const text = `هنضيف لطلبك:\n${name}\nبـ ${price} جنيه\n\nالمطلوب عند الاستلام هيبقى ${Math.round(total - paid)} جنيه بدل ${Math.round(Number(order.total_amount) - paid)}.\nأضيفه؟`;
+        const account = await accountOf(businessId);
+        const mediaId = account && p?.image_url ? await uploadImage(account, p.image_url) : null;
+        await reply(businessId, phone, {
+            type: "interactive",
+            interactive: {
+                type: "button",
+                ...(mediaId ? { header: { type: "image", image: { id: mediaId } } } : {}),
+                body: { text },
+                action: { buttons: [
+                    { type: "reply", reply: { id: `upsell:yes:${orderId}:${variantId}`, title: "أيوه ضيفه" } },
+                    { type: "reply", reply: { id: `upsell:no:${orderId}`, title: "لأ" } },
+                ] },
+            },
+        }, text, orderId, { kind: "upsell_confirm", header_image: p?.image_url || null, buttons: ["أيوه ضيفه", "لأ"], variant_id: variantId, price });
+        return true;
+    }
+
+    // «أيوه ضيفه»: added at the offer price; stock moves through the usual trigger.
     const cost = Number(v.cost_price) || 0;
     const { error } = await admin.from("order_items").insert({
         order_id: orderId, variant_id: variantId, quantity: 1, price_at_sale: price, cost_at_sale: cost, business_id: businessId,
@@ -300,17 +346,14 @@ export async function upsellAnswer(businessId: string, phone: string, buttonId: 
         await admin.from("orders").update({ last_attempt_note: `العميل وافق على العرض من الواتساب بس ما اتضافش: ${error.message}` }).eq("id", orderId);
         return true;
     }
-    const total = Number(order.total_amount) + price;
     await admin.from("orders").update({
         subtotal: Number(order.subtotal || 0) + price, total_amount: total, total_cost: Number(order.total_cost || 0) + cost,
     }).eq("id", orderId);
     await admin.from("actions_log").insert({
         business_id: businessId, user_email: "whatsapp-auto", action_type: "edit", entity_type: "order", entity_id: orderId,
-        entity_name: `Order #${orderId.slice(0, 8)}`, changes: [{ field: "Items", old_value: null, new_value: `+1 من العرض على الواتساب (${price} جنيه)` }],
+        entity_name: `Order #${orderId.slice(0, 8)}`, changes: [{ field: "Items", old_value: null, new_value: `+1 ${p?.name || "منتج"} من العرض على الواتساب (${price} جنيه)` }],
         metadata: { source: "whatsapp-upsell", variant_id: variantId, price },
     });
-    const p = v.products as unknown as { name: string; description: string | null } | null;
-    const name = await arabicProductName(p?.name, p?.description);
-    await say(businessId, phone, `تمام 🌸 ضفنا ${name} لطلبك.\nالمطلوب عند الاستلام بقى ${Math.round(total - (Number(order.paid_amount) || 0))} جنيه.`, orderId);
+    await say(businessId, phone, `تمام 🌸 ضفنا ${name} لطلبك.\nالمطلوب عند الاستلام بقى ${Math.round(total - paid)} جنيه.`, orderId);
     return true;
 }

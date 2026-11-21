@@ -4,6 +4,7 @@ import { reply, say } from "@/lib/whatsapp/system-text";
 import { orderExcepted, runReplyFlows } from "@/lib/whatsapp/flows";
 import { offerUpsell, upsellAnswer } from "@/lib/whatsapp/upsell";
 import { creditFollowUp } from "@/lib/whatsapp/credit";
+import { tappedButtonId } from "@/lib/whatsapp/chats";
 import { CANCEL_CHOICES, CONFIRM_TEMPLATES, whatsappSettingsOf, type WhatsAppSettings } from "@/lib/whatsapp/settings";
 
 /**
@@ -26,7 +27,7 @@ const norm = (s: string | null) => (s || "").replace(/[\p{P}\p{S}\s]+/gu, " ").t
 const YES = /^(تأكيد|تاكيد|تأكيد الطلب|أكد|اكد|أأكد|موافق|تمام|اوكي|اوك|ok|okay|yes|confirm)$/i;
 const CANCEL = /^(إلغاء الطلب|الغاء الطلب|إلغاء|الغاء|الغي|ألغي|cancel)$/i;
 
-interface Incoming { customer_phone: string; body: string | null; context_id: string | null; payload: unknown; wa_message_id?: string | null }
+interface Incoming { customer_phone: string; body: string | null; context_id: string | null; payload: unknown; wa_message_id?: string | null; sent_at?: string }
 
 /** The order the customer is answering about: the message replied to, else our latest confirmation in 3 days. */
 async function orderAskedAbout(businessId: string, phone: string, contextId: string | null): Promise<string | null> {
@@ -71,8 +72,8 @@ export async function handleReply(businessId: string, m: Incoming) {
 
 async function builtIn(businessId: string, m: Incoming) {
     // The offer's buttons (lib/whatsapp/upsell.ts).
-    const buttonId = (m.payload as { interactive?: { button_reply?: { id?: string } } })?.interactive?.button_reply?.id || "";
-    if (buttonId.startsWith("upsell:") && (await upsellAnswer(businessId, m.customer_phone, buttonId))) return;
+    const buttonId = tappedButtonId(m.payload);
+    if (buttonId.startsWith("upsell:") && (await upsellAnswer(businessId, m.customer_phone, buttonId, m.sent_at ? Date.parse(m.sent_at) : Date.now()))) return;
 
     const { data: biz } = await admin.from("businesses").select("theme_config").eq("id", businessId).maybeSingle();
     const settings = whatsappSettingsOf(biz?.theme_config);

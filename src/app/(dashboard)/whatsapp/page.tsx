@@ -19,7 +19,7 @@ import { telLink } from "@/lib/orders/contact";
 import { logBusinessAction } from "@/lib/logs/actions-logger";
 import { CancelOrderDialog } from "@/components/orders/cancel-order-dialog";
 import { CANCEL_REASON_FALLBACK, FLOW_CANCEL_REASONS, cancelReasonLabel, type CancelReason } from "@/lib/orders/cancel-reasons";
-import { QUICK_REPLIES, chatsOf, preview, windowUntil, type Chat, type WaMessage } from "@/lib/whatsapp/chats";
+import { QUICK_REPLIES, chatsOf, preview, tappedButtonId, windowUntil, type Chat, type WaMessage } from "@/lib/whatsapp/chats";
 import { clockLabel } from "@/lib/orders/confirm-queue";
 
 /**
@@ -541,6 +541,9 @@ function Bubble({ m, tail, businessId, me, quoted, reaction, onReply }: {
     const header = m.payload?.header_image || null;
     const buttons = m.direction === "out" && (m.type === "template" || m.type === "interactive") ? m.payload?.buttons || [] : [];
     const loc = m.payload?.location;
+    // «ضيفه لطلبي» on a card: which product (its id carries the variant).
+    const tapped = !out ? tappedButtonId(m.payload) : "";
+    const picked = tapped.startsWith("upsell:add:") ? quoted?.payload?.cards?.find(c => c.variant_id === tapped.split(":")[3]) || null : null;
     return (
         // Tap (phone) or hover (desktop) shows reply / copy.
         <div tabIndex={0} className={cn("group flex outline-none", out ? "justify-start" : "justify-end", tail ? "mt-2" : "mt-0.5")}>
@@ -548,7 +551,18 @@ function Bubble({ m, tail, businessId, me, quoted, reaction, onReply }: {
                 <div className={cn("relative rounded-lg px-2 pb-1.5 pt-1.5 text-[15px] leading-relaxed text-[#111b21] shadow-sm dark:text-[#e9edef]",
                     out ? "bg-[#d9fdd3] dark:bg-[#005c4b]" : "bg-white dark:bg-[#202c33]",
                     tail && (out ? "rounded-ss-none" : "rounded-se-none"))}>
-                    {quoted && (
+                    {picked ? (
+                        // The customer tapped one card of the offer: that product, not the offer's text.
+                        <div className="mb-1 flex items-center gap-2 rounded-md border-s-4 border-[#06cf9c] bg-[#f0f2f5] p-1.5 text-xs dark:bg-[#1d282f]">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src={picked.image} alt="" className="h-12 w-12 shrink-0 rounded object-cover" />
+                            <span className="min-w-0">
+                                <span className="block font-semibold text-[#008069] dark:text-[#06cf9c]">من العرض</span>
+                                <span className="block truncate text-[13px] font-medium text-[#111b21] dark:text-[#e9edef]">{picked.title}</span>
+                                <span className="text-[#54656f] dark:text-[#aebac1]">{picked.price} جنيه بدل {picked.old_price}</span>
+                            </span>
+                        </div>
+                    ) : quoted && (
                         <div className={cn("mb-1 rounded-md border-s-4 border-[#06cf9c] px-2 py-1 text-xs", out ? "bg-[#cfe9c7] dark:bg-[#025144]" : "bg-[#f0f2f5] dark:bg-[#1d282f]")}>
                             <p className="font-semibold text-[#008069] dark:text-[#06cf9c]">{quoted.direction === "out" ? "انت" : "العميل"}</p>
                             <p className="line-clamp-2 text-[#54656f] dark:text-[#aebac1]">{preview(quoted)}</p>
