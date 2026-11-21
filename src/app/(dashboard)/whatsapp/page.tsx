@@ -4,7 +4,7 @@ import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "rea
 import { useSearchParams } from "next/navigation";
 import {
     ArrowDown, ArrowRight, Check, CheckCheck, Clock, Copy, CornerUpLeft, FileText, Loader2, MapPin, MessageCircle, MessageSquareDot,
-    Images, Paperclip, Phone, Search, Send, Smile, TriangleAlert, User, X,
+    Camera, ImageIcon, Images, Paperclip, Pencil, Phone, Search, Send, Smile, TriangleAlert, User, X,
 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/lib/supabase";
@@ -18,8 +18,9 @@ import { telLink } from "@/lib/orders/contact";
 import { logBusinessAction } from "@/lib/logs/actions-logger";
 import { CancelOrderDialog } from "@/components/orders/cancel-order-dialog";
 import { OrderEditDialog } from "@/components/whatsapp/order-edit-dialog";
+import { SavedRepliesManager, fillReply, useSavedReplies } from "@/components/whatsapp/saved-replies";
 import { CANCEL_REASON_FALLBACK, FLOW_CANCEL_REASONS, cancelReasonLabel, type CancelReason } from "@/lib/orders/cancel-reasons";
-import { QUICK_REPLIES, chatsOf, preview, tappedButtonId, windowUntil, type Chat, type WaMessage } from "@/lib/whatsapp/chats";
+import { chatsOf, preview, tappedButtonId, windowUntil, type Chat, type WaMessage } from "@/lib/whatsapp/chats";
 import { clockLabel } from "@/lib/orders/confirm-queue";
 
 /**
@@ -337,7 +338,7 @@ function ChatView({ phone, chat, messages, businessId, me, now, others, onBack, 
             if (await post("/api/whatsapp/send-media", form, false)) { setFile(null); setText(""); setReplyTo(null); }
             return;
         }
-        if (!text.trim()) return;
+        if (!text.trim() || /^\/\S*$/.test(text.trim())) return; // a «/» search is not a message
         // Shown at once and the box cleared, so the next message can be typed
         // while this one goes; sends go one after another, in order.
         const body = text.trim(), ctx = replyTo?.wa_message_id || null;
@@ -373,6 +374,12 @@ function ChatView({ phone, chat, messages, businessId, me, now, others, onBack, 
         await post("/api/whatsapp/send-media", form, false);
     };
     const [photos, setPhotos] = useState(false);
+    // «الردود المحفوظة» (components/whatsapp/saved-replies.tsx).
+    const { replies: savedReplies, ready: repliesReady, reload: reloadReplies } = useSavedReplies(businessId);
+    const [manageReplies, setManageReplies] = useState(false);
+    const [attachOpen, setAttachOpen] = useState(false);
+    const galleryInput = useRef<HTMLInputElement>(null);
+    const cameraInput = useRef<HTMLInputElement>(null);
     const [catalog, setCatalog] = useState<{ id: string; name: string; image_url: string }[] | null>(null);
     const [photoQuery, setPhotoQuery] = useState("");
     const openPhotos = async (o: boolean) => {
@@ -559,11 +566,31 @@ function ChatView({ phone, chat, messages, businessId, me, now, others, onBack, 
                             </div>
                         )}
                         <div className="flex gap-1.5 overflow-x-auto pb-0.5">
-                            {QUICK_REPLIES.map(q => (
-                                <button key={q} type="button" onClick={() => setText(q)}
-                                    className="shrink-0 rounded-full bg-background px-3 py-1.5 text-xs text-[#54656f] ring-1 ring-border hover:bg-muted dark:text-[#aebac1]">{q.length > 26 ? `${q.slice(0, 26)}…` : q}</button>
+                            <button type="button" onClick={() => setManageReplies(true)}
+                                className="flex shrink-0 items-center gap-1 rounded-full bg-[#d9fdd3] px-3 py-1.5 text-xs font-semibold text-[#008069] ring-1 ring-[#25d366]/40 hover:bg-[#c6f5bd] dark:bg-[#0a332c] dark:text-[#25d366]">
+                                <Pencil className="h-3 w-3" />الردود المحفوظة
+                            </button>
+                            {(savedReplies || []).map(r => (
+                                <button key={r.id} type="button" onClick={() => setText(fillReply(r.body, chat?.name || null))} title={r.body}
+                                    className="shrink-0 rounded-full bg-background px-3 py-1.5 text-xs text-[#54656f] ring-1 ring-border hover:bg-muted dark:text-[#aebac1]">{r.title.length > 26 ? `${r.title.slice(0, 26)}…` : r.title}</button>
                             ))}
                         </div>
+                        {text.startsWith("/") && (() => {
+                            // «/» and a word: the saved replies that match, one tap to use.
+                            const q = text.slice(1).trim().toLowerCase();
+                            const hits = (savedReplies || []).filter(r => !q || r.title.toLowerCase().includes(q) || r.body.toLowerCase().includes(q)).slice(0, 8);
+                            return (
+                                <div className="max-h-56 overflow-y-auto rounded-xl bg-background p-1 shadow-md ring-1 ring-border">
+                                    {hits.length === 0 ? <p className="p-2 text-sm text-muted-foreground">مفيش رد فيه «{q}».</p> : hits.map(r => (
+                                        <button key={r.id} type="button" onClick={() => setText(fillReply(r.body, chat?.name || null))}
+                                            className="block w-full rounded-lg px-3 py-2 text-start hover:bg-muted">
+                                            <span className="block text-sm font-semibold">{r.title}</span>
+                                            <span className="block truncate text-xs text-muted-foreground">{r.body}</span>
+                                        </button>
+                                    ))}
+                                </div>
+                            );
+                        })()}
                         <div className="flex items-end gap-1">
                             <Popover>
                                 <PopoverTrigger asChild><Button variant="ghost" size="icon" className="h-10 w-10 shrink-0" aria-label="إيموجي"><Smile className="h-6 w-6 text-[#54656f]" /></Button></PopoverTrigger>
@@ -571,7 +598,25 @@ function ChatView({ phone, chat, messages, businessId, me, now, others, onBack, 
                                     {EMOJIS.map(e => <button key={e} type="button" className="rounded p-1 text-xl hover:bg-muted" onClick={() => setText(t => t + e)}>{e}</button>)}
                                 </PopoverContent>
                             </Popover>
-                            <Button variant="ghost" size="icon" className="h-10 w-10 shrink-0" aria-label="ابعت صورة أو ملف" onClick={() => fileInput.current?.click()}><Paperclip className="h-5 w-5 text-[#54656f]" /></Button>
+                            {/* Attach: the phone's gallery (photos and videos only, so it opens the
+                                gallery, not the files app), the camera, or a document. */}
+                            <Popover open={attachOpen} onOpenChange={setAttachOpen}>
+                                <PopoverTrigger asChild>
+                                    <Button variant="ghost" size="icon" className="h-10 w-10 shrink-0" aria-label="ابعت صورة أو ملف"><Paperclip className="h-5 w-5 text-[#54656f]" /></Button>
+                                </PopoverTrigger>
+                                <PopoverContent side="top" align="start" className="w-48 p-1" dir="rtl">
+                                    {([
+                                        [galleryInput, ImageIcon, "المعرض", "text-[#bf59cf]"],
+                                        [cameraInput, Camera, "الكاميرا", "text-[#ff2e74]"],
+                                        [fileInput, FileText, "ملف", "text-[#7f66ff]"],
+                                    ] as const).map(([ref, Icon, label, tone]) => (
+                                        <button key={label} type="button" onClick={() => { setAttachOpen(false); ref.current?.click(); }}
+                                            className="flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-[15px] hover:bg-muted">
+                                            <Icon className={cn("h-5 w-5", tone)} />{label}
+                                        </button>
+                                    ))}
+                                </PopoverContent>
+                            </Popover>
                             {/* Product photos: this customer's products first, then any, one tap to send. */}
                             <Popover open={photos} onOpenChange={openPhotos}>
                                 <PopoverTrigger asChild>
@@ -610,11 +655,26 @@ function ChatView({ phone, chat, messages, businessId, me, now, others, onBack, 
                                     })()}
                                 </PopoverContent>
                             </Popover>
-                            <input ref={fileInput} type="file" accept="image/*,video/mp4,application/pdf,.doc,.docx,.xls,.xlsx" className="hidden"
+                            <input ref={galleryInput} type="file" accept="image/*,video/*" className="hidden"
+                                onChange={e => { const f = e.target.files?.[0]; if (f) setFile(f); e.target.value = ""; }} />
+                            <input ref={cameraInput} type="file" accept="image/*" capture="environment" className="hidden"
+                                onChange={e => { const f = e.target.files?.[0]; if (f) setFile(f); e.target.value = ""; }} />
+                            <input ref={fileInput} type="file" accept="application/pdf,.doc,.docx,.xls,.xlsx" className="hidden"
                                 onChange={e => { const f = e.target.files?.[0]; if (f) setFile(f); e.target.value = ""; }} />
                             <textarea value={text} onChange={e => setText(e.target.value)} rows={1} placeholder={file ? "تعليق على الملف (اختياري)" : "اكتب رسالة"}
                                 onPaste={e => { if (takeFile(e.clipboardData?.files)) e.preventDefault(); }}
-                                onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey && window.matchMedia("(min-width: 768px)").matches) { e.preventDefault(); sendNow(); } }}
+                                onKeyDown={e => {
+                                    if (e.key !== "Enter" || e.shiftKey) return;
+                                    // «/word» + Enter: the first matching saved reply, never sent as «/word».
+                                    if (text.startsWith("/")) {
+                                        e.preventDefault();
+                                        const q = text.slice(1).trim().toLowerCase();
+                                        const hit = (savedReplies || []).find(r => !q || r.title.toLowerCase().includes(q) || r.body.toLowerCase().includes(q));
+                                        if (hit) setText(fillReply(hit.body, chat?.name || null));
+                                        return;
+                                    }
+                                    if (window.matchMedia("(min-width: 768px)").matches) { e.preventDefault(); sendNow(); }
+                                }}
                                 className="max-h-36 min-h-10 min-w-0 flex-1 resize-none rounded-2xl bg-background px-3 py-2 text-base outline-none ring-1 ring-border" />
                             <Button onClick={sendNow} disabled={sending || (!text.trim() && !file)} className="h-10 w-10 shrink-0 rounded-full bg-[#25d366] p-0 text-white hover:bg-[#1fb855]" aria-label="ابعت">
                                 {sending ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5 -scale-x-100" />}
@@ -630,6 +690,8 @@ function ChatView({ phone, chat, messages, businessId, me, now, others, onBack, 
                     </div>
                 )}
             </footer>
+            <SavedRepliesManager open={manageReplies} onOpenChange={setManageReplies} businessId={businessId}
+                replies={savedReplies} ready={repliesReady} reload={reloadReplies} />
             <OrderEditDialog orderId={editing} businessId={businessId} userEmail={currentUser?.email || null}
                 onClose={() => { setEditing(null); loadOrders(); }} />
             {cancelling && (
