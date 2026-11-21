@@ -7,7 +7,6 @@ import { useBusiness } from "@/contexts/BusinessContext";
 import { Button } from "@/components/ui/button";
 import { WHATSAPP_MIGRATION } from "@/lib/whatsapp/config";
 import { WhatsAppTemplatesAndRules } from "@/components/whatsapp/whatsapp-settings";
-import { WhatsAppBulkSend } from "@/components/whatsapp/bulk-send";
 
 /**
  * Settings → WhatsApp: connect the business's WhatsApp number to the system.
@@ -62,26 +61,24 @@ export default function WhatsAppSettingsPage() {
     };
 
     return (
-        <div dir="rtl" className="mx-auto max-w-2xl space-y-6 p-4 sm:p-6">
-            <div className="space-y-1">
-                <h1 className="flex items-center gap-2 text-2xl font-bold"><MessageCircle className="h-6 w-6 text-emerald-600" />واتساب السيستم</h1>
-                <p className="text-muted-foreground">اربط رقم واتساب البيزنس بالسيستم عشان رسايل التأكيد والشحن تتبعت منه، والمودريتورز يردوا على العملاء من هنا.</p>
+        <div dir="rtl" className="mx-auto max-w-6xl space-y-4 p-4 sm:p-6">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="min-w-0">
+                    <h1 className="flex items-center gap-2 text-2xl font-bold"><MessageCircle className="h-6 w-6 text-emerald-600" />واتساب السيستم</h1>
+                    <p className="text-sm text-muted-foreground">رسايل التأكيد والشحن بتتبعت من رقم الشركة، والمودريتورز بيردوا على العملاء من صفحة المحادثات.</p>
+                </div>
+                {accounts && accounts.length > 0 && accounts.map(a => (
+                    <span key={a.phone_number_id} className="inline-flex items-center gap-2 rounded-full border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-sm font-semibold text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200">
+                        <CheckCircle2 className="h-4 w-4" /><span dir="ltr">{a.display_phone || a.phone_number_id}</span> متربط{a.verified_name ? ` · ${a.verified_name}` : ""}
+                    </span>
+                ))}
             </div>
 
             {problem && <p className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm font-medium text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">{problem}</p>}
 
             {accounts === null ? (
                 <div className="flex h-24 items-center justify-center"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
-            ) : accounts.length > 0 ? (
-                <section className="space-y-3 rounded-2xl border-2 border-emerald-200 bg-emerald-50/60 p-5 dark:border-emerald-900 dark:bg-emerald-950/30">
-                    {accounts.map(a => (
-                        <div key={a.phone_number_id} className="space-y-1">
-                            <p className="flex items-center gap-2 text-lg font-bold"><CheckCircle2 className="h-5 w-5 text-emerald-600" />{a.display_phone || a.phone_number_id} متربط</p>
-                            <p className="text-sm text-muted-foreground">{a.verified_name || ""}</p>
-                        </div>
-                    ))}
-                </section>
-            ) : (
+            ) : accounts.length > 0 ? null : (
                 <section className="space-y-4 rounded-2xl border bg-card p-5">
                     <h2 className="text-lg font-bold">قبل ما تربط</h2>
                     <ol className="list-decimal space-y-2 ps-5 text-[15px] leading-relaxed">
@@ -97,7 +94,6 @@ export default function WhatsAppSettingsPage() {
                 </section>
             )}
             {accounts && accounts.length > 0 && businessId && <WhatsAppTemplatesAndRules businessId={businessId} manager={manager} />}
-            {accounts && accounts.length > 0 && businessId && manager && <WhatsAppBulkSend businessId={businessId} />}
         </div>
     );
 }
