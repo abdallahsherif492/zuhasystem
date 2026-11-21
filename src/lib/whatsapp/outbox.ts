@@ -1,4 +1,4 @@
-import { admin } from "@/lib/whatsapp/server";
+import { admin, isOutage } from "@/lib/whatsapp/server";
 import { sendOrderMessage } from "@/lib/whatsapp/order-messages";
 import { runEventFlows } from "@/lib/whatsapp/flows";
 import { offerUpsell } from "@/lib/whatsapp/upsell";
@@ -59,6 +59,13 @@ export async function processOutbox(opts: { orderId?: string } = {}) {
         if (!settingsOf.get(item.business_id)!.events[event]) await finish("skipped", "off in settings");
         else {
             const r = await sendOrderMessage(item.business_id, item.order_id, event, "system", names.get(item.business_id));
+            if (!r.ok && isOutage(r.error)) {
+                // Meta is refusing everything (blocked access, token, limit): back in the queue,
+                // tried again in 15 minutes and by every run after, until it goes.
+                await admin.from("whatsapp_outbox").update({ status: "queued", detail: r.error, send_after: new Date(Date.now() + 15 * 60_000).toISOString() }).eq("id", item.id);
+                done.push({ id: item.id, status: "retry", detail: r.error });
+                continue;
+            }
             await finish(r.ok ? "sent" : "failed", r.ok ? undefined : r.error);
         }
         // A moderator confirmed someone who wrote today: the offer (free inside the window).

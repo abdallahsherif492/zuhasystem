@@ -63,6 +63,7 @@ export function sendError(body: { error?: { code?: number; message?: string; err
     if (e.code === 131056) return "بعتّ رسايل كتير للرقم ده في وقت قصير. استنى شوية.";
     if (e.code === 130429) return "وصلنا للحد المسموح من Meta دلوقتي. كمّل بعد شوية.";
     if (e.code === 131048) return "Meta وقفت الإرسال مؤقتاً عشان جودة الرقم. استنى شوية قبل ما تكمّل.";
+    if (/api access blocked/i.test(e.message || "") || e.code === 200 || e.code === 10) return "Meta موقفة إرسال السيستم دلوقتي (API access blocked): صاحب حساب الفيسبوك بتاع الـ app محتاج يأكد هويته على فيسبوك. الرسايل الأوتوماتيك هتتبعت لوحدها بعد ما يتحل.";
     if (e.code === 190) return "توكن الواتساب مش شغال. راجع WHATSAPP_TOKEN في Netlify.";
     return `الرسالة ما اتبعتتش: ${e.error_data?.details || e.message || "خطأ من Meta"}`;
 }
@@ -101,3 +102,6 @@ export async function uploadImage(account: WaAccount, url: string): Promise<stri
         return null;
     }
 }
+
+/** A failure of the whole connection (blocked access, token, rate limit), not of one message: worth sending again later. */
+export const isOutage = (error: string) => /API access blocked|توكن|الحد المسموح|وقفت الإرسال|موقفة إرسال/.test(error);
