@@ -2,7 +2,6 @@
 
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import Link from "next/link";
 import {
     ArrowDown, ArrowRight, Check, CheckCheck, Clock, Copy, CornerUpLeft, FileText, Loader2, MapPin, MessageCircle, MessageSquareDot,
     Paperclip, Phone, Search, Send, Smile, TriangleAlert, User, X,
@@ -18,6 +17,7 @@ import { egp } from "@/components/orders/order-summary";
 import { telLink } from "@/lib/orders/contact";
 import { logBusinessAction } from "@/lib/logs/actions-logger";
 import { CancelOrderDialog } from "@/components/orders/cancel-order-dialog";
+import { OrderEditDialog } from "@/components/whatsapp/order-edit-dialog";
 import { CANCEL_REASON_FALLBACK, FLOW_CANCEL_REASONS, cancelReasonLabel, type CancelReason } from "@/lib/orders/cancel-reasons";
 import { QUICK_REPLIES, chatsOf, preview, tappedButtonId, windowUntil, type Chat, type WaMessage } from "@/lib/whatsapp/chats";
 import { clockLabel } from "@/lib/orders/confirm-queue";
@@ -351,6 +351,9 @@ function ChatView({ phone, chat, messages, businessId, me, now, others, onBack, 
         toast.success("اتسجل إنك تابعت الأوردر ده مع شركة الشحن.");
     };
 
+    // «عدّل الأوردر»: the «New from stores» edit section, over the chat.
+    const [editing, setEditing] = useState<string | null>(null);
+
     // «الغي الأوردر»: the same reasons as the confirmations page.
     const [cancelling, setCancelling] = useState<OrderLite | null>(null);
     const cancelOrder = async (o: OrderLite, reason: CancelReason, note: string | null) => {
@@ -435,7 +438,7 @@ function ChatView({ phone, chat, messages, businessId, me, now, others, onBack, 
                                         </div>
                                     )}
                                     <div className="mt-1 flex flex-wrap gap-1.5">
-                                        <Link href={`/orders/${o.id}?edit=1`} className="rounded-md border px-2.5 py-1 text-xs font-semibold hover:bg-muted">عدّل الأوردر</Link>
+                                        <button type="button" onClick={() => setEditing(o.id)} className="rounded-md border px-2.5 py-1 text-xs font-semibold hover:bg-muted">عدّل الأوردر</button>
                                     </div>
                                     {waiting && (
                                         <div className="mt-1 flex gap-1.5">
@@ -524,6 +527,8 @@ function ChatView({ phone, chat, messages, businessId, me, now, others, onBack, 
                     </div>
                 )}
             </footer>
+            <OrderEditDialog orderId={editing} businessId={businessId} userEmail={currentUser?.email || null}
+                onClose={() => { setEditing(null); loadOrders(); }} />
             {cancelling && (
                 <CancelOrderDialog customerName={cancelling.customer_info?.name || name} only={FLOW_CANCEL_REASONS} description="العميل قال إيه؟"
                     open onOpenChange={v => { if (!v) setCancelling(null); }}

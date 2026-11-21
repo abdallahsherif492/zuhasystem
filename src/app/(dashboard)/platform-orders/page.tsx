@@ -5,9 +5,9 @@ import { useEffect, useState, useMemo, useRef, Suspense } from "react";
 
 import { supabase } from "@/lib/supabase";
 import { useBusiness } from "@/contexts/BusinessContext";
-import { ClosedBySelect } from "@/components/orders/closed-by-select";
+import { StoreOrderEditor, itemsCost, type OrderEditActions } from "@/components/orders/store-order-editor";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { formatCurrency, normalizeSearchText } from "@/lib/utils";
+import { formatCurrency } from "@/lib/utils";
 import { DateRangePicker } from "@/components/date-range-picker";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
@@ -17,17 +17,14 @@ import { ContactActions } from "@/components/orders/contact-actions";
 import { RepeatOrdersAlert } from "@/components/orders/repeat-orders";
 import { useRepeatOrders } from "@/hooks/use-repeat-orders";
 import { Input } from "@/components/ui/input";
-import { AutosaveField } from "@/components/ui/autosave-field";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import {
-    Loader2, Check, X, AlertTriangle, Search, PackageSearch, ChevronsUpDown, Repeat, PhoneCall, HandCoins, ShoppingBasket,
+    Loader2, Check, AlertTriangle, Search, PackageSearch, Repeat, PhoneCall, HandCoins, ShoppingBasket,
     Undo2, Link2Off,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import {
     AttemptHistory, FailedAttemptDialog, LastAttempt, ago, claimOrder, recordAttempt, type AttemptReason, type AttemptSummary,
@@ -46,8 +43,7 @@ import { CancelOrderDialog } from "@/components/orders/cancel-order-dialog";
 import {
     CANCEL_REASON_FALLBACK, FLOW_CANCEL_REASONS, LAST_STEP_CANCEL_REASONS, cancelReasonLabel, type CancelReason,
 } from "@/lib/orders/cancel-reasons";
-import { BundlePicker, BundleTag } from "@/components/bundles/bundle-picker";
-import { bundleLabel, bundleSkuIndex, bundleVariantIndex, expandBundle, loadBundles, skuKey, type Bundle, type BundleVariant } from "@/lib/bundles";
+import { bundleLabel, expandBundle, loadBundles, type Bundle, type BundleVariant } from "@/lib/bundles";
 
 const ORDER_SELECT = `
     *,
@@ -60,9 +56,6 @@ const ORDER_SELECT = `
     )
 `;
 
-/** What an order's lines cost us: the order's total_cost, which its profit is generated from. */
-const itemsCost = (items: { quantity: number; cost_at_sale?: number | null }[]) =>
-    items.reduce((sum, i) => sum + (Number(i.cost_at_sale) || 0) * (Number(i.quantity) || 0), 0);
 
 /**
  * Waiting, and from a store (EasyOrders or Shopify) or a missed order from it
@@ -158,12 +151,6 @@ interface Variant {
     products: { name: string };
 }
 
-const GOVERNORATES = [
-    "Cairo", "New Cairo", "Giza", "Alexandria", "Dakahlia", "Red Sea", "Beheira", "Fayoum",
-    "Gharbiya", "Ismailia", "Monufia", "Minya", "Qaliubiya", "New Valley", "Suez",
-    "Aswan", "Assiut", "Beni Suef", "Port Said", "Damietta", "Sharkia", "South Sinai",
-    "Kafr Al Sheikh", "Matrouh", "Luxor", "Qena", "North Sinai", "Sohag"
-];
 
 import { logBusinessAction } from "@/lib/logs/actions-logger";
 import { orderLogName } from "@/lib/logs/order-log-name";
@@ -183,8 +170,6 @@ function PlatformOrdersContent() {
     const [variants, setVariants] = useState<Variant[]>([]);
     const [products, setProducts] = useState<any[]>([]);
     const [bundles, setBundles] = useState<Bundle[]>([]);
-    const bundleNames = useMemo(() => bundleVariantIndex(bundles), [bundles]);
-    const bundlesBySku = useMemo(() => bundleSkuIndex(bundles), [bundles]);
     
     // Treasury Modal state
     const [depositModalOpen, setDepositModalOpen] = useState(false);
@@ -194,11 +179,7 @@ function PlatformOrdersContent() {
     const [accounts, setAccounts] = useState<{ id: string; name: string }[]>([]);
     const [platformFilter, setPlatformFilter] = useState<string>("all");
     
-    const [addItemOpen, setAddItemOpen] = useState<Record<string, boolean>>({});
-    const [selectedProductForAdd, setSelectedProductForAdd] = useState<Record<string, string>>({});
-    const [selectedVariantForAdd, setSelectedVariantForAdd] = useState<Record<string, string>>({});
     const [selectedProductOverride, setSelectedProductOverride] = useState<Record<string, string>>({});
-    const [selectedItemProduct, setSelectedItemProduct] = useState<Record<string, string>>({});
 
     
     const searchParams = useSearchParams();
@@ -891,6 +872,42 @@ function PlatformOrdersContent() {
         }
     };
 
+    /** «Add Product»: one of the variant, at its price; true when it went in. */
+    const addVariantToOrder = async (order: Order, prod: any, vari: any): Promise<boolean> => {
+        const { data: newItem, error } = await supabase.from('order_items').insert({
+            order_id: order.id,
+            variant_id: vari.id,
+            quantity: 1,
+            price_at_sale: vari.sale_price,
+            cost_at_sale: vari.cost_price || 0,
+            business_id: activeBusiness?.id
+        }).select('id').single();
+        if (error) {
+            toast.error("Failed to add item");
+            return false;
+        }
+        const newItemObj = {
+            id: newItem.id,
+            variant_id: vari.id,
+            quantity: 1,
+            price_at_sale: vari.sale_price,
+            cost_at_sale: vari.cost_price || 0,
+            variants: { title: vari.title, sku: vari.sku || "", product_id: prod.id, products: { name: prod.name } },
+        };
+        await applyItemChange(order.id, items => [...items, newItemObj as OrderItem]);
+        return true;
+    };
+
+    /** The edit section's actions for one order (components/orders/store-order-editor.tsx). */
+    const editFor = (order: Order): OrderEditActions<Order> => ({
+        saveStatus: saveStatus[order.id] || "",
+        updateCustomerInfo, handleAutoSaveNotes, updateOrderField,
+        updateOrderFields: (o, updates) => updateOrderFields(o, updates as Partial<Order>),
+        updateOrderItem, mapVariantToItem, deleteItemFromOrder, addBundleToOrder,
+        addVariant: addVariantToOrder,
+        currentSubtotal: id => ordersRef.current.find(o => o.id === id)?.subtotal,
+    });
+
     const filteredOrders = useMemo(() => {
         return orders.filter(order => {
             let matchesSearch = true;
@@ -1448,487 +1465,7 @@ function PlatformOrdersContent() {
                                 onToggle={() => toggleEditing(order)}
                             />
                             {isEditing(order) && <CardContent className="border-t px-4 py-5 sm:px-6">
-                                <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 lg:gap-8">
-                                    {/* Customer Details */}
-                                    <div className="space-y-4">
-                                        <h3 className="font-semibold text-lg flex items-center border-b pb-2">{t("Customer Details")}</h3>
-                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-                                            <div className="space-y-2">
-                                                <Label>{t("Name")}</Label>
-                                                <AutosaveField
-                                                    value={order.customer_info?.name || ""}
-                                                    onCommit={v => updateCustomerInfo(order, 'name', v)}
-                                                />
-                                            </div>
-                                            <div className="space-y-2">
-                                                <Label>{t("Phone 1")}</Label>
-                                                <AutosaveField
-                                                    value={order.customer_info?.phone || ""}
-                                                    onCommit={v => updateCustomerInfo(order, 'phone', v)}
-                                                />
-                                            </div>
-                                        </div>
-                                        
-                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-                                            <div className="space-y-2">
-                                                <Label>{t("Phone 2")}</Label>
-                                                <AutosaveField
-                                                    value={order.customer_info?.phone2 || ""}
-                                                    onCommit={v => updateCustomerInfo(order, 'phone2', v)}
-                                                />
-                                            </div>
-                                            <div className="space-y-2">
-                                                <Label>{t("Governorate")}</Label>
-                                                <Select 
-                                                    value={order.customer_info?.governorate || ""} 
-                                                    onValueChange={val => updateCustomerInfo(order, 'governorate', val)}
-                                                >
-                                                    <SelectTrigger>
-                                                        <SelectValue placeholder="Select Governorate" />
-                                                    </SelectTrigger>
-                                                    <SelectContent>
-                                                        {GOVERNORATES.map(gov => (
-                                                            <SelectItem key={gov} value={gov}>{gov}</SelectItem>
-                                                        ))}
-                                                    </SelectContent>
-                                                </Select>
-                                            </div>
-                                        </div>
-
-                                        <div className="space-y-2">
-                                            <Label>{t("Address")}</Label>
-                                            <AutosaveField
-                                                multiline
-                                                value={order.customer_info?.address || ""}
-                                                onCommit={v => updateCustomerInfo(order, 'address', v)}
-                                                rows={2}
-                                            />
-                                        </div>
-
-                                        {/* Internal Workbench Notes (Autosave) */}
-                                        <div className="space-y-1.5 pt-3 border-t">
-                                            <div className="flex items-center justify-between">
-                                                <Label className="text-xs font-semibold text-primary flex items-center gap-1.5">
-                                                    📝 {t("Internal Review Notes")}
-                                                </Label>
-                                                {saveStatus[order.id] && (
-                                                    <span className="text-[10px] text-emerald-600 font-medium font-mono transition-all animate-pulse">
-                                                        {saveStatus[order.id]}
-                                                    </span>
-                                                )}
-                                            </div>
-                                            <AutosaveField
-                                                multiline
-                                                placeholder={t("Write internal review notes here (Auto-Save)...")}
-                                                value={order.customer_info?.internal_workbench_notes || ""}
-                                                onCommit={v => handleAutoSaveNotes(order, v)}
-                                                rows={2}
-                                                className="text-xs bg-amber-50/30 dark:bg-amber-950/10 border-amber-200/80 dark:border-amber-900/40 focus:border-amber-400"
-                                            />
-                                        </div>
-
-                                        {/* The note that travels with the order.
-                                            Distinct from the review notes above:
-                                            that one is for whoever is checking
-                                            this screen, this one is on the order
-                                            everywhere else and goes out with it. */}
-                                        <div className="space-y-1.5 pt-3 border-t">
-                                            <Label className="text-xs font-semibold flex items-center gap-1.5">
-                                                🗒️ {t("Order note")}
-                                            </Label>
-                                            <AutosaveField
-                                                multiline
-                                                placeholder={t("A note that stays on the order — delivery instructions, a landmark, anything the courier should know.")}
-                                                value={order.notes || ""}
-                                                onCommit={v => updateOrderField(order, 'notes', v)}
-                                                rows={2}
-                                                className="text-xs"
-                                            />
-                                        </div>
-
-                                        {/* Who confirmed this order with the customer. This is the
-                                            busiest of the three entry points — most orders arrive
-                                            from EasyOrders and get closed right here — so it is
-                                            prefilled with whoever is reviewing and saved on the spot
-                                            rather than waiting for the order to move on. */}
-                                        <div className="space-y-1.5 pt-3 border-t">
-                                            <Label className="text-xs font-semibold text-primary">
-                                                {t("Closed by")}
-                                            </Label>
-                                            <ClosedBySelect
-                                                bare
-                                                businessId={activeBusiness?.id}
-                                                value={order.closed_by ?? null}
-                                                onChange={v => updateOrderField(order, 'closed_by', v)}
-                                            />
-                                        </div>
-                                    </div>
-
-
-
-                                    {/* Order Items Mapping */}
-                                    <div className="space-y-4">
-                                        <div className="flex justify-between items-center border-b pb-2">
-                                            <h3 className="font-semibold text-lg">{t("Products & Mapping")}</h3>
-                                            
-                                            <div className="flex items-center gap-2">
-                                            <BundlePicker bundles={bundles} onPick={(b, v) => addBundleToOrder(order.id, b, v)} />
-                                            <Popover open={addItemOpen[order.id]} onOpenChange={(open) => setAddItemOpen(prev => ({...prev, [order.id]: open}))}>
-                                                <PopoverTrigger asChild>
-                                                    <Button size="sm" variant="outline" className="h-8">
-                                                        + {t("Add Product")}
-                                                    </Button>
-                                                </PopoverTrigger>
-                                                <PopoverContent className="w-96 p-0" align="end">
-                                                    {/*
-                                                      One searchable list of product+variant rather than two
-                                                      dependent dropdowns. Picking a product first only to then
-                                                      hunt its variant is slow when you already know what you
-                                                      want, and the plain Select had no search at all — with a
-                                                      long catalogue that means scrolling blind.
-                                                      Searchable by product name, variant title and SKU.
-                                                    */}
-                                                    <Command
-                                                        filter={(value, search) =>
-                                                            // Substring over cmdk's fuzzy scoring — SKUs and Arabic
-                                                            // names match far more predictably — and folded so
-                                                            // "احمر" finds "أحمر" the way staff actually type.
-                                                            normalizeSearchText(value).includes(normalizeSearchText(search)) ? 1 : 0
-                                                        }
-                                                    >
-                                                        <CommandInput placeholder={t("Search by product, variant or SKU…")} />
-                                                        <CommandList className="max-h-72">
-                                                            <CommandEmpty>{t("No product found.")}</CommandEmpty>
-                                                            {products.map(p => (
-                                                                <CommandGroup key={p.id} heading={p.name}>
-                                                                    {(p.variants || []).map((v: any) => {
-                                                                        const isPicked = selectedVariantForAdd[order.id] === v.id;
-                                                                        const outOfStock = v.track_inventory && (v.stock_qty ?? 0) <= 0;
-                                                                        return (
-                                                                            <CommandItem
-                                                                                key={v.id}
-                                                                                value={`${p.name} ${v.title} ${v.sku || ""}`}
-                                                                                onSelect={() => {
-                                                                                    setSelectedProductForAdd(prev => ({ ...prev, [order.id]: p.id }));
-                                                                                    setSelectedVariantForAdd(prev => ({ ...prev, [order.id]: v.id }));
-                                                                                }}
-                                                                            >
-                                                                                <Check className={cn("mr-2 h-4 w-4 shrink-0", isPicked ? "opacity-100" : "opacity-0")} />
-                                                                                <div className="flex-1 min-w-0">
-                                                                                    <div className="text-xs font-medium truncate">{v.title}</div>
-                                                                                    {v.sku && <div className="text-[10px] text-muted-foreground font-mono truncate">{v.sku}</div>}
-                                                                                </div>
-                                                                                <div className="text-end shrink-0 ms-2">
-                                                                                    <div className="text-xs font-semibold">{formatCurrency(v.sale_price)}</div>
-                                                                                    {v.track_inventory && (
-                                                                                        <div className={cn("text-[10px]", outOfStock ? "text-red-600 font-bold" : "text-muted-foreground")}>
-                                                                                            {outOfStock ? t("Out of stock") : `${v.stock_qty} ${t("in stock")}`}
-                                                                                        </div>
-                                                                                    )}
-                                                                                </div>
-                                                                            </CommandItem>
-                                                                        );
-                                                                    })}
-                                                                </CommandGroup>
-                                                            ))}
-                                                        </CommandList>
-                                                    </Command>
-                                                    <div className="p-3 border-t">
-                                                    <Button 
-                                                        size="sm" 
-                                                        className="w-full h-8"
-                                                        disabled={!selectedVariantForAdd[order.id]}
-                                                        onClick={async () => {
-                                                            const vId = selectedVariantForAdd[order.id];
-                                                            const pId = selectedProductForAdd[order.id];
-                                                            const prod = products.find(p => p.id === pId);
-                                                            const vari = prod?.variants.find((v:any) => v.id === vId);
-                                                            if (!prod || !vari) return;
-                                                            
-                                                            const { data: newItem, error } = await supabase.from('order_items').insert({
-                                                                order_id: order.id,
-                                                                variant_id: vari.id,
-                                                                quantity: 1,
-                                                                price_at_sale: vari.sale_price,
-                                                                cost_at_sale: vari.cost_price || 0,
-                                                                business_id: activeBusiness?.id
-                                                            }).select('id').single();
-                                                            
-                                                            if (error) {
-                                                                toast.error("Failed to add item");
-                                                                return;
-                                                            }
-                                                            
-                                                            const newItemObj = {
-                                                                id: newItem.id,
-                                                                variant_id: vari.id,
-                                                                quantity: 1,
-                                                                price_at_sale: vari.sale_price,
-                                                                cost_at_sale: vari.cost_price || 0,
-                                                                variants: {
-                                                                    title: vari.title,
-                                                                    sku: vari.sku || "",
-                                                                    product_id: prod.id,
-                                                                    products: { name: prod.name }
-                                                                }
-                                                            };
-                                                            
-                                                            const newTotal = order.order_items.reduce((sum, item) => sum + (item.price_at_sale * item.quantity), 0) + vari.sale_price + order.shipping_cost;
-                                                            const newCost = itemsCost([...order.order_items, newItemObj]);
-                                                            
-                                                            setOrders(prev => prev.map(o => {
-                                                                if (o.id === order.id) {
-                                                                    return {
-                                                                        ...o,
-                                                                        total_amount: newTotal,
-                                                                        subtotal: newTotal - o.shipping_cost,
-                                                                        total_cost: newCost,
-                                                                        order_items: [...o.order_items, newItemObj as any]
-                                                                    };
-                                                                }
-                                                                return o;
-                                                            }));
-                                                            
-                                                            enqueueSave(order.id, () => handleUpdateOrder(order.id, { subtotal: newTotal - order.shipping_cost, total_amount: newTotal, total_cost: newCost }))
-                                                                .catch(() => toast.error(t("Failed to save")));
-                                                            
-                                                            setAddItemOpen(prev => ({...prev, [order.id]: false}));
-                                                            setSelectedProductForAdd(prev => ({...prev, [order.id]: ""}));
-                                                            setSelectedVariantForAdd(prev => ({...prev, [order.id]: ""}));
-                                                            toast.success("Item added");
-                                                        }}
-                                                    >
-                                                        {t("Add to Order")}
-                                                    </Button>
-                                                    </div>
-                                                </PopoverContent>
-                                            </Popover>
-                                            </div>
-                                        </div>
-
-                                        <div className="space-y-3 max-h-[300px] overflow-y-auto pr-1">
-                                            {order.order_items?.map(item => {
-                                                const isUnmapped = !item.variant_id;
-                                                const defaultProd = item.variant_id 
-                                                    ? products.find(p => p.variants?.some((v: any) => v.id === item.variant_id))
-                                                    : null;
-                                                const chosenProdId = selectedItemProduct[item.id] || defaultProd?.id;
-                                                const activeProd = products.find(p => p.id === chosenProdId);
-                                                // An unmapped line whose code is a bundle's: it came in
-                                                // before the bundle was made, or before the webhook knew it.
-                                                const bundleMatch = isUnmapped && item.unmapped_sku ? bundlesBySku.get(skuKey(item.unmapped_sku)) : undefined;
-                                                const fromBundle = item.bundle_variant_id ? bundleNames.get(item.bundle_variant_id)?.label : undefined;
-
-                                                return (
-                                                    <div key={item.id} className={cn("p-3 rounded-lg border space-y-2", isUnmapped ? "bg-red-50/50 border-red-200" : "bg-muted/30")}>
-                                                        <div className="flex justify-between items-start gap-2">
-                                                            <div className="space-y-1 flex-1">
-                                                                <div className="flex items-center gap-2">
-                                                                    <p className="font-medium text-sm">
-                                                                        {item.variants?.products?.name 
-                                                                            ? `${item.variants.products.name} (${item.variants.title})`
-                                                                            : item.unmapped_name || "Unknown Item"}
-                                                                    </p>
-                                                                    {isUnmapped && (
-                                                                        <Badge variant="destructive" className="text-[10px]">Unmapped</Badge>
-                                                                    )}
-                                                                </div>
-                                                                {item.unmapped_sku && (
-                                                                    <p className="text-xs font-mono text-muted-foreground">SKU: {item.unmapped_sku}</p>
-                                                                )}
-                                                                {fromBundle && <BundleTag label={fromBundle} />}
-                                                                {bundleMatch && (
-                                                                    <Button
-                                                                        size="sm"
-                                                                        className="mt-1 h-8 bg-violet-600 text-white hover:bg-violet-700"
-                                                                        onClick={() => addBundleToOrder(order.id, bundleMatch.bundle, bundleMatch.variant, item)}
-                                                                    >
-                                                                        ده باندل «{bundleLabel(bundleMatch.bundle, bundleMatch.variant)}»، فكّه لمنتجاته
-                                                                    </Button>
-                                                                )}
-                                                            </div>
-                                                            <Button 
-                                                                variant="ghost" 
-                                                                size="sm" 
-                                                                className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
-                                                                onClick={() => deleteItemFromOrder(order.id, item.id)}
-                                                            >
-                                                                <X className="h-4 w-4" />
-                                                            </Button>
-                                                        </div>
-
-                                                        {/* 2-Step Product & Variant Menus */}
-                                                        <div className="pt-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
-                                                            {/* Step 1: Product Selection Menu */}
-                                                            <div>
-                                                                <Label className="text-[10px] font-medium text-muted-foreground block mb-1">{t("Select Product")}:</Label>
-                                                                <Popover>
-                                                                    <PopoverTrigger asChild>
-                                                                        <Button variant="outline" size="sm" className="w-full justify-between text-xs h-8 truncate bg-background/50">
-                                                                            <span className="truncate">{activeProd?.name || t("Select Product")}</span>
-                                                                            <ChevronsUpDown className="h-3 w-3 opacity-50 shrink-0 ml-1" />
-                                                                        </Button>
-                                                                    </PopoverTrigger>
-                                                                    <PopoverContent className="w-[240px] p-0" align="start">
-                                                                        <Command>
-                                                                            <CommandInput placeholder={t("Search system products...")} />
-                                                                            <CommandEmpty>{t("No product found.")}</CommandEmpty>
-                                                                            <CommandGroup>
-                                                                                <CommandList className="max-h-60 overflow-y-auto">
-                                                                                    {products.map(p => (
-                                                                                        <CommandItem
-                                                                                            key={p.id}
-                                                                                            value={p.name}
-                                                                                            onSelect={() => {
-                                                                                                setSelectedItemProduct(prev => ({ ...prev, [item.id]: p.id }));
-                                                                                            }}
-                                                                                        >
-                                                                                            <Check className={cn("mr-2 h-4 w-4 shrink-0", activeProd?.id === p.id ? "opacity-100" : "opacity-0")} />
-                                                                                            <span className="text-xs font-medium">{p.name}</span>
-                                                                                        </CommandItem>
-                                                                                    ))}
-                                                                                </CommandList>
-                                                                            </CommandGroup>
-                                                                        </Command>
-                                                                    </PopoverContent>
-                                                                </Popover>
-                                                            </div>
-
-                                                            {/* Step 2: Variant Selection Menu (Filtered to activeProd) */}
-                                                            <div>
-                                                                <Label className="text-[10px] font-medium text-muted-foreground block mb-1">{t("Select Variant")}:</Label>
-                                                                <Popover>
-                                                                    <PopoverTrigger asChild>
-                                                                        <Button 
-                                                                            variant={isUnmapped ? "outline" : "ghost"} 
-                                                                            size="sm" 
-                                                                            disabled={!activeProd}
-                                                                            className="w-full justify-between text-xs h-8 border border-input bg-background/50 hover:bg-accent truncate"
-                                                                        >
-                                                                            <span className="truncate">
-                                                                                {item.variants?.title ? item.variants.title : t("Select Variant")}
-                                                                            </span>
-                                                                            <ChevronsUpDown className="h-3 w-3 opacity-50 shrink-0 ml-1" />
-                                                                        </Button>
-                                                                    </PopoverTrigger>
-                                                                    <PopoverContent className="w-[260px] p-0" align="start">
-                                                                        <Command>
-                                                                            <CommandInput placeholder={t("Search variants...")} />
-                                                                            <CommandEmpty>{t("No variant found.")}</CommandEmpty>
-                                                                            <CommandGroup>
-                                                                                <CommandList className="max-h-60 overflow-y-auto">
-                                                                                    {activeProd?.variants?.map((v: any) => (
-                                                                                        <CommandItem
-                                                                                            key={v.id}
-                                                                                            value={`${v.title} ${v.sku}`}
-                                                                                            onSelect={() => mapVariantToItem(order.id, item.id, v.id)}
-                                                                                        >
-                                                                                            <Check className={cn("mr-2 h-4 w-4 shrink-0", item.variant_id === v.id ? "opacity-100" : "opacity-0")} />
-                                                                                            <div className="flex flex-col text-xs">
-                                                                                                <span className="font-medium">{v.title}</span>
-                                                                                                <span className="text-muted-foreground font-mono">SKU: {v.sku} ({formatCurrency(v.sale_price)})</span>
-                                                                                            </div>
-                                                                                        </CommandItem>
-                                                                                    ))}
-                                                                                </CommandList>
-                                                                            </CommandGroup>
-                                                                        </Command>
-                                                                    </PopoverContent>
-                                                                </Popover>
-                                                            </div>
-                                                        </div>
-
-
-
-                                                        <div className="flex items-center gap-3 pt-1 border-t text-xs">
-                                                            <div className="flex items-center gap-1">
-                                                                <Label className="text-[11px] text-muted-foreground">{t("Qty")}:</Label>
-                                                                <AutosaveField
-                                                                    type="number"
-                                                                    min="1"
-                                                                    inputMode="numeric"
-                                                                    className="w-14 h-7 text-xs"
-                                                                    value={String(item.quantity)}
-                                                                    onCommit={v => updateOrderItem(order.id, item.id, 'quantity', parseInt(v) || 1)}
-                                                                />
-                                                            </div>
-                                                            <div className="flex items-center gap-1">
-                                                                <Label className="text-[11px] text-muted-foreground">{t("Price")}:</Label>
-                                                                <AutosaveField
-                                                                    type="number"
-                                                                    inputMode="decimal"
-                                                                    className="w-20 h-7 text-xs"
-                                                                    value={String(item.price_at_sale)}
-                                                                    onCommit={v => updateOrderItem(order.id, item.id, 'price_at_sale', parseFloat(v) || 0)}
-                                                                />
-                                                            </div>
-                                                            <div className="ml-auto font-bold">
-                                                                {formatCurrency(item.quantity * item.price_at_sale)}
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                );
-                                            })}
-                                        </div>
-
-                                        {/* Financial Summary */}
-                                        <div className="border-t pt-4 space-y-2 text-sm bg-muted/20 p-3 rounded-lg">
-                                            <div className="flex justify-between items-center text-xs">
-                                                <span className="text-muted-foreground">{t("Subtotal")}</span>
-                                                <span>{formatCurrency(order.subtotal)}</span>
-                                            </div>
-                                            <div className="flex justify-between items-center text-xs">
-                                                <span className="text-muted-foreground">{t("Shipping Cost")}</span>
-                                                <AutosaveField
-                                                    type="number"
-                                                    inputMode="decimal"
-                                                    className="w-24 h-7 text-xs text-right"
-                                                    value={String(order.shipping_cost)}
-                                                    onCommit={v => {
-                                                        const val = parseFloat(v) || 0;
-                                                        const subtotal = ordersRef.current.find(o => o.id === order.id)?.subtotal ?? order.subtotal;
-                                                        updateOrderFields(order, { shipping_cost: val, total_amount: subtotal + val });
-                                                    }}
-                                                />
-                                            </div>
-                                            <div className="flex justify-between items-center font-bold text-sm border-t pt-2">
-                                                <span>{t("Total Amount")}</span>
-                                                <span className="text-primary">{formatCurrency(order.total_amount)}</span>
-                                            </div>
-                                            
-                                            <div className="flex justify-between items-center pt-2">
-                                                <Label>{t("Payment Status")}</Label>
-                                                <Select value={order.payment_status === 'Partial' ? 'Partially Paid' : (order.payment_status || "Not Paid")} onValueChange={(val) => {
-                                                    updateOrderField(order, 'payment_status', val);
-                                                    if (val === 'Paid') updateOrderField(order, 'paid_amount', order.total_amount);
-                                                    if (val === 'Not Paid') updateOrderField(order, 'paid_amount', 0);
-                                                }}>
-                                                    <SelectTrigger className="w-[150px] h-8">
-                                                        <SelectValue />
-                                                    </SelectTrigger>
-                                                    <SelectContent>
-                                                        <SelectItem value="Not Paid">Not Paid</SelectItem>
-                                                        <SelectItem value="Partially Paid">Partially Paid</SelectItem>
-                                                        <SelectItem value="Paid">Paid</SelectItem>
-                                                    </SelectContent>
-                                                </Select>
-                                            </div>
-                                            {(order.payment_status === 'Partially Paid' || order.payment_status === 'Partial') && (
-                                                <div className="flex justify-between items-center">
-                                                    <Label>{t("Paid Amount")}</Label>
-                                                    <AutosaveField
-                                                        type="number"
-                                                        inputMode="decimal"
-                                                        className="w-[150px] h-8"
-                                                        value={String(order.paid_amount || 0)}
-                                                        onCommit={v => updateOrderField(order, 'paid_amount', parseFloat(v) || 0)}
-                                                    />
-                                                </div>
-                                            )}
-                                        </div>
-
-                                    </div>
-                                </div>
+                                <StoreOrderEditor order={order} businessId={activeBusiness?.id} products={products} bundles={bundles} edit={editFor(order)} />
                             </CardContent>}
                             {/* 5. What happened on the call, under the thumb. */}
                             <div className="border-t bg-muted/30 p-4 sm:p-5">
