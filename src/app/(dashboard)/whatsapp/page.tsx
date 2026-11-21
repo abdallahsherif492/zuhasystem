@@ -4,7 +4,7 @@ import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "rea
 import { useSearchParams } from "next/navigation";
 import {
     ArrowDown, ArrowRight, Check, CheckCheck, Clock, Copy, CornerUpLeft, FileText, Loader2, MapPin, MessageCircle, MessageSquareDot,
-    Paperclip, Phone, Search, Send, Smile, TriangleAlert, User, X,
+    Images, Paperclip, Phone, Search, Send, Smile, TriangleAlert, User, X,
 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/lib/supabase";
@@ -101,7 +101,12 @@ function Chats() {
                 setMessages(prev => {
                     if (!prev) return prev;
                     const i = prev.findIndex(m => m.id === row.id || (row.wa_message_id && m.wa_message_id === row.wa_message_id));
-                    if (i === -1) return [row, ...prev];
+                    if (i === -1) {
+                        // Our own message arriving before its send answered: it takes the stand-in's place.
+                        const stand = row.direction === "out" ? prev.findIndex(m => m.id.startsWith("tmp-") && m.customer_phone === row.customer_phone && (m.body || "") === (row.body || "")) : -1;
+                        if (stand !== -1) { const next = prev.slice(); next[stand] = row; return next; }
+                        return [row, ...prev];
+                    }
                     const next = prev.slice(); next[i] = { ...prev[i], ...row }; return next;
                 });
             })
@@ -138,6 +143,16 @@ function Chats() {
     const current: Chat | null = chats.find(c => c.phone === open) || null;
     const others = (phone: string) => Object.entries(typing).filter(([email, p]) => p === phone && email !== me).map(([email]) => teamName(email));
     const addSent = useCallback((m: WaMessage) => setMessages(prev => (prev && !prev.some(x => x.id === m.id) ? [m, ...prev] : prev)), []);
+    /**
+     * A message shown the moment it is sent (a stand-in, id "tmp-…"), then the
+     * saved one in its place; on failure the stand-in shows «ما وصلتش».
+     */
+    const settleSent = useCallback((tempId: string, real: WaMessage | null) => setMessages(prev => {
+        if (!prev) return prev;
+        if (!real) return prev.map(m => (m.id === tempId ? { ...m, status: "failed" } : m));
+        const rest = prev.filter(m => m.id !== tempId);
+        return rest.some(m => m.id === real.id) ? rest : [real, ...rest];
+    }), []);
 
     return (
         <div dir="rtl" className="-m-4 flex h-[calc(100dvh-4rem)] min-h-0 overflow-hidden border-t sm:-m-6">
@@ -204,7 +219,7 @@ function Chats() {
             <section className={cn("min-w-0 flex-1 flex-col", open ? "flex" : "hidden lg:flex")}>
                 {open && businessId
                     ? <ChatView key={open} phone={open} chat={current} businessId={businessId} me={me} now={now}
-                        others={others(open)} onBack={() => setOpen(null)} onSent={addSent}
+                        others={others(open)} onBack={() => setOpen(null)} onSent={addSent} onSettled={settleSent}
                         messages={(messages || []).filter(m => m.customer_phone === open).sort((a, b) => Date.parse(a.sent_at) - Date.parse(b.sent_at))} />
                     : <div className="flex flex-1 flex-col items-center justify-center gap-2 bg-muted/30 p-6 text-center text-muted-foreground">
                         <MessageCircle className="h-12 w-12 text-[#25d366]/60" />
@@ -227,9 +242,9 @@ function Avatar({ name, size = 44 }: { name: string; size?: number }) {
     );
 }
 
-function ChatView({ phone, chat, messages, businessId, me, now, others, onBack, onSent }: {
+function ChatView({ phone, chat, messages, businessId, me, now, others, onBack, onSent, onSettled }: {
     phone: string; chat: Chat | null; messages: WaMessage[]; businessId: string; me: string | null; now: number;
-    others: string[]; onBack: () => void; onSent: (m: WaMessage) => void;
+    others: string[]; onBack: () => void; onSent: (m: WaMessage) => void; onSettled: (tempId: string, real: WaMessage | null) => void;
 }) {
     const { currentUser } = useBusiness();
     const [orders, setOrders] = useState<OrderLite[] | null>(null);
@@ -323,9 +338,56 @@ function ChatView({ phone, chat, messages, businessId, me, now, others, onBack, 
             return;
         }
         if (!text.trim()) return;
-        if (await post("/api/whatsapp/send", JSON.stringify({ business_id: businessId, phone, text: text.trim(), reply_to: replyTo?.wa_message_id || null }))) {
-            setText(""); setReplyTo(null);
+        // Shown at once and the box cleared, so the next message can be typed
+        // while this one goes; sends go one after another, in order.
+        const body = text.trim(), ctx = replyTo?.wa_message_id || null;
+        const tempId = `tmp-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+        onSent({
+            id: tempId, business_id: businessId, wa_message_id: null, direction: "out", customer_phone: phone, contact_name: null,
+            type: "text", body, media_id: null, media_mime: null, context_id: ctx, payload: null, template_name: null,
+            status: "pending", error: null, sent_by: me, order_id: null, sent_at: new Date().toISOString(),
+        });
+        setText(""); setReplyTo(null); setAtBottom(true);
+        textQueue.current = textQueue.current.then(async () => {
+            const res = await fetch("/api/whatsapp/send", {
+                method: "POST", headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ business_id: businessId, phone, text: body, reply_to: ctx }),
+            }).catch(() => null);
+            const out = res ? await res.json().catch(() => ({})) : {};
+            if (!res?.ok) {
+                onSettled(tempId, null);
+                toast.error(out.error || "الرسالة ما اتبعتتش.");
+                setText(prev => prev || body); // back in the box, to send again
+                return;
+            }
+            onSettled(tempId, (out.message as WaMessage) || null);
+        });
+    };
+    const textQueue = useRef<Promise<void>>(Promise.resolve());
+
+    // A product's photo, sent at once with its name (no file to look for).
+    const sendProductPhoto = async (image: string, name: string) => {
+        setPhotos(false);
+        const form = new FormData();
+        form.append("business_id", businessId); form.append("phone", phone); form.append("image_url", image); form.append("caption", name);
+        await post("/api/whatsapp/send-media", form, false);
+    };
+    const [photos, setPhotos] = useState(false);
+    const [catalog, setCatalog] = useState<{ id: string; name: string; image_url: string }[] | null>(null);
+    const [photoQuery, setPhotoQuery] = useState("");
+    const openPhotos = async (o: boolean) => {
+        setPhotos(o);
+        if (o && !catalog) {
+            const { data } = await supabase.from("products").select("id, name, image_url").eq("business_id", businessId)
+                .not("image_url", "is", null).eq("archived", false).order("name").limit(400);
+            setCatalog((data || []) as { id: string; name: string; image_url: string }[]);
         }
+    };
+    // A photo pasted (Ctrl/Cmd+V) or dropped on the chat: attached, ready to send.
+    const takeFile = (files: FileList | null | undefined) => {
+        const f = files?.[0];
+        if (f && (f.type.startsWith("image/") || f.type.startsWith("video/") || f.type === "application/pdf")) { setFile(f); return true; }
+        return false;
     };
 
     const sendConfirmation = (o: OrderLite) => post("/api/whatsapp/send-order", JSON.stringify({ business_id: businessId, order_id: o.id }));
@@ -455,6 +517,8 @@ function ChatView({ phone, chat, messages, businessId, me, now, others, onBack, 
             )}
 
             <div ref={scroller} onScroll={e => { const el = e.currentTarget; setAtBottom(el.scrollHeight - el.scrollTop - el.clientHeight < 80); }}
+                onDragOver={e => { if (e.dataTransfer?.types?.includes("Files")) e.preventDefault(); }}
+                onDrop={e => { if (takeFile(e.dataTransfer?.files)) e.preventDefault(); }}
                 className="relative min-h-0 flex-1 overflow-y-auto overscroll-contain bg-[#efeae2] px-2 py-3 dark:bg-[#0b141a] sm:px-[6%]"
                 style={{ backgroundImage: "radial-gradient(rgba(0,0,0,0.035) 1px, transparent 1px)", backgroundSize: "18px 18px" }}>
                 {visible.length === 0 && <p className="mx-auto mt-6 w-fit rounded-lg bg-[#fff5c4] px-3 py-1.5 text-center text-xs text-[#54656f] shadow-sm dark:bg-[#182229] dark:text-[#ffd279]">مفيش رسايل لسه. ابدأ برسالة التأكيد.</p>}
@@ -508,9 +572,48 @@ function ChatView({ phone, chat, messages, businessId, me, now, others, onBack, 
                                 </PopoverContent>
                             </Popover>
                             <Button variant="ghost" size="icon" className="h-10 w-10 shrink-0" aria-label="ابعت صورة أو ملف" onClick={() => fileInput.current?.click()}><Paperclip className="h-5 w-5 text-[#54656f]" /></Button>
+                            {/* Product photos: this customer's products first, then any, one tap to send. */}
+                            <Popover open={photos} onOpenChange={openPhotos}>
+                                <PopoverTrigger asChild>
+                                    <Button variant="ghost" size="icon" className="h-10 w-10 shrink-0" aria-label="صور المنتجات"><Images className="h-5 w-5 text-[#54656f]" /></Button>
+                                </PopoverTrigger>
+                                <PopoverContent side="top" align="start" className="w-[min(22rem,calc(100vw-1.5rem))] p-2" dir="rtl">
+                                    {(() => {
+                                        const mine = [...new Map((orders || []).flatMap(o => o.order_items)
+                                            .map(i => i.variants?.products).filter(pr => pr?.image_url)
+                                            .map(pr => [pr!.image_url!, pr!.name || "منتج"])).entries()];
+                                        const q = photoQuery.trim().toLowerCase();
+                                        const all = (catalog || []).filter(pr => !q || pr.name.toLowerCase().includes(q)).slice(0, 60);
+                                        const tile = (img: string, name: string) => (
+                                            <button key={img} type="button" onClick={() => sendProductPhoto(img, name)} disabled={sending} title={name}
+                                                className="group relative aspect-square overflow-hidden rounded-lg ring-1 ring-border hover:ring-2 hover:ring-[#25d366]">
+                                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                                <img src={img} alt={name} className="h-full w-full object-cover" loading="lazy" />
+                                                <span className="absolute inset-x-0 bottom-0 truncate bg-black/55 px-1 py-0.5 text-[10px] text-white">{name}</span>
+                                            </button>
+                                        );
+                                        return (
+                                            <div className="space-y-2">
+                                                {mine.length > 0 && (
+                                                    <>
+                                                        <p className="text-xs font-semibold text-muted-foreground">منتجات أوردرات العميل</p>
+                                                        <div className="grid grid-cols-4 gap-1.5">{mine.map(([img, name]) => tile(img, name))}</div>
+                                                    </>
+                                                )}
+                                                <input value={photoQuery} onChange={e => setPhotoQuery(e.target.value)} placeholder="دوّر على منتج"
+                                                    className="h-9 w-full rounded-md border bg-background px-2 text-sm outline-none focus:ring-2 focus:ring-[#25d366]" />
+                                                {catalog === null ? <div className="flex h-20 items-center justify-center"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
+                                                    : <div className="grid max-h-64 grid-cols-4 gap-1.5 overflow-y-auto">{all.map(pr => tile(pr.image_url, pr.name))}</div>}
+                                                <p className="text-[11px] text-muted-foreground">الصورة بتتبعت على طول باسم المنتج. وتقدر تلصق صورة (Ctrl+V) أو تسحبها على الشات.</p>
+                                            </div>
+                                        );
+                                    })()}
+                                </PopoverContent>
+                            </Popover>
                             <input ref={fileInput} type="file" accept="image/*,video/mp4,application/pdf,.doc,.docx,.xls,.xlsx" className="hidden"
                                 onChange={e => { const f = e.target.files?.[0]; if (f) setFile(f); e.target.value = ""; }} />
                             <textarea value={text} onChange={e => setText(e.target.value)} rows={1} placeholder={file ? "تعليق على الملف (اختياري)" : "اكتب رسالة"}
+                                onPaste={e => { if (takeFile(e.clipboardData?.files)) e.preventDefault(); }}
                                 onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey && window.matchMedia("(min-width: 768px)").matches) { e.preventDefault(); sendNow(); } }}
                                 className="max-h-36 min-h-10 min-w-0 flex-1 resize-none rounded-2xl bg-background px-3 py-2 text-base outline-none ring-1 ring-border" />
                             <Button onClick={sendNow} disabled={sending || (!text.trim() && !file)} className="h-10 w-10 shrink-0 rounded-full bg-[#25d366] p-0 text-white hover:bg-[#1fb855]" aria-label="ابعت">

@@ -21,9 +21,9 @@ export async function POST(request: Request) {
     if (!body?.business_id || !body.phone || (!body.text?.trim() && !body.template?.name)) {
         return NextResponse.json({ error: "بيانات ناقصة." }, { status: 400 });
     }
-    const who = await memberOf(body.business_id);
+    // Who is sending and the number to send from, side by side (one less wait per message).
+    const [who, account] = await Promise.all([memberOf(body.business_id), accountOf(body.business_id)]);
     if ("error" in who) return NextResponse.json({ error: who.error }, { status: who.status });
-    const account = await accountOf(body.business_id);
     if (!account) return NextResponse.json({ error: "مفيش رقم واتساب متربط بالبيزنس ده." }, { status: 400 });
 
     const to = waNumber(body.phone);
