@@ -1,7 +1,8 @@
 import { arabicProductLabel } from "@/lib/orders/product-label";
 import { plainEnglish } from "@/lib/orders/arabic-names";
 import { translateToArabic } from "@/lib/translate-ar";
-import { accountOf, admin, graph, sendError, uploadImage, waNumber } from "@/lib/whatsapp/server";
+import { accountOf, admin, graph, sendError, uploadImage, uploadImageBytes, waNumber } from "@/lib/whatsapp/server";
+import { productCollage } from "@/lib/whatsapp/collage";
 import { imageLink, renderTemplate, templateDef } from "@/lib/whatsapp/templates";
 import { whatsappSettingsOf, type OrderEvent } from "@/lib/whatsapp/settings";
 import { BUILTIN_PARAMS, type FieldKey, type MessageCase } from "@/lib/whatsapp/template-fields";
@@ -42,6 +43,7 @@ async function arabicName(it: OrderRow["order_items"][number]): Promise<string> 
 
 const firstName = (o: OrderRow) => String(o.customer_info?.name || "").trim().split(/\s+/)[0] || "عميلنا";
 const due = (o: OrderRow) => String(Math.round(Math.max(0, (Number(o.total_amount) || 0) - (Number(o.paid_amount) || 0))));
+const cut = (s: string, max: number) => (s.length > max ? `${s.slice(0, max - 1).trim()}…` : s);
 const ref = (o: OrderRow) => o.id.slice(0, 8).toUpperCase();
 
 export type OrderMessageKind = OrderEvent | "confirm" | "reminder";
@@ -62,7 +64,7 @@ export async function sendOrderMessage(businessId: string, orderId: string, kind
     // Every detail a template can carry (lib/whatsapp/template-fields.ts).
     const theCase: MessageCase = kind === "new_order" ? "confirm" : kind;
     const builtins: Record<MessageCase, string[]> = {
-        confirm: ["order_confirm_photo", "order_confirm", "order_confirmation"],
+        confirm: ["order_confirm_v2", "order_confirm_photo", "order_confirm", "order_confirmation"],
         reminder: ["confirmation_reminder"],
         confirmed: ["order_confirmed"],
         shipped: ["order_shipped"],
@@ -86,9 +88,14 @@ export async function sendOrderMessage(businessId: string, orderId: string, kind
         tracking: o.courier_code || ref(o),
         store: storeName || biz?.name || "Zuha Store",
         governorate: info.governorate || "-",
-        address: info.address || "-",
+        // Kept short enough for the message (WhatsApp caps a template's text at 1024).
+        address: cut(info.address || "-", 160),
     };
-    const image = (o.order_items || []).map(i => i.variants?.products?.image_url).find(Boolean) || null;
+    values.items = cut(values.items, 400);
+    // Every product's picture (each product once): one alone, or side by side in one picture.
+    const images = [...new Set((o.order_items || []).map(i => i.variants?.products?.image_url).filter((u): u is string => !!u))];
+    const image = images[0] || null;
+    let collageId: string | null | undefined; // made once, only when a template with the products' picture is sent
 
     // Which templates to try, in order: the one chosen in the settings for
     // this case, then the system's own (with the photo first when there is one).
@@ -114,9 +121,14 @@ export async function sendOrderMessage(businessId: string, orderId: string, kind
     let lastError = "الرسالة ما اتبعتتش.";
     for (const t of tries) {
         const components: Record<string, unknown>[] = [];
+        const all = t.image === image && images.length > 1;
+        if (all && collageId === undefined) {
+            const bytes = await productCollage(images);
+            collageId = bytes ? await uploadImageBytes(account, bytes) : null;
+        }
         if (t.image) {
             // Uploaded with its real type (the store's links say "image/jpg", which Meta refuses).
-            const mediaId = await uploadImage(account, t.image);
+            const mediaId = (all && collageId) || await uploadImage(account, t.image);
             if (!mediaId) continue; // no usable photo: the confirmation without it
             components.push({ type: "header", parameters: [{ type: "image", image: { id: mediaId } }] });
         }
@@ -136,7 +148,7 @@ export async function sendOrderMessage(businessId: string, orderId: string, kind
             business_id: businessId, phone_number_id: account.phone_number_id, wa_message_id: res.body?.messages?.[0]?.id || null,
             direction: "out", customer_phone: local, customer_wa_id: res.body?.contacts?.[0]?.wa_id || to,
             type: "template", template_name: t.name, body: t.body ?? renderTemplate(t.name, t.params), status: "pending",
-            payload: { params: t.params, buttons: t.buttons, header_image: t.image || null, event: theCase },
+            payload: { params: t.params, buttons: t.buttons, header_image: t.image || null, header_images: all && collageId ? images.slice(0, 4) : undefined, event: theCase },
             sent_by: sentBy, order_id: o.id, sent_at: new Date().toISOString(),
         };
         const { data: saved } = await admin.from("whatsapp_messages").insert(row).select("*").single();

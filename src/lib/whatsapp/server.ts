@@ -83,21 +83,29 @@ export async function uploadImage(account: WaAccount, url: string): Promise<stri
     try {
         const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
         if (!res.ok) return null;
-        const bytes = new Uint8Array(await res.arrayBuffer());
-        const type = bytes[0] === 0xff && bytes[1] === 0xd8 ? "image/jpeg"
-            : bytes[0] === 0x89 && bytes[1] === 0x50 ? "image/png"
-            : bytes[8] === 0x57 && bytes[9] === 0x45 && bytes[10] === 0x42 && bytes[11] === 0x50 ? "image/webp" : null;
-        if (!type || bytes.length > 5_000_000) return null;
+        const id = await uploadImageBytes(account, new Uint8Array(await res.arrayBuffer()));
+        if (id) uploaded.set(key, { id, at: Date.now() });
+        return id;
+    } catch {
+        return null;
+    }
+}
+
+/** Picture bytes (JPEG, PNG or WebP) uploaded to Meta for a message: the media id. */
+export async function uploadImageBytes(account: WaAccount, bytes: Uint8Array): Promise<string | null> {
+    const type = bytes[0] === 0xff && bytes[1] === 0xd8 ? "image/jpeg"
+        : bytes[0] === 0x89 && bytes[1] === 0x50 ? "image/png"
+        : bytes[8] === 0x57 && bytes[9] === 0x45 && bytes[10] === 0x42 && bytes[11] === 0x50 ? "image/webp" : null;
+    if (!type || bytes.length > 5_000_000) return null;
+    try {
         const form = new FormData();
         form.append("messaging_product", "whatsapp");
         form.append("type", type);
-        form.append("file", new Blob([bytes], { type }), `photo.${type.split("/")[1]}`);
+        form.append("file", new Blob([bytes as BlobPart], { type }), `photo.${type.split("/")[1]}`);
         const up = await fetch(`${GRAPH}/${account.phone_number_id}/media`, {
             method: "POST", headers: { Authorization: `Bearer ${account.token}` }, body: form, signal: AbortSignal.timeout(20000),
         }).then(r => r.json()).catch(() => null) as { id?: string } | null;
-        if (!up?.id) return null;
-        uploaded.set(key, { id: up.id, at: Date.now() });
-        return up.id;
+        return up?.id || null;
     } catch {
         return null;
     }

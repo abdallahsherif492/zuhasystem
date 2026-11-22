@@ -6,9 +6,9 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
  *
  * EasyOrders' product list has no SKUs, so each product is read on its own
  * (it carries its SKU and its variants' SKUs) and matched to our variants by
- * SKU, the same way the order webhook matches items. The `thumb` link it
- * gives is not public (403); the product's `images` are, so the first one
- * that opens as an image is used.
+ * SKU, the same way the order webhook matches items. The main picture
+ * (`thumb`, read from the product itself: the product list cuts its link
+ * short, which then answers 403) comes first.
  */
 
 const API = "https://api.easy-orders.net/api/v1/external-apps";
@@ -31,8 +31,13 @@ export async function firstWorkingImage(urls: (string | null | undefined)[]): Pr
     return null;
 }
 
+/**
+ * The product's main picture first (`thumb`, the one the store shows), then
+ * its other pictures — those are often details (a measure, a close-up) that
+ * confuse a customer who sees them alone.
+ */
 export const productPhotoCandidates = (p: { images?: unknown; thumb?: unknown } | null | undefined) =>
-    [...(Array.isArray(p?.images) ? p!.images as string[] : []), p?.thumb as string | undefined];
+    [p?.thumb as string | undefined, ...(Array.isArray(p?.images) ? p!.images as string[] : [])];
 
 /** One read, retried when EasyOrders says to slow down (429) or hiccups (5xx). */
 async function eo<T>(path: string, key: string): Promise<T> {

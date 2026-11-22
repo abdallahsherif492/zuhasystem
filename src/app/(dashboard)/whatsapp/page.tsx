@@ -843,12 +843,24 @@ function ChatView({ phone, chat, messages, loading, businessId, me, now, others,
     );
 }
 
+/** WhatsApp's own formatting, as the customer sees it: *bold*, _italic_, ~struck~. */
+function WaText({ text }: { text: string }) {
+    const parts = text.split(/(\*[^*\n]+\*|_[^_\n]+_|~[^~\n]+~)/g);
+    return <>{parts.map((p, i) => {
+        if (p.length > 2 && p.startsWith("*") && p.endsWith("*")) return <strong key={i} className="font-semibold">{p.slice(1, -1)}</strong>;
+        if (p.length > 2 && p.startsWith("_") && p.endsWith("_")) return <em key={i}>{p.slice(1, -1)}</em>;
+        if (p.length > 2 && p.startsWith("~") && p.endsWith("~")) return <s key={i}>{p.slice(1, -1)}</s>;
+        return p;
+    })}</>;
+}
+
 function Bubble({ m, tail, businessId, me, quoted, reaction, onReply }: {
     m: WaMessage; tail: boolean; businessId: string; me: string | null; quoted?: WaMessage; reaction?: string; onReply: () => void;
 }) {
     const out = m.direction === "out";
     const media = m.media_id ? `/api/whatsapp/media/${m.media_id}?business_id=${businessId}` : null;
     const header = m.payload?.header_image || null;
+    const headers = m.payload?.header_images || [];
     const buttons = m.direction === "out" && (m.type === "template" || m.type === "interactive") ? m.payload?.buttons || [] : [];
     const loc = m.payload?.location;
     // «ضيفه لطلبي» on a card: which product (its id carries the variant).
@@ -878,7 +890,16 @@ function Bubble({ m, tail, businessId, me, quoted, reaction, onReply }: {
                             <p className="line-clamp-2 text-[#54656f] dark:text-[#aebac1]">{preview(quoted)}</p>
                         </div>
                     )}
-                    {header && /* eslint-disable-next-line @next/next/no-img-element */ <img loading="lazy" decoding="async" src={header} alt="" className="mb-1 max-h-72 w-full rounded-md object-cover" />}
+                    {headers.length > 1 ? (
+                        // Every product's picture, as the customer got them (one picture, side by side).
+                        <div className={cn("mb-1 grid gap-1 overflow-hidden rounded-md bg-[#f5f5f5] p-1", headers.length === 2 ? "grid-cols-2" : "grid-cols-2 grid-rows-2")}>
+                            {headers.map((src, i) => (
+                                /* eslint-disable-next-line @next/next/no-img-element */
+                                <img key={src} loading="lazy" decoding="async" src={src} alt=""
+                                    className={cn("aspect-square w-full rounded bg-white object-contain", headers.length === 3 && i === 0 && "row-span-2 h-full aspect-auto")} />
+                            ))}
+                        </div>
+                    ) : header && /* eslint-disable-next-line @next/next/no-img-element */ <img loading="lazy" decoding="async" src={header} alt="" className="mb-1 max-h-72 w-full rounded-md object-cover" />}
                     {m.type === "image" && media && <a href={media} target="_blank" rel="noreferrer">{/* eslint-disable-next-line @next/next/no-img-element */}<img loading="lazy" decoding="async" src={media} alt="صورة" className="mb-1 max-h-80 rounded-md" /></a>}
                     {m.type === "sticker" && media && /* eslint-disable-next-line @next/next/no-img-element */ <img loading="lazy" decoding="async" src={media} alt="ملصق" className="h-32 w-32" />}
                     {m.type === "audio" && media && <audio controls preload="none" src={media} className="my-1 w-64 max-w-full" />}
@@ -893,7 +914,7 @@ function Bubble({ m, tail, businessId, me, quoted, reaction, onReply }: {
                             <MapPin className="h-4 w-4" />افتح الموقع على الخريطة
                         </a>
                     )}
-                    {m.body && m.type !== "document" && <p className="whitespace-pre-wrap break-words">{m.body}</p>}
+                    {m.body && m.type !== "document" && <p className="whitespace-pre-wrap break-words"><WaText text={m.body} /></p>}
                     {!m.body && !media && !header && m.type !== "location" && <p className="italic text-muted-foreground">{preview(m)}</p>}
                     <span className="mt-0.5 flex items-center justify-end gap-1 text-[11px] text-[#667781] dark:text-[#8696a0]">
                         {m.order_id && <span className="font-mono" dir="ltr">#{orderRef(m.order_id)}</span>}

@@ -23,7 +23,37 @@ export const imageLink = (path: string) => (/^https?:\/\//.test(path) ? path : `
 
 const CONFIRM_BODY = "أهلاً {{1}}\nشكراً إنك طلبت من Zuha Store.\n\nبرجاء تأكيد طلبك:\n{{2}}\n\nالمطلوب عند الاستلام: {{3}} جنيه\n\nالرجاء الرد بكلمة «تأكيد» لتأكيد الأوردر.";
 
+/**
+ * The confirmation a new order gets (the first message the customer reads
+ * from us): who it is from, exactly what was ordered and what it costs, where
+ * it goes, and one clear thing to do. The products' pictures sit above it
+ * (all of them, lib/whatsapp/collage.ts). «تعديل الطلب» keeps a customer who
+ * wants something changed from cancelling. The confirm button keeps the word
+ * «تأكيد»: the automation rules (the deposit ones) look for it.
+ */
+const CONFIRM_V2_BODY = [
+    "أهلاً {{1}} 👋",
+    "طلبك من *Zuha Store* وصلنا، وفاضل خطوة واحدة بس عشان نبدأ نجهّزه: *تأكيدك*.",
+    "",
+    "🛍️ *طلبك:* {{2}}",
+    "💵 *هتدفع عند الاستلام:* {{3}} جنيه",
+    "📍 *العنوان:* {{4}}",
+    "🗺️ *المحافظة:* {{5}}",
+    "",
+    "✅ لو كل حاجة مظبوطة دوس «تأكيد الطلب» وهنبدأ نجهّزه على طول.",
+    "✏️ لو عايز تغيّر حاجة (منتج، عدد، عنوان، رقم) دوس «تعديل الطلب».",
+    "",
+    "⏳ الطلب مش هيتشحن غير بعد تأكيدك.",
+].join("\n");
+
 export const TEMPLATES: TemplateDef[] = [
+    {
+        name: "order_confirm_v2", purpose: "أوردر جديد: تأكيد واضح بصور كل المنتجات والعنوان، وزرار تعديل",
+        body: CONFIRM_V2_BODY,
+        example: ["ساره", "مطحنة بن وتوابل (عدد 1)، طقم بلانشات خشب (عدد 2)", "655", "مدينة نصر، شارع عباس العقاد، عمارة 12", "القاهرة"],
+        buttons: ["تأكيد الطلب", "تعديل الطلب", "إلغاء الطلب"],
+        imageHeader: true,
+    },
     {
         name: "order_confirm_photo", purpose: "أوردر جديد بصورة المنتج: برجاء التأكيد",
         body: CONFIRM_BODY,

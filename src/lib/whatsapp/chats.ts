@@ -16,7 +16,7 @@ export interface WaMessage {
     media_id: string | null;
     media_mime: string | null;
     context_id?: string | null;
-    payload?: { params?: string[]; buttons?: string[]; header_image?: string | null; cards?: { image: string; title: string; price: number; old_price: number; variant_id: string }[]; event?: string; reaction?: { emoji: string; message_id: string }; location?: { latitude: number; longitude: number }; document?: { filename?: string } } | null;
+    payload?: { params?: string[]; buttons?: string[]; header_image?: string | null; header_images?: string[]; cards?: { image: string; title: string; price: number; old_price: number; variant_id: string }[]; event?: string; reaction?: { emoji: string; message_id: string }; location?: { latitude: number; longitude: number }; document?: { filename?: string } } | null;
     template_name: string | null;
     status: string;
     error: unknown;
@@ -49,7 +49,7 @@ export interface Chat {
     topic: "confirm" | "shipping" | null;
 }
 
-const CONFIRM = new Set(["order_confirm", "order_confirm_photo", "order_confirmation", "confirmation_reminder"]);
+const CONFIRM = new Set(["order_confirm_v2", "order_confirm", "order_confirm_photo", "order_confirmation", "confirmation_reminder"]);
 const SHIPPING_PROBLEM = new Set(["delivery_failed", "delivery_failed_photo", "order_returning", "order_returning_photo"]);
 
 const DAY = 24 * 3_600_000;
@@ -99,7 +99,7 @@ export const QUICK_REPLIES = [
     "تحت أمرك في أي وقت 🌸",
 ];
 
-const TOPIC_CONFIRM = new Set(["order_confirm", "order_confirm_photo", "order_confirmation", "confirmation_reminder"]);
+const TOPIC_CONFIRM = new Set(["order_confirm_v2", "order_confirm", "order_confirm_photo", "order_confirmation", "confirmation_reminder"]);
 const TOPIC_SHIPPING = new Set(["delivery_failed", "delivery_failed_photo", "order_returning", "order_returning_photo"]);
 const topicOf = (m: Pick<WaMessage, "template_name" | "payload">): Chat["topic"] => {
     const ev = m.payload?.event || "";

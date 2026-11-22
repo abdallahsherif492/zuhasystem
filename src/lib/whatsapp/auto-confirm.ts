@@ -23,8 +23,10 @@ import { CANCEL_CHOICES, CONFIRM_TEMPLATES, whatsappSettingsOf, type WhatsAppSet
  * Settings → WhatsApp (businesses.theme_config.whatsapp).
  */
 
-const norm = (s: string | null) => (s || "").replace(/[\p{P}\p{S}\s]+/gu, " ").trim();
+// Marks (the shadda in «أكّد») dropped too, so the word matches however it is written.
+const norm = (s: string | null) => (s || "").replace(/\p{M}+/gu, "").replace(/[\p{P}\p{S}\s]+/gu, " ").trim();
 const YES = /^(تأكيد|تاكيد|تأكيد الطلب|أكد|اكد|أأكد|موافق|تمام|اوكي|اوك|ok|okay|yes|confirm)$/i;
+const EDIT = /^(تعديل الطلب|تعديل|عايز اعدل|عايزه اعدل|عاوز اعدل|اعدل)$/i;
 const CANCEL = /^(إلغاء الطلب|الغاء الطلب|إلغاء|الغاء|الغي|ألغي|cancel)$/i;
 
 interface Incoming { customer_phone: string; body: string | null; context_id: string | null; payload: unknown; wa_message_id?: string | null; sent_at?: string }
@@ -129,6 +131,16 @@ async function builtIn(businessId: string, m: Incoming) {
                 action: { button: "اختار السبب", sections: [{ title: "سبب الإلغاء", rows: CANCEL_CHOICES.map(c => ({ id: c.id, title: c.title })) }] },
             },
         }, body, orderId);
+        return;
+    }
+
+    // «تعديل الطلب» (the confirmation's middle button): asked what to change;
+    // the order waits for a moderator, who sees the answer in the chat.
+    if (EDIT.test(text)) {
+        const orderId = await orderAskedAbout(businessId, m.customer_phone, m.context_id);
+        if (!orderId || !(await waitingOrder(businessId, orderId))) return;
+        await note(orderId, "العميل داس «تعديل الطلب» على الواتساب: شوف الشات وعدّل الأوردر قبل التأكيد.");
+        await say(businessId, m.customer_phone, "أكيد 👌 اكتبلنا هنا تحب تغيّر إيه (المنتج، العدد، العنوان أو رقم التليفون)، وهنعدّله ونأكدلك على طول.", orderId);
         return;
     }
 

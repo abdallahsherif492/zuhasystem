@@ -26,6 +26,7 @@ export const fieldLabel = (k: string) => BY_KEY.get(k as FieldKey)?.label || k;
 
 /** The system's templates: which detail each {{n}} is. */
 export const BUILTIN_PARAMS: Record<string, FieldKey[]> = {
+    order_confirm_v2: ["first_name", "items", "due", "address", "governorate"],
     order_confirm_photo: ["first_name", "items", "due"],
     order_confirm: ["first_name", "items", "due"],
     order_confirmation: ["first_name", "items", "due"],
@@ -65,7 +66,7 @@ export function fromMetaBody(body: string, params: string[] | undefined): string
 /** The cases a template can be chosen for (Settings → WhatsApp). */
 export type MessageCase = "confirm" | "reminder" | "confirmed" | "shipped" | "hold" | "returning" | "delivered";
 export const CASES: { key: MessageCase; label: string; builtin: string }[] = [
-    { key: "confirm", label: "رسالة التأكيد (أوردر جديد)", builtin: "order_confirm_photo ← order_confirm" },
+    { key: "confirm", label: "رسالة التأكيد (أوردر جديد)", builtin: "order_confirm_v2 ← order_confirm_photo ← order_confirm" },
     { key: "reminder", label: "تذكير بالتأكيد (من الأتمتة)", builtin: "confirmation_reminder" },
     { key: "confirmed", label: "المودريتور أكد الأوردر", builtin: "order_confirmed" },
     { key: "shipped", label: "الأوردر اتشحن", builtin: "order_shipped" },

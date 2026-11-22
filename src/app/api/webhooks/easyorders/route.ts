@@ -469,14 +469,14 @@ export async function POST(request: Request) {
 
         // The product's photo, from the store, for the WhatsApp confirmation
         // and the chats (products.image_url, 20261125). Only where none is set.
-        // EasyOrders' `thumb` link is not public (403); its `images` are, so
-        // the first that opens is kept. Products that have one are skipped.
+        // The product's main picture (thumb) first, then its others; the first
+        // that opens is kept. Products that have one are skipped.
         try {
             const wanted = new Map<string, unknown[]>();
             for (const item of rawItems) {
                 const sku = normalizeStr(item.variant?.taager_code || item.product?.sku || item.sku || "");
                 const v = sku ? variantsMap.get(sku) : null;
-                if (v?.product_id && !wanted.has(v.product_id)) wanted.set(v.product_id, [...productPhotoCandidates(item.product), item.thumb]);
+                if (v?.product_id && !wanted.has(v.product_id)) wanted.set(v.product_id, [item.thumb, ...productPhotoCandidates(item.product)]);
             }
             if (wanted.size) {
                 const { data: bare } = await supabase.from("products").select("id").in("id", [...wanted.keys()]).is("image_url", null);

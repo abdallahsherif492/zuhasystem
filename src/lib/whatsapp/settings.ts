@@ -65,7 +65,7 @@ export function whatsappSettingsOf(themeConfig: { whatsapp?: Partial<WhatsAppSet
 }
 
 /** The confirmation templates: the current one (with «إلغاء الطلب») first. */
-export const CONFIRM_TEMPLATES = ["order_confirm", "order_confirm_photo", "order_confirmation"];
+export const CONFIRM_TEMPLATES = ["order_confirm_v2", "order_confirm", "order_confirm_photo", "order_confirmation"];
 export const CONFIRM_TEMPLATE = CONFIRM_TEMPLATES[0];
 
 /** Why a customer cancels, offered as a list after «إلغاء الطلب». Titles: 24 characters at most. */
