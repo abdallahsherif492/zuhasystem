@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Bot, FileText, Gift, Send, Zap } from "lucide-react";
+import { Ban, Bot, FileText, Gift, Send, Zap } from "lucide-react";
+import { BlockedList } from "@/components/whatsapp/blocked-list";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { WhatsAppBulkSend } from "@/components/whatsapp/bulk-send";
 import { Loader2 } from "lucide-react";
@@ -26,7 +27,7 @@ import { CONFIRM_TEMPLATES, ORDER_EVENTS, whatsappSettingsOf, type WhatsAppSetti
  */
 
 
-export function WhatsAppTemplatesAndRules({ businessId, manager }: { businessId: string; manager: boolean }) {
+export function WhatsAppTemplatesAndRules({ businessId, manager, owner = false }: { businessId: string; manager: boolean; owner?: boolean }) {
     const [meta, setMeta] = useState<MetaTemplate[] | null>(null);
     const [submitting, setSubmitting] = useState(false);
     const [settings, setSettings] = useState<WhatsAppSettings | null>(null);
@@ -37,6 +38,7 @@ export function WhatsAppTemplatesAndRules({ businessId, manager }: { businessId:
         { key: "flows", label: "الأتمتة", icon: Zap },
         { key: "offers", label: "العروض والنتايج", icon: Gift },
         ...(manager ? [{ key: "bulk", label: "إرسال للقديم", icon: Send }] : []),
+        ...(owner ? [{ key: "blocked", label: "المتبلّكين", icon: Ban }] : []),
     ];
     const [tab, setTab] = useState(() => {
         try { return (typeof window !== "undefined" && localStorage.getItem("wa-settings-tab")) || "auto"; } catch { return "auto"; }
@@ -216,6 +218,12 @@ export function WhatsAppTemplatesAndRules({ businessId, manager }: { businessId:
                     onChange={upsell => set({ upsell })} onSave={save} />
             )}
             </TabsContent>
+
+            {owner && (
+                <TabsContent value="blocked" className="mt-0">
+                    <BlockedList businessId={businessId} />
+                </TabsContent>
+            )}
 
             {manager && (
                 <TabsContent value="bulk" className="mt-0">

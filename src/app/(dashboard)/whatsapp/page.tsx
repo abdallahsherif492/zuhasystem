@@ -4,7 +4,7 @@ import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "rea
 import { useSearchParams } from "next/navigation";
 import {
     ArrowDown, ArrowRight, Check, CheckCheck, Clock, Copy, CornerUpLeft, FileText, Loader2, MapPin, MessageCircle, MessageSquareDot,
-    Camera, ImageIcon, Images, Paperclip, Pencil, Phone, Search, Send, Smile, TriangleAlert, User, X,
+    Ban, Camera, ImageIcon, Images, MoreVertical, Paperclip, Pencil, Phone, Trash2, Search, Send, Smile, TriangleAlert, User, X,
 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/lib/supabase";
@@ -18,6 +18,9 @@ import { telLink } from "@/lib/orders/contact";
 import { logBusinessAction } from "@/lib/logs/actions-logger";
 import { CancelOrderDialog } from "@/components/orders/cancel-order-dialog";
 import { OrderEditDialog } from "@/components/whatsapp/order-edit-dialog";
+import { isOwnerRole } from "@/lib/whatsapp/roles";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { SavedRepliesManager, fillReply, useSavedReplies } from "@/components/whatsapp/saved-replies";
 import { CANCEL_REASON_FALLBACK, FLOW_CANCEL_REASONS, cancelReasonLabel, type CancelReason } from "@/lib/orders/cancel-reasons";
 import { applyToChats, chatFromRow, chatsOf, type ChatListRow, preview, tappedButtonId, windowUntil, type Chat, type WaMessage } from "@/lib/whatsapp/chats";
@@ -70,7 +73,8 @@ export default function WhatsAppChatsPage() {
 }
 
 function Chats() {
-    const { activeBusiness, currentUser } = useBusiness();
+    const { activeBusiness, currentUser, userRole } = useBusiness();
+    const owner = isOwnerRole(userRole);
     const params = useSearchParams();
     const businessId = activeBusiness?.id;
     const me = currentUser?.email?.toLowerCase() ?? null;
@@ -142,6 +146,19 @@ function Chats() {
         })();
         return () => { gone = true; };
     }, [businessId, open]);
+
+    // Owners: who is blocked on the company number (Meta's list), to block / unblock from the chat.
+    const [blocked, setBlocked] = useState<Set<string>>(new Set());
+    useEffect(() => {
+        if (!businessId || !owner) return;
+        let gone = false;
+        (async () => {
+            const res = await fetch(`/api/whatsapp/block?business_id=${businessId}`).catch(() => null);
+            const body = res ? await res.json().catch(() => ({})) : {};
+            if (!gone && res?.ok) setBlocked(new Set(body.blocked || []));
+        })();
+        return () => { gone = true; };
+    }, [businessId, owner]);
 
     const presence = useRef<ReturnType<typeof supabase.channel> | null>(null);
     useEffect(() => {
@@ -252,7 +269,10 @@ function Chats() {
                 {open && businessId
                     ? <ChatView key={open} phone={open} chat={current} businessId={businessId} me={me} now={now}
                         others={others(open)} onBack={() => setOpen(null)} onSent={addSent} onSettled={settleSent}
-                        messages={thread || []} loading={thread === null} />
+                        messages={thread || []} loading={thread === null}
+                        owner={owner} blocked={blocked.has(open)}
+                        onBlocked={b => setBlocked(prev => { const n = new Set(prev); if (b) n.add(open); else n.delete(open); return n; })}
+                        onDeleted={() => { setChats(prev => prev?.filter(c => c.phone !== open) ?? prev); setThread(null); setOpen(null); }} />
                     : <div className="flex flex-1 flex-col items-center justify-center gap-2 bg-muted/30 p-6 text-center text-muted-foreground">
                         <MessageCircle className="h-12 w-12 text-[#25d366]/60" />
                         <p className="text-lg font-semibold text-foreground">واتساب {activeBusiness?.name || ""}</p>
@@ -274,8 +294,9 @@ function Avatar({ name, size = 44 }: { name: string; size?: number }) {
     );
 }
 
-function ChatView({ phone, chat, messages, loading, businessId, me, now, others, onBack, onSent, onSettled }: {
+function ChatView({ phone, chat, messages, loading, businessId, me, now, others, onBack, onSent, onSettled, owner, blocked, onBlocked, onDeleted }: {
     phone: string; chat: Chat | null; messages: WaMessage[]; loading: boolean; businessId: string; me: string | null; now: number;
+    owner: boolean; blocked: boolean; onBlocked: (b: boolean) => void; onDeleted: () => void;
     others: string[]; onBack: () => void; onSent: (m: WaMessage) => void; onSettled: (tempId: string, real: WaMessage | null) => void;
 }) {
     const { currentUser } = useBusiness();
@@ -337,6 +358,28 @@ function ChatView({ phone, chat, messages, loading, businessId, me, now, others,
         lastRead.current = latest.id;
         fetch("/api/whatsapp/read", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ business_id: businessId, customer_phone: phone, wa_message_id: latest.wa_message_id }) }).catch(() => undefined);
     }, [messages, businessId, phone]);
+
+    // Owners: block (Meta allows it only within 24 hours of the customer's last message) and delete.
+    const canBlock = !!chat?.lastIn && now - Date.parse(chat.lastIn.sent_at) < 24 * 3_600_000;
+    const block = async (action: "block" | "unblock") => {
+        const res = await fetch("/api/whatsapp/block", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ business_id: businessId, phone, action }) });
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) { toast.error(body.error || "ما اتعملش."); return; }
+        onBlocked(action === "block");
+        toast.success(action === "block" ? "العميل اتبلّك." : "البلوك اتفك.");
+    };
+    const [confirmDelete, setConfirmDelete] = useState(false);
+    const [deleting, setDeleting] = useState(false);
+    const deleteChat = async () => {
+        setDeleting(true);
+        const res = await fetch("/api/whatsapp/delete-chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ business_id: businessId, phone }) });
+        const body = await res.json().catch(() => ({}));
+        setDeleting(false);
+        if (!res.ok) { toast.error(body.error || "ما اتمسحش."); return; }
+        setConfirmDelete(false);
+        toast.success(`الشات اتمسح (${body.deleted} رسالة).`);
+        onDeleted();
+    };
 
     const markUnread = async () => {
         lastRead.current = "unread";
@@ -519,8 +562,49 @@ function ChatView({ phone, chat, messages, loading, businessId, me, now, others,
                 <div className="flex shrink-0 items-center">
                     <Button variant="ghost" size="icon" className="h-10 w-10" onClick={markUnread} aria-label="علّمها غير مقروءة" title="علّمها غير مقروءة"><MessageSquareDot className="h-5 w-5" /></Button>
                     <Button asChild variant="ghost" size="icon" className="h-10 w-10" aria-label="اتصل"><a href={telLink(phone)}><Phone className="h-5 w-5" /></a></Button>
+                    {owner && (
+                        // Owners only: block on the company number, or delete the chat from the system.
+                        <DropdownMenu dir="rtl">
+                            <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" size="icon" className="h-10 w-10" aria-label="خيارات المحادثة"><MoreVertical className="h-5 w-5" /></Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="w-56">
+                                {blocked ? (
+                                    <DropdownMenuItem onSelect={() => block("unblock")}><Ban className="me-2 h-4 w-4" />فك البلوك</DropdownMenuItem>
+                                ) : (
+                                    <DropdownMenuItem disabled={!canBlock} onSelect={() => block("block")}>
+                                        <Ban className="me-2 h-4 w-4" />
+                                        <span>بلوك{!canBlock && <span className="block text-[11px] text-muted-foreground">بيتعمل بس لو كتبلنا في آخر 24 ساعة</span>}</span>
+                                    </DropdownMenuItem>
+                                )}
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem className="text-destructive focus:text-destructive" onSelect={() => setConfirmDelete(true)}>
+                                    <Trash2 className="me-2 h-4 w-4" />امسح الشات نهائياً
+                                </DropdownMenuItem>
+                            </DropdownMenuContent>
+                        </DropdownMenu>
+                    )}
                 </div>
             </header>
+            {blocked && (
+                <p className="border-b bg-zinc-100 px-3 py-1.5 text-center text-xs font-semibold text-zinc-700 dark:bg-zinc-900 dark:text-zinc-300">العميل ده متبلّك: مش هيقدر يبعت لرقم الشركة.</p>
+            )}
+            <AlertDialog open={confirmDelete} onOpenChange={o => { if (!deleting) setConfirmDelete(o); }}>
+                <AlertDialogContent dir="rtl">
+                    <AlertDialogHeader className="text-start">
+                        <AlertDialogTitle>تمسح الشات ده نهائياً؟</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            كل الرسايل مع {chat?.name || phone} هتتمسح من السيستم ومش هترجع. العميل بيفضل عنده المحادثة على موبايله (واتساب مابيسمحش بالمسح من عنده).
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter className="gap-2">
+                        <AlertDialogCancel disabled={deleting}>لأ</AlertDialogCancel>
+                        <AlertDialogAction disabled={deleting} onClick={e => { e.preventDefault(); deleteChat(); }} className="bg-destructive text-white hover:bg-destructive/90">
+                            {deleting && <Loader2 className="me-2 h-4 w-4 animate-spin" />}امسح نهائياً
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
 
             {undelivered && (
                 <div className="flex items-center gap-3 border-b border-red-200 bg-red-50 px-3 py-2.5 dark:border-red-900 dark:bg-red-950/50">

@@ -7,6 +7,7 @@ import { useBusiness } from "@/contexts/BusinessContext";
 import { Button } from "@/components/ui/button";
 import { WHATSAPP_MIGRATION } from "@/lib/whatsapp/config";
 import { WhatsAppTemplatesAndRules } from "@/components/whatsapp/whatsapp-settings";
+import { isOwnerRole } from "@/lib/whatsapp/roles";
 
 /**
  * Settings → WhatsApp: connect the business's WhatsApp number to the system.
@@ -93,7 +94,7 @@ export default function WhatsAppSettingsPage() {
                     {!manager && <p className="text-sm text-destructive">الأونر أو الأدمن بس اللي يقدر يربط الرقم.</p>}
                 </section>
             )}
-            {accounts && accounts.length > 0 && businessId && <WhatsAppTemplatesAndRules businessId={businessId} manager={manager} />}
+            {accounts && accounts.length > 0 && businessId && <WhatsAppTemplatesAndRules businessId={businessId} manager={manager} owner={isOwnerRole(userRole)} />}
         </div>
     );
 }
