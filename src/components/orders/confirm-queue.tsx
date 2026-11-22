@@ -9,16 +9,25 @@ import {
     type FlowStep, type QueueOrder, type QueueState,
 } from "@/lib/orders/confirm-queue";
 import { type AttemptReason } from "@/components/orders/confirmation-attempts";
+import { useBusiness } from "@/contexts/BusinessContext";
+import { useWhatsAppConnected } from "@/components/whatsapp/send-confirmation";
+
+/**
+ * «للاتصال»: customers whose number has no WhatsApp, so the confirmation never
+ * reached them and only a call can. First, because nothing else will move them.
+ */
+export type QueueTab = QueueState | "call";
+const TABS: { key: QueueTab; label: string }[] = [{ key: "call", label: "للاتصال" }, ...QUEUE_TABS];
 
 /** The queue's tabs: one per state, the count big enough to read at a glance. */
 export function QueueTabs({ value, onChange, counts }: {
-    value: QueueState;
-    onChange: (v: QueueState) => void;
-    counts: Record<QueueState, number>;
+    value: QueueTab;
+    onChange: (v: QueueTab) => void;
+    counts: Record<QueueTab, number>;
 }) {
     return (
         <div dir="rtl" className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 sm:mx-0 sm:flex-wrap sm:px-0">
-            {QUEUE_TABS.map(tab => {
+            {TABS.map(tab => {
                 const active = value === tab.key;
                 const n = counts[tab.key];
                 return (
@@ -28,13 +37,17 @@ export function QueueTabs({ value, onChange, counts }: {
                         onClick={() => onChange(tab.key)}
                         className={cn(
                             "flex min-h-12 shrink-0 items-center gap-2 rounded-xl border px-4 text-sm font-semibold transition-colors",
-                            active ? "border-foreground bg-foreground text-background" : "bg-background hover:bg-muted",
+                            active ? "border-foreground bg-foreground text-background"
+                                : tab.key === "call" && n ? "border-orange-300 bg-orange-50 text-orange-900 hover:bg-orange-100 dark:border-orange-900 dark:bg-orange-950/30 dark:text-orange-200"
+                                : "bg-background hover:bg-muted",
                         )}
                     >
+                        {tab.key === "call" && <PhoneCall className="h-4 w-4" />}
                         <span>{tab.label}</span>
                         <span className={cn(
                             "min-w-7 rounded-full px-2 py-0.5 text-center text-sm font-bold tabular-nums",
                             active ? "bg-background/20" :
+                                tab.key === "call" && n ? "bg-orange-600 text-white" :
                                 tab.key === "new" && n ? "bg-emerald-600 text-white" :
                                 tab.key === "whatsapp" && n ? "bg-sky-600 text-white" :
                                 tab.key === "last" && n ? "bg-red-600 text-white" : "bg-muted",
@@ -69,6 +82,8 @@ export function FlowInstruction({ order, me, missed, now, children }: {
     /** The call and WhatsApp buttons. */
     children?: React.ReactNode;
 }) {
+    const { activeBusiness } = useBusiness();
+    const manual = useWhatsAppConnected(activeBusiness?.id) === false;
     const scheduled = queueStateOf(order, now) === "scheduled";
     const at = nextAttemptAt(order);
     const step = stepOf(order, scheduled ? at : now);
@@ -90,7 +105,7 @@ export function FlowInstruction({ order, me, missed, now, children }: {
         );
     }
 
-    const { title, detail } = instructionFor(order, me, { missed }, now);
+    const { title, detail } = instructionFor(order, me, { missed, manual }, now);
     return (
         <section dir="rtl" aria-label="المطلوب منك"
             className="mx-3 space-y-4 rounded-2xl border-2 border-indigo-200 bg-indigo-50/70 p-4 text-indigo-950 sm:mx-4 sm:p-5 dark:border-indigo-800 dark:bg-indigo-950/40 dark:text-indigo-50">

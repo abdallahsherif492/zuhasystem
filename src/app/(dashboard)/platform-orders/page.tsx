@@ -21,15 +21,16 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import {
     Loader2, Check, AlertTriangle, Search, PackageSearch, Repeat, PhoneCall, HandCoins, ShoppingBasket,
-    Undo2, Link2Off,
+    Undo2, Link2Off, MessageSquareText, X,
 } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import {
     AttemptHistory, FailedAttemptDialog, LastAttempt, ago, claimOrder, recordAttempt, type AttemptReason, type AttemptSummary,
 } from "@/components/orders/confirmation-attempts";
-import { ClaimBadge, FlowActions, FlowInstruction, HeadsUp, QueueTabs, type HeadsUpItem } from "@/components/orders/confirm-queue";
+import { ClaimBadge, FlowActions, FlowInstruction, HeadsUp, QueueTabs, type HeadsUpItem, type QueueTab } from "@/components/orders/confirm-queue";
 import { DUE_STATES, byDue, claimedByOther, isMine, nextTryToast, queueStateOf, shortName, stepOf, whatsappFromOther, type QueueState } from "@/lib/orders/confirm-queue";
 
 import { deliveryRateOf } from "@/lib/easyorders-delivery-rate";
@@ -37,7 +38,7 @@ import { fetchDeliveryRatesAction } from "./delivery-rate-actions";
 import { MISSED_ORDERS_IN_QUEUE, MissedOrderNote } from "@/components/orders/missed-order";
 import { OrderSummary, egp } from "@/components/orders/order-summary";
 import { SendConfirmationButton } from "@/components/whatsapp/send-confirmation";
-import { OrderChatStatus, chatStateOf, useChatStates } from "@/components/whatsapp/order-chat-status";
+import { OrderChatStatus, chatStateOf, useChatStates, type ChatState } from "@/components/whatsapp/order-chat-status";
 import { governorateArabic } from "@/lib/governorates";
 import { CancelOrderDialog } from "@/components/orders/cancel-order-dialog";
 import {
@@ -71,6 +72,23 @@ function isWaitingPlatformOrder(o: { status?: string | null; easyorders_id?: str
 
 const MISSED_TAG = "missed-order";
 const CARDS_PER_PAGE = 15;
+
+/** Where the order's customer is on WhatsApp, for the filter. */
+type WaFilter = "all" | "no_whatsapp" | "not_sent" | "waiting_us" | "replied" | "no_reply";
+const WA_FILTERS: { key: WaFilter; label: string }[] = [
+    { key: "all", label: "الواتساب: الكل" },
+    { key: "not_sent", label: "ماتبعتلوش تأكيد" },
+    { key: "no_reply", label: "اتبعتله ومردش" },
+    { key: "waiting_us", label: "رد ومستني ردنا" },
+    { key: "replied", label: "رد علينا" },
+    { key: "no_whatsapp", label: "مش عليه واتساب" },
+];
+function waStateOf(s: ChatState | null | undefined): Exclude<WaFilter, "all"> {
+    if (s?.noWhatsApp) return "no_whatsapp";
+    if (!s?.confirmSentAt) return "not_sent";
+    if (s.waiting > 0) return "waiting_us";
+    return s.lastInAt && s.lastInAt >= s.confirmSentAt ? "replied" : "no_reply";
+}
 const isMissed = (o: { tags?: unknown }) => Array.isArray(o.tags) && o.tags.includes(MISSED_TAG);
 
 /** Missed orders become Waiting orders here; harmless before the migration is run. */
@@ -974,7 +992,10 @@ function PlatformOrdersContent() {
     // The queue: every Waiting order sits in one state (lib/orders/confirm-queue.ts),
     // worked out again each minute so an order whose time comes moves to
     // "call now" on its own. The order's status stays Waiting throughout.
-    const [queueTab, setQueueTab] = useState<QueueState>("new");
+    const [queueTab, setQueueTabRaw] = useState<QueueTab>("new");
+    // «للاتصال» opens first once it has someone in it, unless a tab was already picked.
+    const tabPicked = useRef(false);
+    const setQueueTab = (t: QueueTab) => { tabPicked.current = true; setQueueTabRaw(t); };
     const [shown, setShown] = useState(CARDS_PER_PAGE);
     const [failing, setFailing] = useState<Order | null>(null);
     const [cancelling, setCancelling] = useState<Order | null>(null);
@@ -989,9 +1010,36 @@ function PlatformOrdersContent() {
     }, []);
     const me = currentUser?.email ?? null;
 
+    // The WhatsApp, governorate and product filters (beside the search).
+    const [waFilter, setWaFilter] = useState<WaFilter>("all");
+    const [govFilter, setGovFilter] = useState("all");
+    const [productFilter, setProductFilter] = useState("all");
+    const govOf = (o: Order) => governorateArabic(o.customer_info?.governorate) || o.customer_info?.governorate || "";
+    const productsOf = (o: Order) => (o.order_items || []).map(i => i.variants?.products?.name || i.unmapped_name || "").filter(Boolean);
+    const filterChoices = useMemo(() => {
+        const govs = new Map<string, number>(), prods = new Map<string, number>();
+        for (const o of listed) {
+            const g = govOf(o);
+            if (g) govs.set(g, (govs.get(g) || 0) + 1);
+            for (const p of new Set(productsOf(o))) prods.set(p, (prods.get(p) || 0) + 1);
+        }
+        const sorted = (m: Map<string, number>) => [...m].sort((a, b) => b[1] - a[1]);
+        return { govs: sorted(govs), prods: sorted(prods) };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [listed]);
+    const narrowed = listed.filter(o => (govFilter === "all" || govOf(o) === govFilter)
+        && (productFilter === "all" || productsOf(o).includes(productFilter))
+        && (waFilter === "all" || waStateOf(chatStateOf(chatStates, o.customer_info?.phone)) === waFilter));
+
+    /** The order's tab: its step, or «للاتصال» when its number has no WhatsApp (an appointment still waits for its time). */
+    const tabOf = (o: Order, at: number): QueueTab => {
+        const st = queueStateOf(o, at);
+        return st !== "scheduled" && chatStateOf(chatStates, o.customer_info?.phone)?.noWhatsApp ? "call" : st;
+    };
     const byState = useMemo(() => {
-        const m: Record<QueueState, Order[]> = { new: [], whatsapp: [], last: [], scheduled: [] };
-        for (const o of listed) m[queueStateOf(o, now)].push(o);
+        const m: Record<QueueTab, Order[]> = { call: [], new: [], whatsapp: [], last: [], scheduled: [] };
+        for (const o of narrowed) m[tabOf(o, now)].push(o);
+        m.call.sort(byDue);
         // The other lists: whoever has waited longest first. A WhatsApp sent
         // from my phone comes back to me first: only I can see whether they replied.
         const sentByMe = (o: Order) => (o.whatsapp_sent_at && !whatsappFromOther(o, me) ? 1 : 0);
@@ -1003,11 +1051,56 @@ function PlatformOrdersContent() {
         m.last.sort(mineFirst);
         m.scheduled.sort(byDue);
         return m;
-    }, [listed, now, me]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [narrowed, now, me, chatStates]);
     const queueCounts = {
-        new: byState.new.length, whatsapp: byState.whatsapp.length, last: byState.last.length, scheduled: byState.scheduled.length,
+        call: byState.call.length, new: byState.new.length, whatsapp: byState.whatsapp.length, last: byState.last.length, scheduled: byState.scheduled.length,
     };
     const visibleOrders = byState[queueTab];
+    useEffect(() => {
+        if (!tabPicked.current && queueCounts.call > 0) setQueueTabRaw("call");
+    }, [queueCounts.call]);
+
+    // Picked cards, for «ابعت رسالة التأكيد» on many at once; a tab or filter change clears them.
+    const [picked, setPicked] = useState<Set<string>>(new Set());
+    useEffect(() => { setPicked(new Set()); }, [queueTab, waFilter, govFilter, productFilter, platformFilter, searchQuery, fromDate, toDate, repeatOnly]);
+    const pickedHere = visibleOrders.filter(o => picked.has(o.id));
+    const allPicked = visibleOrders.length > 0 && pickedHere.length === visibleOrders.length;
+    const togglePick = (id: string) => setPicked(prev => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+    const [bulkAsk, setBulkAsk] = useState(false);
+    const [bulkProgress, setBulkProgress] = useState<{ done: number; total: number } | null>(null);
+    const sendConfirmations = async () => {
+        if (!activeBusiness) return;
+        const ids = pickedHere.map(o => o.id);
+        const tally: Record<string, number> = {};
+        const errors = new Set<string>();
+        setBulkProgress({ done: 0, total: ids.length });
+        for (let i = 0; i < ids.length; i += 10) {
+            const res = await fetch("/api/whatsapp/send-confirmations", {
+                method: "POST", headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ business_id: activeBusiness.id, order_ids: ids.slice(i, i + 10) }),
+            }).catch(() => null);
+            const body = await res?.json().catch(() => null) as { results?: { outcome: string; error?: string }[]; stopped?: string | null; error?: string } | null;
+            if (!res?.ok || !body?.results) { errors.add(body?.error || "الإرسال وقف، جرّب تاني."); break; }
+            for (const r of body.results) { tally[r.outcome] = (tally[r.outcome] || 0) + 1; if (r.error) errors.add(r.error); }
+            setBulkProgress({ done: Math.min(ids.length, i + 10), total: ids.length });
+            if (body.stopped) break;
+        }
+        setBulkProgress(null);
+        setPicked(new Set());
+        const said = [
+            tally.confirm && `اتبعت تأكيد لـ ${tally.confirm}`,
+            tally.reminder && `تذكير لـ ${tally.reminder} (كان اتبعتلهم قبل كده)`,
+            tally.recent && `${tally.recent} اتبعتلهم من أقل من 3 ساعات فاستنّينا`,
+            tally.no_whatsapp && `${tally.no_whatsapp} مش عليهم واتساب (في «للاتصال»)`,
+            tally.not_waiting && `${tally.not_waiting} اتأكدوا أو اتلغوا خلاص`,
+            tally.no_phone && `${tally.no_phone} من غير رقم`,
+            tally.failed && `${tally.failed} ماتبعتوش`,
+        ].filter(Boolean).join("، ");
+        if (tally.confirm || tally.reminder) toast.success(said || "اتبعت.");
+        else toast.info(said || "ماتبعتش حاجة.");
+        if (errors.size) toast.error([...errors].slice(0, 2).join(" — "));
+    };
 
     const patchOrder = (id: string, patch: Partial<Order>) =>
         setOrders(prev => prev.map(o => o.id === id ? { ...o, ...patch } : o));
@@ -1059,7 +1152,7 @@ function PlatformOrdersContent() {
      * due now and not held by someone else. It is claimed on the server
      * first, so two moderators pressing at once get different orders.
      */
-    const nextUp = DUE_STATES.flatMap(k => byState[k]).filter(o => o.id !== focusId && !claimedByOther(o, me, now) && !inFlight.current.has(o.id));
+    const nextUp = (["call", ...DUE_STATES] as QueueTab[]).flatMap(k => byState[k]).filter(o => o.id !== focusId && !claimedByOther(o, me, now) && !inFlight.current.has(o.id));
     const [pickingNext, setPickingNext] = useState(false);
     const takeNext = async () => {
         setPickingNext(true);
@@ -1075,7 +1168,7 @@ function PlatformOrdersContent() {
                 if (r?.status === "taken") { patchOrder(o.id, { claimed_by: r.claimed_by, claimed_at: r.claimed_at }); continue; }
                 if (r?.status === "gone") { dropOrder(o.id); continue; }
                 if (r?.status === "done") patchOrder(o.id, { claimed_by: r.claimed_by, claimed_at: r.claimed_at });
-                const tab = queueStateOf(o, Date.now());
+                const tab = tabOf(o, Date.now());
                 setQueueTab(tab);
                 setFocusId(o.id);
                 const i = byState[tab].findIndex(x => x.id === o.id);
@@ -1149,7 +1242,7 @@ function PlatformOrdersContent() {
     // list passed 130 cards, all drawn at once and all drawn again on every
     // keystroke in any of them; the next page is drawn as the moderator
     // scrolls near the end of this one.
-    useEffect(() => { setShown(CARDS_PER_PAGE); }, [queueTab, platformFilter, searchQuery, fromDate, toDate, repeatOnly]);
+    useEffect(() => { setShown(CARDS_PER_PAGE); }, [queueTab, platformFilter, searchQuery, fromDate, toDate, repeatOnly, waFilter, govFilter, productFilter]);
     const drawnOrders = visibleOrders.slice(0, shown);
     const moreRef = useRef<HTMLDivElement>(null);
     useEffect(() => {
@@ -1235,6 +1328,31 @@ function PlatformOrdersContent() {
                     </SelectContent>
                 </Select>
                 <DateRangePicker className="min-w-0" />
+                <Select value={waFilter} onValueChange={v => setWaFilter(v as WaFilter)}>
+                    <SelectTrigger className={cn("h-10 w-full sm:w-[180px]", waFilter !== "all" && "border-primary text-primary")}><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                        {WA_FILTERS.map(f => <SelectItem key={f.key} value={f.key}>{f.label}</SelectItem>)}
+                    </SelectContent>
+                </Select>
+                <Select value={govFilter} onValueChange={setGovFilter}>
+                    <SelectTrigger className={cn("h-10 w-full sm:w-[170px]", govFilter !== "all" && "border-primary text-primary")}><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="all">كل المحافظات</SelectItem>
+                        {filterChoices.govs.map(([g, n]) => <SelectItem key={g} value={g}>{g} ({n})</SelectItem>)}
+                    </SelectContent>
+                </Select>
+                <Select value={productFilter} onValueChange={setProductFilter}>
+                    <SelectTrigger className={cn("col-span-2 h-10 w-full sm:w-[220px]", productFilter !== "all" && "border-primary text-primary")}><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="all">كل المنتجات</SelectItem>
+                        {filterChoices.prods.map(([p, n]) => <SelectItem key={p} value={p}>{p} ({n})</SelectItem>)}
+                    </SelectContent>
+                </Select>
+                {(waFilter !== "all" || govFilter !== "all" || productFilter !== "all") && (
+                    <Button variant="ghost" className="col-span-2 h-10 gap-1 sm:w-auto" onClick={() => { setWaFilter("all"); setGovFilter("all"); setProductFilter("all"); }}>
+                        <X className="h-4 w-4" />شيل الفلاتر
+                    </Button>
+                )}
                 {/* Only there when something is flagged, and red when two
                     orders on one number could both still ship. */}
                 {(repeatCount > 0 || repeatOnly) && (
@@ -1281,6 +1399,25 @@ function PlatformOrdersContent() {
                     }}
                 />
             )}
+
+            <AlertDialog open={bulkAsk} onOpenChange={setBulkAsk}>
+                <AlertDialogContent dir="rtl">
+                    <AlertDialogHeader className="text-start sm:text-start">
+                        <AlertDialogTitle>ابعت رسالة التأكيد لـ {pickedHere.length} عميل؟</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            هتتبعت من رقم الشركة. اللي ماوصلتلوش رسالة التأكيد قبل كده هتوصله، واللي وصلته من 3 ساعات أو أكتر هيوصله تذكير.
+                            اللي اتبعتله من أقل من 3 ساعات أو رقمه مش عليه واتساب مش هيتبعتله.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter className="gap-2">
+                        <AlertDialogCancel className="h-12">رجوع</AlertDialogCancel>
+                        <AlertDialogAction className="h-12 bg-emerald-600 text-base font-semibold text-white hover:bg-emerald-700"
+                            onClick={() => { setBulkAsk(false); sendConfirmations(); }}>
+                            <MessageSquareText className="h-5 w-5" />ابعت
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
 
             {/* One confirm dialog for the page, opened by a card's "confirm". */}
             <AlertDialog open={!!approving} onOpenChange={o => { if (!o) setApproving(null); }}>
@@ -1355,6 +1492,28 @@ function PlatformOrdersContent() {
             {orders.length > 0 && (
                 <div className="space-y-3" dir="rtl">
                     <QueueTabs value={queueTab} onChange={setQueueTab} counts={queueCounts} />
+                    {queueTab === "call" && queueCounts.call > 0 && (
+                        <p className="text-sm font-medium text-orange-800 dark:text-orange-300">الأرقام دي مش عليها واتساب، فرسالة التأكيد ماوصلتلهمش. لازم تتصل بيهم.</p>
+                    )}
+                    {visibleOrders.length > 0 && (
+                        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl border bg-muted/30 px-3 py-2">
+                            <label className="flex min-h-10 cursor-pointer items-center gap-2 text-sm font-semibold">
+                                <Checkbox checked={allPicked ? true : pickedHere.length ? "indeterminate" : false}
+                                    onCheckedChange={() => setPicked(allPicked ? new Set() : new Set(visibleOrders.map(o => o.id)))} />
+                                {pickedHere.length ? `اخترت ${pickedHere.length} من ${visibleOrders.length}` : `اختار الكل (${visibleOrders.length})`}
+                            </label>
+                            {pickedHere.length > 0 && (
+                                <div className="flex flex-wrap items-center gap-2 sm:ms-auto">
+                                    <Button size="sm" variant="ghost" className="h-10" onClick={() => setPicked(new Set())}>إلغاء الاختيار</Button>
+                                    {queueTab !== "call" && <Button size="sm" disabled={!!bulkProgress} onClick={() => setBulkAsk(true)}
+                                        className="h-10 gap-2 bg-emerald-600 font-semibold text-white hover:bg-emerald-700">
+                                        {bulkProgress ? <Loader2 className="h-4 w-4 animate-spin" /> : <MessageSquareText className="h-4 w-4" />}
+                                        {bulkProgress ? `بيتبعت ${bulkProgress.done} من ${bulkProgress.total}` : `ابعت رسالة التأكيد (${pickedHere.length})`}
+                                    </Button>}
+                                </div>
+                            )}
+                        </div>
+                    )}
                     {queueTab === "whatsapp" && queueCounts.whatsapp > 0 && (
                         <p className="text-sm text-muted-foreground">اتبعتلهم واتساب من 4 ساعات أو أكتر. اللي اتبعتلهم من موبايلك فوق.</p>
                     )}
@@ -1389,7 +1548,7 @@ function PlatformOrdersContent() {
                     </p>
                     {queueTab !== "scheduled" && DUE_STATES.some(k => k !== queueTab && queueCounts[k] > 0) && (
                         <button className="mt-2 text-sm text-primary underline" onClick={() => setQueueTab(DUE_STATES.find(k => k !== queueTab && queueCounts[k] > 0)!)}>
-                            فيه أوردرات عليها الدور في «{DUE_STATES.filter(k => k !== queueTab && queueCounts[k] > 0).map(k => ({ new: "جديد", whatsapp: "بعتلهم واتساب", last: "آخر فرصة", scheduled: "" })[k]).join("» و«")}»
+                            فيه أوردرات عليها الدور في «{DUE_STATES.filter(k => k !== queueTab && queueCounts[k] > 0).map(k => ({ new: "جديد", whatsapp: "بعتلهم واتساب", last: "آخر فرصة", scheduled: "", call: "للاتصال" })[k]).join("» و«")}»
                         </button>
                     )}
                     {queueTab !== "scheduled" && queueCounts.scheduled > 0 && (
@@ -1416,12 +1575,14 @@ function PlatformOrdersContent() {
                             className={cn(
                                 "gap-0 overflow-hidden rounded-2xl py-0 shadow-sm scroll-mt-24",
                                 focusId === order.id && "border-emerald-500 ring-4 ring-emerald-500/30",
+                                picked.has(order.id) && focusId !== order.id && "border-primary ring-2 ring-primary/30",
                             )}
                         >
                             {/* 1. Who and how much. */}
                             <div dir="rtl" className="flex items-start justify-between gap-3 p-4 pb-4 sm:px-5">
                                 <div className="min-w-0 space-y-1">
                                     <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                                        <Checkbox aria-label="اختار الأوردر" className="size-5" checked={picked.has(order.id)} onCheckedChange={() => togglePick(order.id)} />
                                         <h3 className="break-words text-xl font-bold leading-tight">{info.name || "من غير اسم"}</h3>
                                         <ClaimBadge order={order} me={me} now={now} />
                                     </div>

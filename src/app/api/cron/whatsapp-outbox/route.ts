@@ -4,6 +4,7 @@ import { admin } from "@/lib/whatsapp/server";
 import { processOutbox } from "@/lib/whatsapp/outbox";
 import { runTimedFlows } from "@/lib/whatsapp/flows";
 import { answerMissedTaps } from "@/lib/whatsapp/upsell";
+import { cancelSilentLastChance } from "@/lib/whatsapp/silent-cancel";
 
 /**
  * Sends the queued WhatsApp messages (lib/whatsapp/outbox.ts).
@@ -24,7 +25,10 @@ export async function GET(request: Request) {
     // Offer buttons tapped but not answered (lib/whatsapp/upsell.ts).
     let taps: string[] = [];
     try { taps = await answerMissedTaps(); } catch (e) { console.error("whatsapp missed taps", e); }
-    return NextResponse.json({ ...r, taps }, { status: r.ok ? 200 : 500 });
+    // «آخر فرصة» orders that never answered on WhatsApp (lib/whatsapp/silent-cancel.ts).
+    let silent: { business: string; cancelled: string[] }[] = [];
+    try { silent = await cancelSilentLastChance(); } catch (e) { console.error("whatsapp silent cancel", e); }
+    return NextResponse.json({ ...r, taps, silent }, { status: r.ok ? 200 : 500 });
 }
 
 export async function POST(request: Request) {

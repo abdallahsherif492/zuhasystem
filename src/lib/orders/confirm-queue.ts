@@ -141,17 +141,20 @@ export function whatsappFromOther(o: QueueOrder, me: string | null | undefined):
  * What to do with the order now: the thing to do first (`title`), then what
  * to do if it does not work (`detail`).
  */
-export function instructionFor(o: QueueOrder, me: string | null | undefined, opts: { missed?: boolean } = {}, now = Date.now()): { title: string; detail: string } {
+/** `manual`: the business has no WhatsApp number connected, so the moderator sends the WhatsApp from their own phone. */
+export function instructionFor(o: QueueOrder, me: string | null | undefined, opts: { missed?: boolean; manual?: boolean } = {}, now = Date.now()): { title: string; detail: string } {
     const step = stepOf(o, now);
     // Steps 2 and 3 always start from the WhatsApp: whoever sent it is asked
     // first, or, when nobody is known to have, the moderator checks it.
     const other = whatsappFromOther(o, me);
     const checkWa = other
         ? `اسأل ${shortName(other)} العميل ردّ على الواتساب اللي بعتهوله ولا لأ.`
+        : opts.manual ? "شوف العميل ردّ على الواتساب اللي اتبعتله ولا لأ."
         : "شوف العميل ردّ على رسالة الواتساب ولا لأ (السطر الأخضر في الكارت).";
     const ifNot = step === 3
         ? "لو مردش، اتصل بيه مرتين. لو مفيش رد، الغي الأوردر."
         : step === 2 ? "لو مردش، اتصل بيه مرتين. لو مفيش رد، اختار «مردش تاني»."
+        : opts.manual ? "لو مردش، ابعتله رسالة التأكيد من زرار «واتساب» واختار «مردش»."
         : "لو مردش، اختار «مردش». رسالة التأكيد بتوصله لوحدها من رقم الشركة، ولو ردّ عليها هتشوفها هنا.";
 
     // After a call the instruction itself asks for: what if nobody answers.

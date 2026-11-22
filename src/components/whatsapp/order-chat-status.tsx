@@ -22,6 +22,8 @@ export interface ChatState {
     lastAt: string;
     /** Customer messages since our last reply. */
     waiting: number;
+    /** When the customer last wrote (or tapped a button). */
+    lastInAt: string | null;
     confirmSentAt: string | null;
     confirmStatus: string | null;
     /** The confirmation failed because the number has no WhatsApp. */
@@ -52,12 +54,13 @@ export function useChatStates(businessId: string | undefined, phones?: (string |
         const apply = (m: Msg, isNew = true) => {
             if (m.type === "reaction") return;
             const key = last10(m.customer_phone);
-            const s = out.get(key) || { phone: m.customer_phone, lastDirection: m.direction, lastAt: m.sent_at, waiting: 0, confirmSentAt: null, confirmStatus: null, noWhatsApp: false, lastTemplate: null };
+            const s = out.get(key) || { phone: m.customer_phone, lastDirection: m.direction, lastAt: m.sent_at, waiting: 0, lastInAt: null, confirmSentAt: null, confirmStatus: null, noWhatsApp: false, lastTemplate: null };
             if (isNew && (m.sent_at >= s.lastAt || !out.has(key))) {
                 s.waiting = m.direction === "in" ? (s.lastDirection === "in" && out.has(key) ? s.waiting + 1 : 1) : 0;
                 s.lastDirection = m.direction;
                 s.lastAt = m.sent_at;
             }
+            if (m.direction === "in" && (!s.lastInAt || m.sent_at > s.lastInAt)) s.lastInAt = m.sent_at;
             const failedNoWa = m.status === "failed" && JSON.stringify(m.error || "").includes("131026");
             const ev = m.event ?? m.payload?.event ?? null;
             // A template picked in the settings is known by the case it was sent for.

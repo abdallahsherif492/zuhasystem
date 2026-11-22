@@ -181,6 +181,20 @@ export function WhatsAppTemplatesAndRules({ businessId, manager, owner = false }
                                 <p className="mt-2 text-xs text-muted-foreground">الأوردر اللي داخل في الشروط دي مابيتلغيش لوحده: بيفضل ومكتوب عليه إن العميل عايز يلغي عشان المودريتور يكلمه. مثلاً: قيمة الأوردر أكتر من 1500.</p>
                             </div>
                         )}
+                        <label className="flex items-start justify-between gap-4 border-t pt-4">
+                            <span>
+                                <span className="block font-semibold">«آخر فرصة» اللي مردش على الواتساب يتلغى لوحده</span>
+                                <span className="block text-sm text-muted-foreground">لو الأوردر وصل «آخر فرصة» في صفحة التأكيدات، ورسالة التأكيد وصلت للعميل وماردّش عليها خالص، بيتلغى «مابيردش» بعد المدة دي من آخر رسالة. اللي رقمه مش عليه واتساب مابيتلغيش (بيروح «للاتصال»)، واستثناءات الإلغاء اللي فوق مابتتلغيش.</span>
+                            </span>
+                            <Switch checked={settings.auto_cancel_silent} onCheckedChange={v => set({ auto_cancel_silent: v })} disabled={!manager} />
+                        </label>
+                        {settings.auto_cancel_silent && (
+                            <div className="max-w-xs space-y-1.5">
+                                <Label>بعد كام ساعة من آخر رسالة</Label>
+                                <Input type="number" min={1} max={72} value={settings.auto_cancel_silent_hours} disabled={!manager}
+                                    onChange={e => set({ auto_cancel_silent_hours: Math.min(72, Math.max(1, Number(e.target.value) || 24)) })} />
+                            </div>
+                        )}
                         <div className="grid gap-3 sm:grid-cols-3">
                             <div className="space-y-1.5"><Label>الديبوزت (جنيه)</Label><Input type="number" min={0} value={settings.deposit_amount} disabled={!manager} onChange={e => set({ deposit_amount: Number(e.target.value) || 0 })} /></div>
                             <div className="space-y-1.5"><Label>رقم انستا باي</Label><Input dir="ltr" value={settings.deposit_instapay} disabled={!manager} onChange={e => set({ deposit_instapay: e.target.value })} /></div>

@@ -46,7 +46,32 @@ const CONFIRM_V2_BODY = [
     "⏳ الطلب مش هيتشحن غير بعد تأكيدك.",
 ].join("\n");
 
+/**
+ * The reminder to a customer who has not confirmed: the same order details
+ * and pictures as the confirmation, and plainly what happens otherwise (an
+ * unconfirmed order is cancelled, by hand or on its own).
+ */
+const REMINDER_V2_BODY = [
+    "يا {{1}}، طلبك لسه مستني تأكيدك ⏳",
+    "",
+    "🛍️ *طلبك:* {{2}}",
+    "💵 *هتدفع عند الاستلام:* {{3}} جنيه",
+    "",
+    "مش هنقدر نجهّز الطلب ولا نشحنه غير بعد تأكيدك.",
+    "✅ دوس «تأكيد الطلب» وهنبدأ نجهّزه على طول.",
+    "✏️ عايز تغيّر حاجة؟ دوس «تعديل الطلب».",
+    "",
+    "⚠️ لو الطلب ماتأكدش، هيتلغي تلقائي.",
+].join("\n");
+
 export const TEMPLATES: TemplateDef[] = [
+    {
+        name: "confirmation_reminder_v2", purpose: "تذكير بالتأكيد: بصور المنتجات والمبلغ، وإن الطلب هيتلغي لو ماتأكدش",
+        body: REMINDER_V2_BODY,
+        example: ["ساره", "مطحنة بن وتوابل (عدد 1)، طقم بلانشات خشب (عدد 2)", "655"],
+        buttons: ["تأكيد الطلب", "تعديل الطلب", "إلغاء الطلب"],
+        imageHeader: true,
+    },
     {
         name: "order_confirm_v2", purpose: "أوردر جديد: تأكيد واضح بصور كل المنتجات والعنوان، وزرار تعديل",
         body: CONFIRM_V2_BODY,

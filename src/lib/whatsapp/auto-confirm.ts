@@ -238,7 +238,7 @@ async function confirm(businessId: string, m: Incoming, s: WhatsAppSettings) {
     // Only an answer to a confirmation template counts as confirming.
     const { count: asked } = await admin.from("whatsapp_messages").select("id", { count: "exact", head: true })
         .eq("order_id", orderId).eq("direction", "out")
-        .or(`template_name.in.(${[...CONFIRM_TEMPLATES, "confirmation_reminder"].join(",")}),payload->>event.in.(confirm,reminder)`);
+        .or(`template_name.in.(${[...CONFIRM_TEMPLATES, "confirmation_reminder", "confirmation_reminder_v2"].join(",")}),payload->>event.in.(confirm,reminder)`);
     if (!asked) return;
     const order = await waitingOrder(businessId, orderId);
     if (!order) return;

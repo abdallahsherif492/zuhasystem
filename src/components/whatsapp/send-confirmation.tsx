@@ -20,6 +20,18 @@ function isConnected(businessId: string) {
         .then(r => r.json()).then(b => !!b.connected).catch(() => false);
     return connected[businessId];
 }
+/** Whether the business sends from a connected WhatsApp number (null while checking). */
+export function useWhatsAppConnected(businessId: string | undefined): boolean | null {
+    const [state, setState] = useState<{ id: string; ok: boolean } | null>(null);
+    useEffect(() => {
+        if (!businessId) return;
+        let gone = false;
+        isConnected(businessId).then(ok => { if (!gone) setState({ id: businessId, ok }); });
+        return () => { gone = true; };
+    }, [businessId]);
+    return businessId && state?.id === businessId ? state.ok : null;
+}
+
 /** For tests and after connecting a number. */
 export const forgetWhatsAppConnection = () => { connected = {}; };
 

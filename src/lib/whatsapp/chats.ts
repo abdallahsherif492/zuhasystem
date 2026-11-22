@@ -49,7 +49,7 @@ export interface Chat {
     topic: "confirm" | "shipping" | null;
 }
 
-const CONFIRM = new Set(["order_confirm_v2", "order_confirm", "order_confirm_photo", "order_confirmation", "confirmation_reminder"]);
+const CONFIRM = new Set(["order_confirm_v2", "order_confirm", "order_confirm_photo", "order_confirmation", "confirmation_reminder", "confirmation_reminder_v2"]);
 const SHIPPING_PROBLEM = new Set(["delivery_failed", "delivery_failed_photo", "order_returning", "order_returning_photo"]);
 
 const DAY = 24 * 3_600_000;
@@ -99,7 +99,7 @@ export const QUICK_REPLIES = [
     "تحت أمرك في أي وقت 🌸",
 ];
 
-const TOPIC_CONFIRM = new Set(["order_confirm_v2", "order_confirm", "order_confirm_photo", "order_confirmation", "confirmation_reminder"]);
+const TOPIC_CONFIRM = new Set(["order_confirm_v2", "order_confirm", "order_confirm_photo", "order_confirmation", "confirmation_reminder", "confirmation_reminder_v2"]);
 const TOPIC_SHIPPING = new Set(["delivery_failed", "delivery_failed_photo", "order_returning", "order_returning_photo"]);
 const topicOf = (m: Pick<WaMessage, "template_name" | "payload">): Chat["topic"] => {
     const ev = m.payload?.event || "";

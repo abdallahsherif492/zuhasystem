@@ -4,13 +4,14 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useBusiness } from "@/contexts/BusinessContext";
 import { ShippingChatStatus, chatStateOf, useChatStates } from "@/components/whatsapp/order-chat-status";
+import { useWhatsAppConnected } from "@/components/whatsapp/send-confirmation";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { formatCurrency, cn, normalizeSearchText } from "@/lib/utils";
 import { Card, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
-    Loader2, LifeBuoy, Phone, Search, RefreshCw,
+    Loader2, LifeBuoy, Phone, Search, RefreshCw, MessageCircle,
     ChevronDown, Clock, Download, PhoneCall, PhoneMissed, PhoneOff, ClipboardCheck,
 } from "lucide-react";
 import * as XLSX from "xlsx";
@@ -19,7 +20,7 @@ import { format } from "date-fns";
 import { ago } from "@/components/orders/confirmation-attempts";
 import {
     FOLLOW_TABS, FOLLOW_TONE, FollowupRecorder, OrderBrief, byUrgency, loadOrderBriefs, type OrderBriefData, dayLabel, followChip, followDueAt, followStateOf, isFailed, outcomeLabel,
-    phoneNumbers, quickFollowup, todayStr, type Followup, type FollowState, type Issue,
+    phoneNumbers, quickFollowup, todayStr, waLink, type Followup, type FollowState, type Issue,
 } from "@/components/logistics/shipping-followup";
 
 const BUCKETS = [
@@ -57,6 +58,8 @@ export default function ShippingIssuesPage() {
     // Worked out again each minute, so a retry whose time comes moves to "today".
     const [now, setNow] = useState(() => Date.now());
     const chatStates = useChatStates(activeBusiness?.id, rows.map(r => r.customer_phone));
+    // No WhatsApp number connected: the customer's chat opens in the moderator's own WhatsApp instead.
+    const manualWhatsApp = useWhatsAppConnected(activeBusiness?.id) === false;
     useEffect(() => {
         const timer = setInterval(() => setNow(Date.now()), 60_000);
         return () => clearInterval(timer);
@@ -473,7 +476,7 @@ export default function ShippingIssuesPage() {
                                         </p>
                                     )}
 
-                                    {activeBusiness && (
+                                    {activeBusiness && !manualWhatsApp && (
                                         <ShippingChatStatus state={chatStateOf(chatStates, r.customer_phone)} phone={phones[0] || r.customer_phone} now={now}
                                             businessId={activeBusiness.id} orderId={r.order_id}
                                             kind={r.bucket === "hold" ? "hold" : r.bucket === "returning" ? "returning" : null} />
@@ -488,6 +491,12 @@ export default function ShippingIssuesPage() {
                                                     <a href={`tel:${num}`}><Phone /><span>{num}</span></a>
                                                 </Button>
                                             ))}
+                                            {manualWhatsApp && phones.map(waLink).find(Boolean) && (
+                                                <Button asChild variant="outline"
+                                                    className={cn("h-12 gap-1.5 border-emerald-500/40 text-base text-emerald-700 hover:bg-emerald-500/10 dark:text-emerald-400 sm:min-w-32 [&_svg]:size-5", phones.length % 2 === 0 && "col-span-2")}>
+                                                    <a href={phones.map(waLink).find(Boolean)!} target="_blank" rel="noopener noreferrer"><MessageCircle /><span>واتساب</span></a>
+                                                </Button>
+                                            )}
                                         </div>
                                     )}
 

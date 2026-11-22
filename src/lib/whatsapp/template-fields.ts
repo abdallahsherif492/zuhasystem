@@ -39,6 +39,7 @@ export const BUILTIN_PARAMS: Record<string, FieldKey[]> = {
     order_delivered: ["first_name", "store"],
     order_delivered_photo: ["first_name", "store"],
     confirmation_reminder: ["first_name", "items"],
+    confirmation_reminder_v2: ["first_name", "items", "due"],
 };
 
 /** Editor text → Meta's body ({{n}}), which detail each number is, and the examples Meta asks for. Unknown {words} are an error. */
@@ -67,7 +68,7 @@ export function fromMetaBody(body: string, params: string[] | undefined): string
 export type MessageCase = "confirm" | "reminder" | "confirmed" | "shipped" | "hold" | "returning" | "delivered";
 export const CASES: { key: MessageCase; label: string; builtin: string }[] = [
     { key: "confirm", label: "رسالة التأكيد (أوردر جديد)", builtin: "order_confirm_v2 ← order_confirm_photo ← order_confirm" },
-    { key: "reminder", label: "تذكير بالتأكيد (من الأتمتة)", builtin: "confirmation_reminder" },
+    { key: "reminder", label: "تذكير بالتأكيد (من الأتمتة)", builtin: "confirmation_reminder_v2 ← confirmation_reminder" },
     { key: "confirmed", label: "المودريتور أكد الأوردر", builtin: "order_confirmed" },
     { key: "shipped", label: "الأوردر اتشحن", builtin: "order_shipped" },
     { key: "hold", label: "المندوب ماقدرش يوصله", builtin: "delivery_failed_photo ← delivery_failed" },

@@ -65,7 +65,7 @@ export async function sendOrderMessage(businessId: string, orderId: string, kind
     const theCase: MessageCase = kind === "new_order" ? "confirm" : kind;
     const builtins: Record<MessageCase, string[]> = {
         confirm: ["order_confirm_v2", "order_confirm_photo", "order_confirm", "order_confirmation"],
-        reminder: ["confirmation_reminder"],
+        reminder: ["confirmation_reminder_v2", "confirmation_reminder"],
         confirmed: ["order_confirmed"],
         shipped: ["order_shipped"],
         hold: ["delivery_failed_photo", "delivery_failed"],

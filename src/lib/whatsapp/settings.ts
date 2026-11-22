@@ -12,6 +12,9 @@ export interface WhatsAppSettings {
     /** A customer's «إلغاء الطلب» cancels the order at once (else it waits for a moderator); except these. */
     auto_cancel: boolean;
     auto_cancel_rule: OrderRule;
+    /** «آخر فرصة» orders that never answered the confirmation on WhatsApp are cancelled, this many hours after it (lib/whatsapp/silent-cancel.ts). */
+    auto_cancel_silent: boolean;
+    auto_cancel_silent_hours: number;
     deposit_amount: number;
     deposit_instapay: string;
     deposit_wallet: string;
@@ -46,6 +49,8 @@ export const WHATSAPP_DEFAULTS: WhatsAppSettings = {
     auto_confirm_rule: { match: "all", conditions: [] },
     auto_cancel: true,
     auto_cancel_rule: { match: "all", conditions: [] },
+    auto_cancel_silent: true,
+    auto_cancel_silent_hours: 24,
     deposit_amount: 50,
     deposit_instapay: "01011690491",
     deposit_wallet: "01100354568",

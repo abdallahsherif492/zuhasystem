@@ -250,7 +250,7 @@ function Chats() {
                                         </span>
                                         <span className="mt-0.5 flex items-center justify-between gap-2">
                                             <span className="flex min-w-0 items-center gap-1 text-sm text-muted-foreground">
-                                                {c.last.direction === "out" && <Ticks status={c.last.status} />}
+                                                {c.last.direction === "out" && c.last.type !== "note" && <Ticks status={c.last.status} />}
                                                 <span className="truncate">{preview(c.last)}</span>
                                             </span>
                                             {unreadNow
@@ -379,6 +379,19 @@ function ChatView({ phone, chat, messages, loading, businessId, me, now, others,
         setConfirmDelete(false);
         toast.success(`الشات اتمسح (${body.deleted} رسالة).`);
         onDeleted();
+    };
+
+    // «العميل مش محتاج رد»: out of «مستنيين رد» without sending anything (api/whatsapp/no-reply).
+    const waiting = (chat?.waiting ?? 0) > 0;
+    const [dismissing, setDismissing] = useState(false);
+    const noReplyNeeded = async () => {
+        setDismissing(true);
+        const res = await fetch("/api/whatsapp/no-reply", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ business_id: businessId, customer_phone: phone }) }).catch(() => null);
+        const body = await res?.json().catch(() => ({})) ?? {};
+        setDismissing(false);
+        if (!res?.ok) { toast.error(body.error || "ماتسجلش، جرّب تاني."); return; }
+        if (body.message) onSent(body.message as WaMessage);
+        toast.success("اتشال من «مستنيين رد». لو العميل كتب تاني هيرجع.");
     };
 
     const markUnread = async () => {
@@ -560,6 +573,13 @@ function ChatView({ phone, chat, messages, loading, businessId, me, now, others,
                     </div>
                 </div>
                 <div className="flex shrink-0 items-center">
+                    {waiting && (
+                        <Button variant="outline" size="sm" className="me-1 h-9 gap-1.5 px-2.5 text-xs font-semibold sm:text-sm" onClick={noReplyNeeded} disabled={dismissing}
+                            title="العميل مش محتاج رد: يتشال من «مستنيين رد» من غير ما يتبعتله حاجة">
+                            {dismissing ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCheck className="h-4 w-4" />}
+                            <span>مش محتاج رد</span>
+                        </Button>
+                    )}
                     <Button variant="ghost" size="icon" className="h-10 w-10" onClick={markUnread} aria-label="علّمها غير مقروءة" title="علّمها غير مقروءة"><MessageSquareDot className="h-5 w-5" /></Button>
                     <Button asChild variant="ghost" size="icon" className="h-10 w-10" aria-label="اتصل"><a href={telLink(phone)}><Phone className="h-5 w-5" /></a></Button>
                     {owner && (
@@ -858,6 +878,17 @@ function Bubble({ m, tail, businessId, me, quoted, reaction, onReply }: {
     m: WaMessage; tail: boolean; businessId: string; me: string | null; quoted?: WaMessage; reaction?: string; onReply: () => void;
 }) {
     const out = m.direction === "out";
+    if (m.type === "note") {
+        // Our own mark in the chat (never sent): who said it needs no reply, and when.
+        const by = String((m.payload as { by?: string } | null)?.by || "").split("@")[0];
+        return (
+            <div className="my-2 flex justify-center">
+                <span className="inline-flex items-center gap-1.5 rounded-lg bg-[#e1f2fb] px-3 py-1 text-xs text-[#54656f] shadow-sm dark:bg-[#182229] dark:text-[#8696a0]">
+                    <CheckCheck className="h-3.5 w-3.5" />{by ? `${by}: ` : ""}{m.body || "مش محتاج رد"} · {new Date(m.sent_at).toLocaleTimeString("ar-EG", { hour: "numeric", minute: "2-digit" })}
+                </span>
+            </div>
+        );
+    }
     const media = m.media_id ? `/api/whatsapp/media/${m.media_id}?business_id=${businessId}` : null;
     const header = m.payload?.header_image || null;
     const headers = m.payload?.header_images || [];
