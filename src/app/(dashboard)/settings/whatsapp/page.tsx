@@ -62,7 +62,7 @@ export default function WhatsAppSettingsPage() {
     };
 
     return (
-        <div dir="rtl" className="mx-auto max-w-6xl space-y-4 p-4 sm:p-6">
+        <div dir="rtl" className="mx-auto w-full min-w-0 max-w-6xl space-y-4 p-4 sm:p-6">
             <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="min-w-0">
                     <h1 className="flex items-center gap-2 text-2xl font-bold"><MessageCircle className="h-6 w-6 text-emerald-600" />واتساب السيستم</h1>

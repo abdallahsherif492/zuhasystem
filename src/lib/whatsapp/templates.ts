@@ -66,6 +66,12 @@ const REMINDER_V2_BODY = [
 
 export const TEMPLATES: TemplateDef[] = [
     {
+        // To a moderator, not a customer: forwarded by them to the courier's group (lib/whatsapp/team-alerts.ts).
+        name: "team_shipping_update", purpose: "للمودريتور: رد العميل على متابعة الشحن، جاهز يتبعت لجروب شركة الشحن",
+        body: "📦 *متابعة شحنة: {{1}}*\nالبوليصة: {{2}}\nكود الأوردر: {{3}}\nالعميل: {{4}}\n\n{{5}}\n\n💬 ردود العميل: {{6}}\n\nبرجاء التنفيذ في أسرع وقت 🙏",
+        example: ["تيليغراف", "123456789", "24B4EF7B", "ساره — 01012345678 — الجيزة", "⛔ العميل مش عايز الشحنة: برجاء إيقاف أي محاولات عليها ورجوعها مرتجع بسرعة.", "«مش عايزه» ← «مش هكون موجودة الأسبوع ده»"],
+    },
+    {
         name: "confirmation_reminder_v2", purpose: "تذكير بالتأكيد: بصور المنتجات والمبلغ، وإن الطلب هيتلغي لو ماتأكدش",
         body: REMINDER_V2_BODY,
         example: ["ساره", "مطحنة بن وتوابل (عدد 1)، طقم بلانشات خشب (عدد 2)", "655"],

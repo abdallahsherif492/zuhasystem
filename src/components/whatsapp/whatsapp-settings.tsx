@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Ban, Bot, FileText, Gift, Send, Zap } from "lucide-react";
+import { Ban, Bot, FileText, Gift, Send, Truck, Zap } from "lucide-react";
 import { BlockedList } from "@/components/whatsapp/blocked-list";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { WhatsAppBulkSend } from "@/components/whatsapp/bulk-send";
@@ -18,6 +18,7 @@ import { TemplatesManager, type MetaTemplate } from "@/components/whatsapp/templ
 import { CASES, type MessageCase } from "@/lib/whatsapp/template-fields";
 import { UpsellSettings } from "@/components/whatsapp/upsell-settings";
 import { OfferResults } from "@/components/whatsapp/offer-results";
+import { TeamAlertsSettings } from "@/components/whatsapp/team-alerts-settings";
 import { CONFIRM_TEMPLATES, ORDER_EVENTS, whatsappSettingsOf, type WhatsAppSettings } from "@/lib/whatsapp/settings";
 
 /**
@@ -37,6 +38,7 @@ export function WhatsAppTemplatesAndRules({ businessId, manager, owner = false }
         { key: "templates", label: "القوالب", icon: FileText },
         { key: "flows", label: "الأتمتة", icon: Zap },
         { key: "offers", label: "العروض والنتايج", icon: Gift },
+        { key: "team", label: "فريق الشحن", icon: Truck },
         ...(manager ? [{ key: "bulk", label: "إرسال للقديم", icon: Send }] : []),
         ...(owner ? [{ key: "blocked", label: "المتبلّكين", icon: Ban }] : []),
     ];
@@ -107,7 +109,7 @@ export function WhatsAppTemplatesAndRules({ businessId, manager, owner = false }
 
     // In tabs: the page was nine sections one under the other.
     return (
-        <Tabs value={tab} onValueChange={pickTab} dir="rtl" className="space-y-4">
+        <Tabs value={tab} onValueChange={pickTab} dir="rtl" className="min-w-0 space-y-4">
             <TabsList className="flex h-auto w-full justify-start gap-1 overflow-x-auto bg-muted/60 p-1 [scrollbar-width:none]">
                 {TABS.map(t => (
                     <TabsTrigger key={t.key} value={t.key} className="shrink-0 gap-1.5 px-3 py-2 text-sm data-[state=active]:font-bold">
@@ -231,6 +233,13 @@ export function WhatsAppTemplatesAndRules({ businessId, manager, owner = false }
                 <UpsellSettings businessId={businessId} value={settings.upsell} manager={manager} saving={saving}
                     onChange={upsell => set({ upsell })} onSave={save} />
             )}
+            </TabsContent>
+
+            <TabsContent value="team" className="mt-0">
+                {settings && (
+                    <TeamAlertsSettings businessId={businessId} value={settings.team_alerts} manager={manager} saving={saving}
+                        onChange={team_alerts => set({ team_alerts })} onSave={save} />
+                )}
             </TabsContent>
 
             {owner && (

@@ -30,7 +30,12 @@ export interface WhatsAppSettings {
     templates: Record<string, SavedTemplate>;
     /** The template chosen for each automatic case; none: the system's own. */
     case_templates: Partial<Record<MessageCase, string>>;
+    /** «فريق الشحن»: a customer's answers to a shipping message go to a moderator on shift, ready to forward to the courier (lib/whatsapp/team-alerts.ts). */
+    team_alerts: { enabled: boolean; members: TeamMember[] };
 }
+
+/** A moderator who forwards shipping answers to the courier: their WhatsApp number, and whether they get them. */
+export interface TeamMember { email: string; phone: string; on: boolean }
 
 export type OrderEvent = "new_order" | "confirmed" | "shipped" | "hold" | "returning" | "delivered";
 export const ORDER_EVENTS: { key: OrderEvent; label: string; template: string }[] = [
@@ -60,11 +65,13 @@ export const WHATSAPP_DEFAULTS: WhatsAppSettings = {
     upsell: { enabled: true, discount_percent: 10, count: 6, cheap_max: 150, offer_hours: 2 },
     templates: {},
     case_templates: {},
+    team_alerts: { enabled: false, members: [] },
 };
 
 export function whatsappSettingsOf(themeConfig: { whatsapp?: Partial<WhatsAppSettings> } | null | undefined): WhatsAppSettings {
     const saved = themeConfig?.whatsapp || {};
     return { ...WHATSAPP_DEFAULTS, ...saved, events: { ...WHATSAPP_DEFAULTS.events, ...(saved.events || {}) }, flows: Array.isArray(saved.flows) ? saved.flows : [], upsell: { ...WHATSAPP_DEFAULTS.upsell, ...(saved.upsell || {}) }, templates: saved.templates || {}, case_templates: saved.case_templates || {},
+        team_alerts: { enabled: !!saved.team_alerts?.enabled, members: Array.isArray(saved.team_alerts?.members) ? saved.team_alerts!.members : [] },
         auto_confirm_rule: { ...WHATSAPP_DEFAULTS.auto_confirm_rule, ...(saved.auto_confirm_rule || {}) },
         auto_cancel_rule: { ...WHATSAPP_DEFAULTS.auto_cancel_rule, ...(saved.auto_cancel_rule || {}) } };
 }

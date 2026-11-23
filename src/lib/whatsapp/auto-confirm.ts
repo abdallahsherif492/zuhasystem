@@ -5,6 +5,7 @@ import { orderExcepted, runReplyFlows } from "@/lib/whatsapp/flows";
 import { offerUpsell, upsellAnswer } from "@/lib/whatsapp/upsell";
 import { creditFollowUp } from "@/lib/whatsapp/credit";
 import { tappedButtonId } from "@/lib/whatsapp/chats";
+import { notifyTeamOfShippingReply } from "@/lib/whatsapp/team-alerts";
 import { CANCEL_CHOICES, CONFIRM_TEMPLATES, whatsappSettingsOf, type WhatsAppSettings } from "@/lib/whatsapp/settings";
 
 /**
@@ -29,7 +30,7 @@ const YES = /^(تأكيد|تاكيد|تأكيد الطلب|أكد|اكد|أأك�
 const EDIT = /^(تعديل الطلب|تعديل|عايز اعدل|عايزه اعدل|عاوز اعدل|اعدل)$/i;
 const CANCEL = /^(إلغاء الطلب|الغاء الطلب|إلغاء|الغاء|الغي|ألغي|cancel)$/i;
 
-interface Incoming { customer_phone: string; body: string | null; context_id: string | null; payload: unknown; wa_message_id?: string | null; sent_at?: string }
+interface Incoming { customer_phone: string; body: string | null; context_id: string | null; payload: unknown; wa_message_id?: string | null; sent_at?: string; type?: string }
 
 /** The order the customer is answering about: the message replied to, else our latest confirmation in 3 days. */
 async function orderAskedAbout(businessId: string, phone: string, contextId: string | null): Promise<string | null> {
@@ -66,6 +67,8 @@ async function log(businessId: string, orderId: string, change: string) {
 /** A customer's message: the built-in answers first, then the rules of «الأتمتة». */
 export async function handleReply(businessId: string, m: Incoming) {
     await builtIn(businessId, m);
+    // An answer to a shipping message: to a moderator on shift, for the courier (Settings → «فريق الشحن»).
+    try { await notifyTeamOfShippingReply(businessId, m); } catch (e) { console.error("whatsapp team alert", e); }
     try {
         const orderId = await orderAskedAbout(businessId, m.customer_phone, m.context_id);
         await runReplyFlows(businessId, orderId, m.customer_phone, m.body || "", m.wa_message_id || `${m.customer_phone}:${Date.now()}`);
