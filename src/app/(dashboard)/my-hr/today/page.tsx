@@ -10,9 +10,9 @@ import { cn } from "@/lib/utils";
 import { cairoDate } from "@/lib/cairo-day";
 import { Button } from "@/components/ui/button";
 import {
-    ATTENDANCE_LABEL, METRIC_LABEL, attendanceFor, clockingFor, dataSince, deductionFor, loadTargetData,
+    ATTENDANCE_LABEL, METRIC_LABEL, attendanceFor, clockingFor, dataSince, deductionFor, loadMonthStanding, loadTargetData,
     creditWindow, recentDays, scheduledShift, scoreDay, settingsOf,
-    type Attendance, type Clocking, type Member, type MetricKey, type MetricResult, type Scorecard, type TargetSettings,
+    type Attendance, type Clocking, type Member, type MetricKey, type MetricResult, type MonthStanding, type Scorecard, type TargetSettings,
 } from "@/lib/hr/daily-targets";
 
 /**
@@ -200,6 +200,8 @@ export default function MyDayPage() {
                 <p className="rounded-2xl border p-4 text-sm text-muted-foreground">النهارده إجازة معتمدة، مفيش تارجت.</p>
             )}
 
+            {measured && settings && businessId && email && <MyBonus businessId={businessId} email={email} settings={settings} />}
+
             <MonthSection pay={pay} commission={commission} past={past} measured={measured} />
 
             {measured && <HowItWorks settings={settings} />}
@@ -328,7 +330,7 @@ function countsSpan(card: Scorecard) {
 
 function TodayTargets({ card, settings, attendance, now }: { card: Scorecard; settings: TargetSettings; attendance: Attendance | null; now: number }) {
     const running = now < Date.parse(card.counts_until || card.shift_end);
-    const order: MetricKey[] = ["confirm", "messages", "followups", "rate"];
+    const order: MetricKey[] = ["confirm", "whatsapp", "messages", "followups"];
     const metrics = order.map(k => card.metrics.find(m => m.key === k)).filter(Boolean) as MetricResult[];
     const atRisk = metrics.filter(m => m.target !== null && !m.met).reduce((s, m) => s + deductionFor(settings, m.key), 0)
         + (attendance?.items.reduce((s, i) => s + i.amount, 0) || 0);
@@ -535,18 +537,19 @@ function HowItWorks({ settings: s }: { settings: TargetSettings }) {
     const lines = useMemo(() => {
         const out: string[] = [];
         out.push("بيتحسبلك كل شغلك في يوم الشيفت كله، مش ساعات الشيفت بس: من 12 بالليل لـ 12 بالليل. ولو شيفتك بيعدّي نص الليل: من بداية شيفتك لحد قبل بداية شيفتك اللي بعده بدقيقة.");
-        out.push(`سرعة التأكيد: أي أوردر من المتجر لازم يتشغل عليه خلال ${s.confirm_within_hours} ساعة من وصوله. «يتشغل عليه» يعني يتأكد، أو يتلغى، أو تسجّل عليه محاولة اتصال (مابيردش، كلّمني بعدين...). المطلوب منك نصيبك من الأوردرات اللي وصلت في شيفتك + اللي كانت مستنية من آخر ${s.backlog_days} يوم.`
+        out.push(`الاتصال باللي محتاجين اتصال: الأوردرات اللي رقمها مش عليه واتساب (تاب «للاتصال»)، أو رسالة التأكيد ماوصلتلهاش، أو العميل مردّش عليها بعد ${s.call_after_hours} ساعة. لازم يتشغل عليها خلال ${s.confirm_within_hours} ساعة: تأكيد، أو إلغاء، أو تسجّل اللي حصل في المكالمة (مابيردش، كلّمني بعدين...). المكالمة اللي ماتسجلتش مابتتحسبش. اللي بيتأكد أو بيتلغى لوحده من الواتساب مش محسوب على حد.`
             + (s.deduct_confirm > 0 ? ` لو قلّيت عن نصيبك: خصم ${egp(s.deduct_confirm)}.` : ""));
-        if (s.min_message_orders > 0) out.push(`أوردرات الرسايل: ${s.min_message_orders} أوردر على الأقل في الشيفت من الرسايل (فيسبوك، واتساب، إنستجرام) باسمك.` + (s.deduct_messages > 0 ? ` خصم ${egp(s.deduct_messages)} لو أقل.` : ""));
-        out.push(`متابعة الشحن: كل شحنة متعطلة (Returning، Hold to redeliver، أو Shipped من ${s.stale_days} أيام) لازم تتتابع كل ${s.followup_every_days} يوم من صفحة مشاكل الشحن، وعليك نصيبك منها.` + (s.deduct_followups > 0 ? ` خصم ${egp(s.deduct_followups)} لو أقل.` : ""));
-        if (s.min_confirm_rate > 0) out.push(`نسبة التأكيد: اللي اتأكد ÷ (اللي اتأكد + اللي اتلغى) لازم ${s.min_confirm_rate}% على الأقل، لو قفلت ${s.min_handled_for_rate} أوردر أو أكتر.` + (s.deduct_rate > 0 ? ` خصم ${egp(s.deduct_rate)} لو أقل.` : ""));
+        out.push("الرد على الواتساب: كل مرة عميل بيكتب ومفيش رد أوتوماتيك غطّاه، حد لازم يرد. نصيبك منها بيتحسب بردّك، أو بـ «مش محتاج رد» لو فعلاً مش محتاج. وسرعة ردك بتبان في التفاصيل."
+            + (s.deduct_whatsapp > 0 ? ` خصم ${egp(s.deduct_whatsapp)} لو أقل من نصيبك.` : ""));
+        if (s.min_message_orders > 0) out.push(`أوردرات الرسايل وميتا: ${s.min_message_orders} أوردر على الأقل في الشيفت من الرسايل (فيسبوك، إنستجرام، واتساب) تسجّلها من الأول باسمك.` + (s.deduct_messages > 0 ? ` خصم ${egp(s.deduct_messages)} لو أقل.` : ""));
+        out.push(`متابعة الشحن: كل شحنة متعطلة (Returning، Hold to redeliver، أو Shipped من ${s.stale_days} أيام) لازم تتتابع كل ${s.followup_every_days} يوم، وعليك نصيبك منها. بتتحسب لما تسجّل اللي حصل من صفحة مشاكل الشحن («مابيردش» بتتحسب)، أو تدوس «تم الإرسال لشركة الشحن» في الشات.` + (s.deduct_followups > 0 ? ` خصم ${egp(s.deduct_followups)} لو أقل.` : ""));
         const att: string[] = [];
         if (s.deduct_late > 0) att.push(`التأخير ${egp(s.deduct_late)}`);
         if (s.deduct_early > 0) att.push(`الخروج بدري ${egp(s.deduct_early)}`);
-        if (s.deduct_no_clockout > 0) att.push(`نسيان الانصراف ${egp(s.deduct_no_clockout)}`);
         if (s.deduct_no_clockin > 0) att.push(`الشغل من غير تسجيل حضور ${egp(s.deduct_no_clockin)}`);
         if (att.length) out.push(`الحضور: سجّل حضور وانصراف من الصفحة دي. فيه سماح ${s.grace_minutes} دقيقة، وبعدها الخصم: ${att.join("، ")}.`);
         if (s.monthly_cap) out.push(`أقصى خصم في الشهر ${egp(s.monthly_cap)}.`);
+        if (s.bonus_amount > 0) out.push(`المكافأة الشهرية ${egp(s.bonus_amount)}: لو حققت كل التارجت في ${s.bonus_days_pct}% من أيامك على الأقل، و${s.bonus_delivery_rate}% أو أكتر من الأوردرات اللي أكدتها اتسلمت. بتنزل في مرتبك أول الشهر اللي بعده.`);
         return out;
     }, [s]);
     return (
@@ -560,6 +563,39 @@ function HowItWorks({ settings: s }: { settings: TargetSettings }) {
                     {lines.map(l => <li key={l}>{l}</li>)}
                 </ul>
             )}
+        </section>
+    );
+}
+
+/** This month so far: am I on course for the bonus, and what is still missing. */
+function MyBonus({ businessId, email, settings }: { businessId: string; email: string; settings: TargetSettings }) {
+    const [me, setMe] = useState<MonthStanding | null>(null);
+    useEffect(() => {
+        let gone = false;
+        loadMonthStanding(supabase, businessId, cairoDate(), { ...settings, members: [email.toLowerCase()] })
+            .then(rows => { if (!gone) setMe(rows[0] || null); }).catch(() => undefined);
+        return () => { gone = true; };
+    }, [businessId, email, settings]);
+    if (!me || !(Number(settings.bonus_amount) > 0)) return null;
+    return (
+        <section className={cn("space-y-2 rounded-2xl border p-5", me.eligible ? "border-emerald-300 bg-emerald-50/60 dark:border-emerald-900 dark:bg-emerald-950/20" : "bg-card")}>
+            <div className="flex items-baseline justify-between gap-3">
+                <h2 className="text-base font-semibold">مكافأة الشهر</h2>
+                <span className={cn("text-sm font-semibold", me.eligible ? "text-emerald-700 dark:text-emerald-400" : "text-muted-foreground")}>
+                    {me.eligible ? `لحد دلوقتي تستاهلها: ${egp(Number(settings.bonus_amount))}` : egp(Number(settings.bonus_amount))}
+                </span>
+            </div>
+            <ul className="space-y-1.5 text-sm">
+                <li className="flex justify-between gap-3">
+                    <span>الأيام اللي حققت فيها كل التارجت</span>
+                    <span className="tabular-nums">{me.days_met} من {me.days} ({me.days_pct}%) · المطلوب {settings.bonus_days_pct}%</span>
+                </li>
+                <li className="flex justify-between gap-3">
+                    <span>اللي اتسلم من الأوردرات اللي أكدتها</span>
+                    <span className="tabular-nums">{me.delivery_rate === null ? `لسه (${me.delivered + me.came_back} ليهم نتيجة)` : `${me.delivery_rate}%`} · المطلوب {settings.bonus_delivery_rate}%</span>
+                </li>
+            </ul>
+            {!me.eligible && <p className="text-xs text-muted-foreground">الناقص: {me.notes.join(" · ")}</p>}
         </section>
     );
 }
