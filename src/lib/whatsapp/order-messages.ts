@@ -16,7 +16,7 @@ import { BUILTIN_PARAMS, type FieldKey, type MessageCase } from "@/lib/whatsapp/
 
 const ARABIC = /[؀-ۿ]/;
 
-interface OrderRow {
+export interface OrderRow {
     id: string; status: string; total_amount: number; paid_amount: number | null; courier_code: string | null;
     customer_info: { name?: string; phone?: string } | null;
     shipping_companies: { name: string | null } | null;
@@ -48,13 +48,36 @@ const ref = (o: OrderRow) => o.id.slice(0, 8).toUpperCase();
 
 export type OrderMessageKind = OrderEvent | "confirm" | "reminder";
 
+export const ORDER_SELECT = "id, status, total_amount, paid_amount, courier_code, customer_info, shipping_companies(name), order_items(quantity, unmapped_name, variants(title, products(name, description, image_url)))";
+
+/** Every detail a template can carry (lib/whatsapp/template-fields.ts) for one order; products' Arabic names only when asked (they may need translating). */
+export async function orderValues(o: OrderRow, store: string, withItems: boolean): Promise<Record<FieldKey, string>> {
+    const names = withItems ? await Promise.all((o.order_items || []).map(arabicName)) : [];
+    const info = (o.customer_info || {}) as { governorate?: string; address?: string };
+    return {
+        first_name: firstName(o),
+        items: cut((o.order_items || []).map((it, i) => `${names[i]} (عدد ${it.quantity || 1})`).join("، ") || "طلبك", 400),
+        due: due(o),
+        total: String(Math.round(Number(o.total_amount) || 0)),
+        ref: ref(o),
+        courier: o.shipping_companies?.name || "شركة الشحن",
+        tracking: o.courier_code || ref(o),
+        store,
+        governorate: info.governorate || "-",
+        // Kept short enough for the message (WhatsApp caps a template's text at 1024).
+        address: cut(info.address || "-", 160),
+    };
+}
+
+/** Every product's picture in the order, each product once. */
+export const orderImages = (o: OrderRow) => [...new Set((o.order_items || []).map(i => i.variants?.products?.image_url).filter((u): u is string => !!u))];
+
 export async function sendOrderMessage(businessId: string, orderId: string, kind: OrderMessageKind, sentBy: string, storeName?: string)
     : Promise<{ ok: true; message: unknown } | { ok: false; error: string }> {
     const account = await accountOf(businessId);
     if (!account) return { ok: false, error: "مفيش رقم واتساب متربط بالبيزنس ده." };
     const { data } = await admin.from("orders")
-        .select("id, status, total_amount, paid_amount, courier_code, customer_info, shipping_companies(name), order_items(quantity, unmapped_name, variants(title, products(name, description, image_url)))")
-        .eq("business_id", businessId).eq("id", orderId).maybeSingle();
+        .select(ORDER_SELECT).eq("business_id", businessId).eq("id", orderId).maybeSingle();
     const o = data as unknown as OrderRow | null;
     if (!o) return { ok: false, error: "الأوردر مش موجود." };
     const { data: biz } = await admin.from("businesses").select("name, theme_config").eq("id", businessId).maybeSingle();
@@ -76,24 +99,9 @@ export async function sendOrderMessage(businessId: string, orderId: string, kind
     const names2 = [...new Set([...(chosen ? [chosen] : []), ...builtins[theCase]])];
     // The products' Arabic names only when a template carries them (they may need translating).
     const needsItems = names2.some(n => (settings.templates[n]?.params || BUILTIN_PARAMS[n] || []).includes("items"));
-    const names = needsItems ? await Promise.all((o.order_items || []).map(arabicName)) : [];
-    const info = (o.customer_info || {}) as { governorate?: string; address?: string };
-    const values: Record<FieldKey, string> = {
-        first_name: firstName(o),
-        items: (o.order_items || []).map((it, i) => `${names[i]} (عدد ${it.quantity || 1})`).join("، ") || "طلبك",
-        due: due(o),
-        total: String(Math.round(Number(o.total_amount) || 0)),
-        ref: ref(o),
-        courier: o.shipping_companies?.name || "شركة الشحن",
-        tracking: o.courier_code || ref(o),
-        store: storeName || biz?.name || "Zuha Store",
-        governorate: info.governorate || "-",
-        // Kept short enough for the message (WhatsApp caps a template's text at 1024).
-        address: cut(info.address || "-", 160),
-    };
-    values.items = cut(values.items, 400);
+    const values = await orderValues(o, storeName || biz?.name || "Zuha Store", needsItems);
     // Every product's picture (each product once): one alone, or side by side in one picture.
-    const images = [...new Set((o.order_items || []).map(i => i.variants?.products?.image_url).filter((u): u is string => !!u))];
+    const images = orderImages(o);
     const image = images[0] || null;
     let collageId: string | null | undefined; // made once, only when a template with the products' picture is sent
 

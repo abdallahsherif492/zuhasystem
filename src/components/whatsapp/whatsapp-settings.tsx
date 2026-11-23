@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Ban, Bot, FileText, Gift, Send, Truck, Zap } from "lucide-react";
+import { Ban, Bot, FileText, Gift, Megaphone, Send, Truck, Zap } from "lucide-react";
 import { BlockedList } from "@/components/whatsapp/blocked-list";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { WhatsAppBulkSend } from "@/components/whatsapp/bulk-send";
@@ -19,6 +19,7 @@ import { CASES, type MessageCase } from "@/lib/whatsapp/template-fields";
 import { UpsellSettings } from "@/components/whatsapp/upsell-settings";
 import { OfferResults } from "@/components/whatsapp/offer-results";
 import { TeamAlertsSettings } from "@/components/whatsapp/team-alerts-settings";
+import { OrderCampaign } from "@/components/whatsapp/order-campaign";
 import { CONFIRM_TEMPLATES, ORDER_EVENTS, whatsappSettingsOf, type WhatsAppSettings } from "@/lib/whatsapp/settings";
 
 /**
@@ -39,7 +40,7 @@ export function WhatsAppTemplatesAndRules({ businessId, manager, owner = false }
         { key: "flows", label: "الأتمتة", icon: Zap },
         { key: "offers", label: "العروض والنتايج", icon: Gift },
         { key: "team", label: "فريق الشحن", icon: Truck },
-        ...(manager ? [{ key: "bulk", label: "إرسال للقديم", icon: Send }] : []),
+        ...(manager ? [{ key: "campaign", label: "ابعت لأوردرات", icon: Megaphone }, { key: "bulk", label: "إرسال للقديم", icon: Send }] : []),
         ...(owner ? [{ key: "blocked", label: "المتبلّكين", icon: Ban }] : []),
     ];
     const [tab, setTab] = useState(() => {
@@ -245,6 +246,12 @@ export function WhatsAppTemplatesAndRules({ businessId, manager, owner = false }
             {owner && (
                 <TabsContent value="blocked" className="mt-0">
                     <BlockedList businessId={businessId} />
+                </TabsContent>
+            )}
+
+            {manager && settings && (
+                <TabsContent value="campaign" className="mt-0">
+                    <OrderCampaign businessId={businessId} settings={settings} />
                 </TabsContent>
             )}
 
