@@ -1075,17 +1075,26 @@ function PlatformOrdersContent() {
         const tally: Record<string, number> = {};
         const errors = new Set<string>();
         setBulkProgress({ done: 0, total: ids.length });
-        for (let i = 0; i < ids.length; i += 10) {
-            const res = await fetch("/api/whatsapp/send-confirmations", {
-                method: "POST", headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ business_id: activeBusiness.id, order_ids: ids.slice(i, i + 10) }),
-            }).catch(() => null);
-            const body = await res?.json().catch(() => null) as { results?: { outcome: string; error?: string }[]; stopped?: string | null; error?: string } | null;
-            if (!res?.ok || !body?.results) { errors.add(body?.error || "الإرسال وقف، جرّب تاني."); break; }
-            for (const r of body.results) { tally[r.outcome] = (tally[r.outcome] || 0) + 1; if (r.error) errors.add(r.error); }
-            setBulkProgress({ done: Math.min(ids.length, i + 10), total: ids.length });
-            if (body.stopped) break;
-        }
+        // One order per request, three at a time: a message takes a few seconds
+        // (the products' picture is made and uploaded), and a request holding
+        // ten ran past the host's time limit, so the page said it had stopped
+        // while the messages were still going out.
+        const queue = ids.slice();
+        let done = 0, stopped = false;
+        const worker = async () => {
+            for (let id = queue.shift(); id && !stopped; id = queue.shift()) {
+                const res = await fetch("/api/whatsapp/send-confirmations", {
+                    method: "POST", headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ business_id: activeBusiness.id, order_ids: [id] }),
+                }).catch(() => null);
+                const body = await res?.json().catch(() => null) as { results?: { outcome: string; error?: string }[]; stopped?: string | null; error?: string } | null;
+                if (!res?.ok || !body?.results) { tally.failed = (tally.failed || 0) + 1; errors.add(body?.error || "واحد ماوصلش رد عليه من السيرفر، ممكن يكون اتبعت."); }
+                else for (const r of body.results) { tally[r.outcome] = (tally[r.outcome] || 0) + 1; if (r.error) errors.add(r.error); }
+                if (body?.stopped) stopped = true;
+                setBulkProgress({ done: ++done, total: ids.length });
+            }
+        };
+        await Promise.all([worker(), worker(), worker()]);
         setBulkProgress(null);
         setPicked(new Set());
         const said = [
