@@ -5,7 +5,7 @@ import { orderExcepted, runReplyFlows } from "@/lib/whatsapp/flows";
 import { offerUpsell, upsellAnswer } from "@/lib/whatsapp/upsell";
 import { creditFollowUp } from "@/lib/whatsapp/credit";
 import { tappedButtonId } from "@/lib/whatsapp/chats";
-import { notifyTeamOfShippingReply } from "@/lib/whatsapp/team-alerts";
+import { notifyTeamOfShippingReply, teamReady } from "@/lib/whatsapp/team-alerts";
 import { CANCEL_CHOICES, CONFIRM_TEMPLATES, whatsappSettingsOf, type WhatsAppSettings } from "@/lib/whatsapp/settings";
 
 /**
@@ -66,6 +66,8 @@ async function log(businessId: string, orderId: string, change: string) {
 
 /** A customer's message: the built-in answers first, then the rules of «الأتمتة». */
 export async function handleReply(businessId: string, m: Incoming) {
+    // A moderator's «جاهز» to the day's opening message: nothing else to do with it.
+    try { if (await teamReady(businessId, m)) return; } catch (e) { console.error("whatsapp team ready", e); }
     await builtIn(businessId, m);
     // An answer to a shipping message: to a moderator on shift, for the courier (Settings → «فريق الشحن»).
     try { await notifyTeamOfShippingReply(businessId, m); } catch (e) { console.error("whatsapp team alert", e); }

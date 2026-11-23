@@ -168,3 +168,100 @@ export async function notifyTeamOfShippingReply(businessId: string, m: Incoming,
 export function teamShippingText(p: string[]): string {
     return `📦 *متابعة شحنة: ${p[0]}*\nالبوليصة: ${p[1]}\nكود الأوردر: ${p[2]}\nالعميل: ${p[3]}\n\n${p[4]}\n\n💬 ردود العميل: ${p[5]}\n\nبرجاء التنفيذ في أسرع وقت 🙏`;
 }
+
+// ---------------------------------------------------------------------------
+// The day's opening message
+// ---------------------------------------------------------------------------
+
+/**
+ * Once a day, as a moderator's shift starts (they clock in, or the hour of
+ * their scheduled start comes), the team_shift_start template with a «جاهز»
+ * button. A template we send does not open WhatsApp's 24-hour window — only
+ * a message from them does — so their «جاهز» is what makes every shipping
+ * message after it that day free text instead of a paid template.
+ * Recorded as an out message to their number (payload.kind "team_start").
+ */
+const START_TEMPLATE = "team_shift_start";
+
+export async function sendShiftStart(businessId: string, email: string): Promise<"sent" | "skipped" | string> {
+    const { data: biz } = await admin.from("businesses").select("theme_config").eq("id", businessId).maybeSingle();
+    const team = whatsappSettingsOf(biz?.theme_config).team_alerts;
+    const member = team.enabled ? team.members.find(m => m.on && m.email.toLowerCase() === email.toLowerCase() && m.phone.replace(/\D/g, "").length >= 10) : null;
+    if (!member) return "skipped";
+    const to = waNumber(member.phone);
+    const local = /^20(1\d{9})$/.test(to) ? `0${to.slice(2)}` : member.phone;
+    // Once a day; and not when their window is already open (they wrote in the last 20 hours).
+    const since = new Date(Date.now() - 20 * 3_600_000).toISOString();
+    const [{ count: sentToday }, { count: wrote }] = await Promise.all([
+        admin.from("whatsapp_messages").select("id", { count: "exact", head: true }).eq("business_id", businessId).eq("customer_phone", local)
+            .eq("direction", "out").eq("template_name", START_TEMPLATE).gte("sent_at", since),
+        admin.from("whatsapp_messages").select("id", { count: "exact", head: true }).eq("business_id", businessId).eq("customer_phone", local)
+            .eq("direction", "in").gte("sent_at", since),
+    ]);
+    if (sentToday || wrote) return "skipped";
+    const account = await accountOf(businessId);
+    if (!account) return "skipped";
+    const names = (biz?.theme_config?.team_names || {}) as Record<string, string>;
+    const name = names[email.toLowerCase()] || email.split("@")[0];
+    const res = await graph(`${account.phone_number_id}/messages`, account.token, {
+        method: "POST",
+        body: JSON.stringify({ messaging_product: "whatsapp", to, type: "template",
+            template: { name: START_TEMPLATE, language: { code: "ar" }, components: [{ type: "body", parameters: [{ type: "text", text: name }] }] } }),
+    });
+    if (!res.ok) return sendError(res.body);
+    await admin.from("whatsapp_messages").insert({
+        business_id: businessId, phone_number_id: account.phone_number_id, wa_message_id: res.body?.messages?.[0]?.id || null,
+        direction: "out", customer_phone: local, customer_wa_id: res.body?.contacts?.[0]?.wa_id || to, type: "template",
+        template_name: START_TEMPLATE, body: `صباح الخير يا ${name} 👋 شيفتك بدأ…`, status: "pending", sent_by: "system",
+        payload: { kind: "team_start", buttons: ["جاهز"], params: [name] }, sent_at: new Date().toISOString(),
+    });
+    return "sent";
+}
+
+/**
+ * The hourly run: every moderator on the team list whose shift started in
+ * the last hour (clocked in, or scheduled) and who has not had the day's
+ * message. Clocking in sends it at once too (api/whatsapp/team-start).
+ */
+export async function sendDueShiftStarts(): Promise<string[]> {
+    const done: string[] = [];
+    const { data: businesses } = await admin.from("businesses").select("id, theme_config").not("theme_config->whatsapp->team_alerts", "is", null);
+    const hourAgo = Date.now() - 3_600_000;
+    for (const b of businesses || []) {
+        const team = whatsappSettingsOf(b.theme_config).team_alerts;
+        const on = team.enabled ? team.members.filter(m => m.on) : [];
+        if (!on.length) continue;
+        const emails = on.map(m => m.email);
+        const today = new Date().toLocaleDateString("en-CA", { timeZone: "Africa/Cairo" });
+        const [{ data: clocked }, { data: shifts }] = await Promise.all([
+            admin.from("attendance_logs").select("user_email, clock_in_time").eq("business_id", b.id).eq("date", today).in("user_email", emails),
+            admin.from("business_users").select("user_email, shift_start, weekend_days").eq("business_id", b.id).in("user_email", emails),
+        ]);
+        const now = new Date();
+        const minute = Number(cairo(now, { hour: "numeric", hour12: false })) % 24 * 60 + Number(cairo(now, { minute: "numeric" }));
+        const weekday = cairo(now, { weekday: "long" });
+        for (const m of on) {
+            const e = m.email.toLowerCase();
+            const clockIn = (clocked || []).find(c => c.user_email.toLowerCase() === e && Date.parse(c.clock_in_time) >= hourAgo);
+            const s = (shifts || []).find(x => x.user_email.toLowerCase() === e);
+            const start = minutesOf(s?.shift_start);
+            const startsNow = start !== null && !(s?.weekend_days || []).includes(weekday) && minute >= start && minute < start + 60;
+            if (!clockIn && !startsNow) continue;
+            const r = await sendShiftStart(b.id, e).catch(err => String(err));
+            if (r === "sent") done.push(e);
+        }
+    }
+    return done;
+}
+
+/** A moderator's «جاهز»: acknowledged (free inside the window it just opened), so their chat is not left waiting. */
+export async function teamReady(businessId: string, m: Incoming): Promise<boolean> {
+    if (plain(m.body || "") !== "جاهز") return false;
+    const { data: last } = await admin.from("whatsapp_messages").select("template_name")
+        .eq("business_id", businessId).eq("customer_phone", m.customer_phone).eq("direction", "out")
+        .order("sent_at", { ascending: false }).limit(1).maybeSingle();
+    if (last?.template_name !== START_TEMPLATE) return false;
+    const { say } = await import("@/lib/whatsapp/system-text");
+    await say(businessId, m.customer_phone, "تمام 👌 ردود العملاء على متابعة الشحن هتوصلك هنا النهارده، حوّلها لجروب شركة الشحن ودوس «تم الإرسال لشركة الشحن» في شات العميل.", null);
+    return true;
+}

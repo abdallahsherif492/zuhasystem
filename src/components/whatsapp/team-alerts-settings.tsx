@@ -68,7 +68,7 @@ export function TeamAlertsSettings({ businessId, value, onChange, onSave, saving
                 <p className="text-sm font-semibold">مين يستلم؟</p>
                 <p className="text-xs text-muted-foreground">
                     بتتقسم على اللي عامل تسجيل حضور دلوقتي؛ لو محدش، على اللي شيفته دلوقتي؛ ولو محدش خالص، على أي حد مفعّل. اللي استلم أقل النهارده بياخد الجاية، ونفس الأوردر بيروح لنفس المودريتور.
-                    لو المودريتور بعت أي رسالة لرقم الشركة في أول الشيفت، الرسايل اللي بتوصله بتبقى ببلاش طول اليوم.
+                    أول ما شيفت المودريتور يبدأ (يسجّل حضور، أو ييجي ميعاد شيفته) بتوصله رسالة واحدة فيها زرار «جاهز» (قالب بحوالي 0.2 جنيه). لما يدوس «جاهز»، كل الرسايل اللي بتوصله بعدها لمدة 24 ساعة بتبقى ببلاش. لو مادسش، كل رسالة بتتبعت كقالب مدفوع.
                 </p>
                 {!people ? (
                     <div className="flex justify-center p-6"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>

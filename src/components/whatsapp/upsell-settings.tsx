@@ -58,7 +58,7 @@ export function UpsellSettings({ businessId, value, onChange, onSave, saving, ma
                     </select>
                 </label>
                 <label className="space-y-1.5">
-                    <span className="text-sm font-semibold">العرض مفتوح لمدة</span>
+                    <span className="text-sm font-semibold">«عرض مفتوح» في صفحة التجهيز لمدة</span>
                     <span className="flex items-center gap-2">
                         <Input type="number" min={1} max={24} className="w-20" value={value.offer_hours} disabled={!manager}
                             onChange={e => onChange({ ...value, offer_hours: Math.min(24, Math.max(1, Number(e.target.value) || 2)) })} />ساعة

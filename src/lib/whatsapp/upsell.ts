@@ -20,6 +20,8 @@ const DAY = 86_400_000;
 /** From here «ضيفه لطلبي» asks first; before, it added at once. */
 const ASK_SINCE = Date.parse("2026-11-21T01:00:00Z");
 const ACTIVE = ["pending", "processing", "prepared"];
+/** A product can still be added while the order is not yet being prepared. */
+const EDITABLE = ["waiting", "pending"];
 
 interface Pick { variantId: string; productId: string; name: string; description: string | null; option: string | null; image: string; price: number; cost: number }
 
@@ -278,18 +280,12 @@ export async function upsellAnswer(businessId: string, phone: string, buttonId: 
     if (!orderId) return false;
     if (what === "no") { await say(businessId, phone, "ولا يهمك 🌸 طلبك هيتجهز ويتشحن قريب.", orderId); return true; }
     if ((what !== "add" && what !== "yes") || !variantId) return false;
-    const { data: biz } = await admin.from("businesses").select("theme_config").eq("id", businessId).maybeSingle();
-    const hours = whatsappSettingsOf(biz?.theme_config).upsell.offer_hours;
-
     // The price offered: a message of its own, or a card in the carousel.
     const { data: offers } = await admin.from("whatsapp_messages").select("payload, sent_at")
         .eq("order_id", orderId).eq("direction", "out").eq("payload->>kind", "upsell").order("sent_at", { ascending: false }).limit(20);
-    // The offer is open for `offer_hours` (2 by default); after that the order is final.
-    // «أيوه ضيفه» answers a question asked inside the window, so it is not held to it.
-    if (what === "add" && offers?.length && tappedAt - Date.parse(offers[0].sent_at) > hours * 3_600_000) {
-        await say(businessId, phone, "العرض ده خلص للأسف 🙏 طلبك اتجهز زي ما هو. لو حابب تطلب المنتج ده ابعتلنا هنا ونعملهولك في طلب جديد.", orderId);
-        return true;
-    }
+    // The offer stays open while the order is not yet being prepared (Waiting
+    // or Pending), however long ago it was sent; checked on the order below.
+    void tappedAt;
     let price = 0;
     for (const o of offers || []) {
         const pl = o.payload as { variant_id?: string; price?: number; cards?: { variant_id: string; price: number }[] } | null;
@@ -305,8 +301,11 @@ export async function upsellAnswer(businessId: string, phone: string, buttonId: 
         await say(businessId, phone, "المنتج ده موجود في طلبك بالفعل 🌸", orderId);
         return true;
     }
-    if (!ACTIVE.includes(String(order.status).toLowerCase()) || order.courier_code) {
-        await say(businessId, phone, "للأسف طلبك اتسلم لشركة الشحن خلاص 🙏 لو حابب ناخده في طلب جديد ابعتلنا هنا.", orderId);
+    const status = String(order.status).toLowerCase();
+    if (!EDITABLE.includes(status) || order.courier_code) {
+        await say(businessId, phone, ACTIVE.includes(status) && !order.courier_code
+            ? "للأسف طلبك دخل التجهيز خلاص 🙏 لو حابب ناخد المنتج ده في طلب جديد ابعتلنا هنا."
+            : "للأسف طلبك اتسلم لشركة الشحن خلاص 🙏 لو حابب ناخده في طلب جديد ابعتلنا هنا.", orderId);
         return true;
     }
     const { data: v } = await admin.from("variants").select("id, cost_price, products(name, description, image_url)").eq("id", variantId).eq("business_id", businessId).maybeSingle();
@@ -378,17 +377,12 @@ export async function answerMissedTaps(): Promise<string[]> {
         // Already in the order (added then, or by hand): nothing to say.
         const { count: inOrder } = await admin.from("order_items").select("id", { count: "exact", head: true }).eq("order_id", orderId).eq("variant_id", variantId);
         if (inOrder) continue;
-        if (what === "add") {
-            // Answered: a «أضيفه؟» for this product after the tap.
-            const { count } = await admin.from("whatsapp_messages").select("id", { count: "exact", head: true })
-                .eq("order_id", orderId).eq("direction", "out").eq("payload->>kind", "upsell_confirm").eq("payload->>variant_id", variantId).gte("sent_at", t.sent_at);
-            if (count) continue;
-        } else {
-            // Answered: a reply went out after the tap.
-            const { count: replied } = await admin.from("whatsapp_messages").select("id", { count: "exact", head: true })
-                .eq("order_id", orderId).eq("direction", "out").eq("sent_by", "system").gt("sent_at", t.sent_at);
-            if (replied) continue;
-        }
+        // Answered: anything the system sent on this order after the tap — the
+        // «أضيفه؟», or a «can't add it any more». (Only the «أضيفه؟» counted
+        // once, so a refusal was sent again every hour.)
+        const { count: replied } = await admin.from("whatsapp_messages").select("id", { count: "exact", head: true })
+            .eq("order_id", orderId).eq("direction", "out").eq("sent_by", "system").gt("sent_at", t.sent_at);
+        if (replied) continue;
         try {
             if (await upsellAnswer(t.business_id, t.customer_phone, id, Date.parse(t.sent_at))) done.push(`${what} ${orderId.slice(0, 8)}`);
         } catch (e) { console.error("missed offer tap", e); }

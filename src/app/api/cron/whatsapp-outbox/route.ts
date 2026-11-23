@@ -5,6 +5,7 @@ import { processOutbox } from "@/lib/whatsapp/outbox";
 import { runTimedFlows } from "@/lib/whatsapp/flows";
 import { answerMissedTaps } from "@/lib/whatsapp/upsell";
 import { cancelSilentLastChance } from "@/lib/whatsapp/silent-cancel";
+import { sendDueShiftStarts } from "@/lib/whatsapp/team-alerts";
 
 /**
  * Sends the queued WhatsApp messages (lib/whatsapp/outbox.ts).
@@ -28,7 +29,10 @@ export async function GET(request: Request) {
     // «آخر فرصة» orders that never answered on WhatsApp (lib/whatsapp/silent-cancel.ts).
     let silent: { business: string; cancelled: string[] }[] = [];
     try { silent = await cancelSilentLastChance(); } catch (e) { console.error("whatsapp silent cancel", e); }
-    return NextResponse.json({ ...r, taps, silent }, { status: r.ok ? 200 : 500 });
+    // The day's «جاهز» message to the shipping team whose shift just started.
+    let starts: string[] = [];
+    try { starts = await sendDueShiftStarts(); } catch (e) { console.error("whatsapp team starts", e); }
+    return NextResponse.json({ ...r, taps, silent, starts }, { status: r.ok ? 200 : 500 });
 }
 
 export async function POST(request: Request) {

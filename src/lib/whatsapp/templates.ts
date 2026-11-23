@@ -66,6 +66,14 @@ const REMINDER_V2_BODY = [
 
 export const TEMPLATES: TemplateDef[] = [
     {
+        // To a moderator once a day as their shift starts: their «جاهز» opens the 24-hour window,
+        // so the shipping answers sent to them that day are free text (lib/whatsapp/team-alerts.ts).
+        name: "team_shift_start", purpose: "للمودريتور أول الشيفت: «جاهز» عشان رسايل متابعة الشحن توصله ببلاش طول اليوم",
+        body: "صباح الخير يا {{1}} 👋\nشيفتك بدأ، والنهارده هتوصلك هنا ردود العملاء على رسايل متابعة الشحن عشان تحوّلها لجروب شركة الشحن.\nدوس «جاهز» عشان الرسايل توصلك طول اليوم.",
+        example: ["مريم"],
+        buttons: ["جاهز"],
+    },
+    {
         // To a moderator, not a customer: forwarded by them to the courier's group (lib/whatsapp/team-alerts.ts).
         name: "team_shipping_update", purpose: "للمودريتور: رد العميل على متابعة الشحن، جاهز يتبعت لجروب شركة الشحن",
         body: "📦 *متابعة شحنة: {{1}}*\nالبوليصة: {{2}}\nكود الأوردر: {{3}}\nالعميل: {{4}}\n\n{{5}}\n\n💬 ردود العميل: {{6}}\n\nبرجاء التنفيذ في أسرع وقت 🙏",

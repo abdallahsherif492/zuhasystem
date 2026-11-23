@@ -163,7 +163,11 @@ export default function MyDayPage() {
         });
         setBusy(false);
         if (error) toast.error(/duplicate/i.test(error.message) ? "انت مسجّل حضور النهارده بالفعل." : "الحضور ماتسجلش، جرّب تاني.");
-        else { toast.success(`اتسجل حضورك ${fmtTime(at.getTime())}`); setReload(n => n + 1); }
+        else {
+            toast.success(`اتسجل حضورك ${fmtTime(at.getTime())}`); setReload(n => n + 1);
+            // On the shipping team: the day's «جاهز» message on WhatsApp (api/whatsapp/team-start).
+            fetch("/api/whatsapp/team-start", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ business_id: businessId }) }).catch(() => undefined);
+        }
     }, [businessId, email, currentUser, member]);
 
     const clockOut = useCallback(async () => {
