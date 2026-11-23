@@ -8,6 +8,7 @@ import { logBusinessAction } from "@/lib/logs/actions-logger";
 import { orderLogName } from "@/lib/logs/order-log-name";
 import { bundleLabel, expandBundle, loadBundles, type Bundle, type BundleVariant } from "@/lib/bundles";
 import { itemsCost, type EditableItem, type EditableOrder, type OrderEditActions } from "@/components/orders/store-order-editor";
+import { creditAdder } from "@/lib/orders/credit-adder";
 
 /**
  * One order, editable with the same section as «New from stores»
@@ -149,6 +150,8 @@ export function useOrderEditor(businessId: string | undefined, orderId: string |
             }));
             await applyItemChange(items => [...items.filter(i => i.id !== replace?.id), ...added]);
             log("Bundle", replace ? replace.unmapped_name || "Unmapped Item" : null, bundleLabel(bundle, variant));
+            // Added, not a store line matched to its bundle: the order is theirs (commission).
+            if (!replace) creditAdder(businessId, orderId, userEmail).catch(() => null);
             toast.success(`اتضاف ${bundleLabel(bundle, variant)}`);
         },
         addVariant: async (_o, prod, vari) => {
@@ -162,6 +165,7 @@ export function useOrderEditor(businessId: string | undefined, orderId: string |
                 variants: { title: vari.title, sku: vari.sku || "", product_id: prod.id, products: { name: prod.name } },
             }]);
             log("Items", null, `+1 ${prod.name} (${vari.title})`);
+            creditAdder(businessId, orderId!, userEmail).catch(() => null);
             return true;
         },
         currentSubtotal: () => ref.current?.subtotal,

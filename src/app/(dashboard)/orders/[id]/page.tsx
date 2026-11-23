@@ -431,7 +431,8 @@ export default function OrderDetailsPage() {
                 subtotal: newSubtotal,
                 total_cost: newTotalCost,
                 channel: editForm.channel,
-                closed_by: editForm.closedBy,
+                // A product added by hand with no one credited: the order is theirs (commission).
+                closed_by: editForm.closedBy || (editItems.some(i => !i.id) && currentUser?.email ? currentUser.email : editForm.closedBy),
                 shipping_company_id: editForm.shippingCompanyId || null,
                 actual_shipping_cost: actual_shipping_cost,
                 

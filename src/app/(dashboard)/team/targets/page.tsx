@@ -40,7 +40,7 @@ interface Stored {
 
 type Report = (Scorecard | Stored) & { source: "recorded" | "live" | "computed" };
 
-const KEYS: MetricKey[] = ["confirm", "whatsapp", "messages", "followups", "rate"];
+const KEYS: MetricKey[] = ["confirm", "whatsapp", "messages", "followups"];
 const prevDay = (ymd: string) => new Date(Date.UTC(+ymd.slice(0, 4), +ymd.slice(5, 7) - 1, +ymd.slice(8, 10) - 1)).toISOString().slice(0, 10);
 const fmtDay = (ymd: string) => new Date(`${ymd}T12:00:00Z`).toLocaleDateString("ar-EG", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
 const fmtTime = (iso: string) => new Date(iso).toLocaleTimeString("ar-EG", { hour: "numeric", minute: "2-digit", timeZone: "Africa/Cairo" });

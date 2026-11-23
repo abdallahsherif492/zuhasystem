@@ -22,9 +22,9 @@
  *     Shipped for `stale_days`+) must be followed up every
  *     `followup_every_days`. The ones due at the start of the shift, shared
  *     like confirmations.
- *  4. Confirmation rate: confirmed ÷ (confirmed + cancelled) of the store
- *     orders they handled, at least `min_confirm_rate`%, once they handled
- *     `min_handled_for_rate` or more.
+ *  4. (The confirmation rate was dropped in Nov 2026: with the company
+ *     number the easy orders confirm themselves, so a person's rate says
+ *     nothing about their work. Old scorecards still carry it.)
  *  5. WhatsApp replies: every time a customer writes and no automatic answer
  *     covers it, someone has to reply. Those that came in during the shift
  *     (or were still unanswered when it started), shared like confirmations.
@@ -376,9 +376,8 @@ export function attendanceFor(member: Member, day: string, clocking: Clocking | 
         out.early_minutes = mins(sched.end - clockOut);
         out.items.push({ key: "early", amount: attendanceCost(settings, "early"), detail: `سجّلت انصراف قبل آخر الشيفت بـ ${out.early_minutes} دقيقة.` });
     }
-    if (clockOut === null && over && now >= sched.end + 30 * 60_000) {
-        out.items.push({ key: "no_clockout", amount: attendanceCost(settings, "no_clockout"), detail: "الشيفت خلص ومسجلتش انصراف." });
-    }
+    // Forgetting to clock out costs nothing any more (Nov 2026): the shift is
+    // closed on its own. Old scorecards still show it.
     return out;
 }
 
@@ -577,22 +576,6 @@ export function scoreDay(day: string, settings: TargetSettings, data: TargetData
             detail: `${due} شحنة متعطلة كان لازم تتتابع، نصيبك ${followTarget}. تابعت ${followed}.`,
         };
 
-        // 4. Confirmation rate
-        const minRate = Math.max(0, Number(settings.min_confirm_rate) || 0);
-        const minHandled = Math.max(1, Number(settings.min_handled_for_rate) || 1);
-        const rate = handled ? Math.round((confirmed / handled) * 100) : 0;
-        // With the company number the easy orders confirm themselves and a
-        // person gets the hard ones: their rate falls for no fault of theirs,
-        // so it is shown, not asked.
-        const asked = minRate > 0 && handled >= minHandled && !wa.active;
-        const rateM: MetricResult = {
-            key: "rate", target: asked ? minRate : null, done: rate, met: !asked || rate >= minRate,
-            detail: minRate <= 0 ? `نسبة التأكيد ${rate}% (مفيش حد أدنى).`
-                : wa.active ? `نسبة التأكيد ${rate}% (${confirmed} من ${handled}). للمتابعة بس: السهل بيتأكد لوحده من الواتساب، فاللي بيوصلك الأصعب.`
-                : handled < minHandled ? `نسبة التأكيد ${rate}% من ${handled} أوردر، أقل من ${minHandled} فمش محسوبة.`
-                : `المطلوب ${minRate}% على الأقل، نسبتك ${rate}% (${confirmed} من ${handled}).`,
-        };
-
         // 5. WhatsApp replies: a customer's messages that needed a person.
         const REPLY_GRACE = 15 * 60_000;
         const chatBacklog = 12 * HOUR;
@@ -610,7 +593,7 @@ export function scoreDay(day: string, settings: TargetSettings, data: TargetData
             detail: `${chatsNeeded} مرة عميل كتب ومحتاج رد من حد (${chatsWaiting} مستنيين من قبل الشيفت + ${chatsArrived} في الشيفت)، نصيبك ${chatTarget}. رديت على ${replied}${medianWait !== null ? `، ونص ردودك كانت خلال ${medianWait} دقيقة` : ""}. «مش محتاج رد» بيتحسب رد.`,
         } : null;
 
-        const metrics = [confirm, ...(whatsapp ? [whatsapp] : []), msg, follow, rateM];
+        const metrics = [confirm, ...(whatsapp ? [whatsapp] : []), msg, follow];
         const clocking = clockOf(shift.email);
         const anything = worked + messages + followed + replied > 0 || !!clocking;
         if (!anything && end >= shift.end) {

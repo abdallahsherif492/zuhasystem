@@ -172,6 +172,7 @@ interface Variant {
 
 
 import { logBusinessAction } from "@/lib/logs/actions-logger";
+import { creditAdder } from "@/lib/orders/credit-adder";
 import { orderLogName } from "@/lib/logs/order-log-name";
 
 
@@ -879,6 +880,15 @@ function PlatformOrdersContent() {
             }],
         });
         toast.success(`اتضاف ${label}`);
+        // Added, not a store line matched to its bundle: the order is theirs (commission).
+        if (!replace) credit(orderId);
+    };
+
+    /** A product added by hand: the order is credited to whoever added it, if no one is yet. */
+    const credit = (orderId: string) => {
+        creditAdder(activeBusiness?.id, orderId, currentUser?.email).then(who => {
+            if (who) setOrders(prev => prev.map(o => (o.id === orderId && !o.closed_by ? { ...o, closed_by: who } : o)));
+        }).catch(() => null);
     };
 
     const deleteItemFromOrder = async (orderId: string, itemId: string) => {
@@ -915,6 +925,7 @@ function PlatformOrdersContent() {
             variants: { title: vari.title, sku: vari.sku || "", product_id: prod.id, products: { name: prod.name } },
         };
         await applyItemChange(order.id, items => [...items, newItemObj as OrderItem]);
+        credit(order.id);
         return true;
     };
 

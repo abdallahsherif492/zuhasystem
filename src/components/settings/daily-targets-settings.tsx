@@ -185,11 +185,6 @@ export function DailyTargetsSettings() {
                             <p className="text-xs text-muted-foreground">المتعطلة: Returning، أو Hold to redeliver، أو Shipped من {s.stale_days} أيام أو أكتر.</p>
                         </div>
                         <div className="space-y-1">
-                            <Label htmlFor="dt-r" className="text-sm">أقل نسبة تأكيد (%)</Label>
-                            <Input id="dt-r" type="number" min={0} max={100} value={s.min_confirm_rate} onChange={num("min_confirm_rate")} />
-                            <p className="text-xs text-muted-foreground">بتتحسب لو قفل {s.min_handled_for_rate} أوردر أو أكتر في الشيفت. 0 يعني مش مطلوب.</p>
-                        </div>
-                        <div className="space-y-1">
                             <Label htmlFor="dt-st" className="text-sm">يبدأ من يوم</Label>
                             <Input id="dt-st" type="date" value={s.starts_on || ""} onChange={e => set("starts_on", e.target.value || null)} />
                             <p className="text-xs text-muted-foreground">الشيفتات اللي قبله مش بتتقاس.</p>
@@ -213,7 +208,6 @@ export function DailyTargetsSettings() {
                         </div>
                         {amount("deduct_late", "التأخير", "سجّل حضور بعد بداية الشيفت + السماح.")}
                         {amount("deduct_early", "الخروج بدري", "سجّل انصراف قبل آخر الشيفت − السماح.")}
-                        {amount("deduct_no_clockout", "نسيان تسجيل الانصراف", "الشيفت خلص من نص ساعة ولسه ماسجلش انصراف.")}
                         {amount("deduct_no_clockin", "شغل من غير تسجيل حضور", "اشتغل على أوردرات في الشيفت ومسجلش حضور خالص.")}
                     </div>
                 </section>
@@ -229,7 +223,6 @@ export function DailyTargetsSettings() {
                         {amount("deduct_whatsapp", "الرد على الواتساب", "رد على أقل من نصيبه من رسايل العملاء اللي محتاجة رد.")}
                         {amount("deduct_messages", "أوردرات الرسايل وميتا", "عمل أقل من الحد الأدنى.")}
                         {amount("deduct_followups", "متابعة الشحن", "تابع أقل من نصيبه من الشحنات المتعطلة.")}
-                        {amount("deduct_rate", "نسبة التأكيد", "نسبته أقل من المطلوب.")}
                     </div>
                     <div className="grid gap-4 sm:grid-cols-2">
                         <div className="space-y-1">
