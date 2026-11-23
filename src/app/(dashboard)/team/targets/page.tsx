@@ -12,8 +12,8 @@ import { cairoDate, nextDay } from "@/lib/cairo-day";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
-    ATTENDANCE_LABEL, DAILY_TARGETS_MIGRATION, METRIC_LABEL, dataSince, deductionFor, loadTargetData, scoreDay, settingsOf,
-    type Attendance, type MetricKey, type MetricResult, type Scorecard, type TargetSettings,
+    ATTENDANCE_LABEL, DAILY_TARGETS_MIGRATION, METRIC_LABEL, dataSince, deductionFor, loadMonthStanding, loadTargetData, scoreDay, settingsOf,
+    type Attendance, type MetricKey, type MonthStanding, type MetricResult, type Scorecard, type TargetSettings,
 } from "@/lib/hr/daily-targets";
 
 /**
@@ -40,7 +40,7 @@ interface Stored {
 
 type Report = (Scorecard | Stored) & { source: "recorded" | "live" | "computed" };
 
-const KEYS: MetricKey[] = ["confirm", "messages", "followups", "rate"];
+const KEYS: MetricKey[] = ["confirm", "whatsapp", "messages", "followups", "rate"];
 const prevDay = (ymd: string) => new Date(Date.UTC(+ymd.slice(0, 4), +ymd.slice(5, 7) - 1, +ymd.slice(8, 10) - 1)).toISOString().slice(0, 10);
 const fmtDay = (ymd: string) => new Date(`${ymd}T12:00:00Z`).toLocaleDateString("ar-EG", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
 const fmtTime = (iso: string) => new Date(iso).toLocaleTimeString("ar-EG", { hour: "numeric", minute: "2-digit", timeZone: "Africa/Cairo" });
@@ -165,7 +165,54 @@ export default function DailyTargetsPage() {
                     </div>
                 </>
             )}
+
+            {settings && settings.members.length > 0 && businessId && <MonthBonus businessId={businessId} settings={settings} month={day.slice(0, 7)} />}
         </div>
+    );
+}
+
+/** The month of the day picked: who is on course for the bonus, and why not. */
+function MonthBonus({ businessId, settings, month }: { businessId: string; settings: TargetSettings; month: string }) {
+    const [rows, setRows] = useState<{ month: string; list: MonthStanding[] } | null>(null);
+    useEffect(() => {
+        let gone = false;
+        loadMonthStanding(supabase, businessId, `${month}-01`, settings).then(list => { if (!gone) setRows({ month, list }); }).catch(() => undefined);
+        return () => { gone = true; };
+    }, [businessId, settings, month]);
+    const label = new Date(`${month}-15T12:00:00Z`).toLocaleDateString("ar-EG", { month: "long", year: "numeric" });
+    return (
+        <section className="space-y-3 rounded-xl border bg-card p-4">
+            <div>
+                <h2 className="text-lg font-semibold">المكافأة الشهرية: {label}</h2>
+                <p className="text-sm text-muted-foreground">
+                    {Number(settings.bonus_amount) > 0
+                        ? `${money(Number(settings.bonus_amount))} لكل مودريتور حقق كل التارجت في ${settings.bonus_days_pct}% من أيامه، ونسبة التسليم من تأكيداته ${settings.bonus_delivery_rate}% أو أكتر. بتتسجل في المرتبات أول الشهر اللي بعده.`
+                        : "قيمة المكافأة 0 في الإعدادات، فده للمتابعة بس."}
+                </p>
+            </div>
+            {rows?.month !== month ? (
+                <div className="flex h-16 items-center justify-center"><Loader2 className="h-5 w-5 animate-spin" /></div>
+            ) : (
+                <ul className="divide-y rounded-lg border">
+                    {rows.list.map(r => (
+                        <li key={r.user_email} className="flex flex-wrap items-start justify-between gap-3 p-3">
+                            <div className="min-w-0">
+                                <p className="font-semibold">{who(r.user_email)}</p>
+                                <p className="text-xs text-muted-foreground">
+                                    حقق كل التارجت {r.days_met} من {r.days} يوم ({r.days_pct}%) · اتسلم {r.delivered} ورجع {r.came_back}
+                                    {r.delivery_rate !== null && ` (${r.delivery_rate}%)`}
+                                </p>
+                                {!r.eligible && <p className="mt-1 text-xs text-amber-700 dark:text-amber-400">{r.notes.join(" · ")}</p>}
+                            </div>
+                            <span className={cn("shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold",
+                                r.eligible ? "bg-emerald-50 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300" : "bg-muted text-muted-foreground")}>
+                                {r.eligible ? "يستحق المكافأة لحد دلوقتي" : "لسه"}
+                            </span>
+                        </li>
+                    ))}
+                </ul>
+            )}
+        </section>
     );
 }
 

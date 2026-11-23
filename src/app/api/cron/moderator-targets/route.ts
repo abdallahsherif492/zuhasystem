@@ -3,7 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import { resolveCronCaller } from "../auto-sync/cron-auth";
 import { cairoDate } from "@/lib/cairo-day";
 import {
-    ATTENDANCE_LABEL, METRIC_LABEL, dataSince, loadTargetData, scoreDay, settingsOf,
+    ATTENDANCE_LABEL, METRIC_LABEL, dataSince, loadMonthStanding, loadTargetData, scoreDay, settingsOf,
     type MetricKey, type Scorecard, type TargetSettings,
 } from "@/lib/hr/daily-targets";
 
@@ -54,10 +54,12 @@ export async function GET(request: Request) {
         return NextResponse.json({ success: false, error: missing ? "Run 20261113_moderator_daily_targets.sql first." : error.message }, { status: missing ? 412 : 500 });
     }
 
-    const results: Record<string, { scored: number; booked: number; errors: string[] }> = {};
+    const results: Record<string, { scored: number; booked: number; bonuses?: number; errors: string[] }> = {};
     for (const row of rows || []) {
         try {
             results[row.business_id] = await scoreBusiness(row.business_id, settingsOf(row));
+            const bonuses = await bookMonthBonus(row.business_id, settingsOf(row));
+            if (bonuses) results[row.business_id].bonuses = bonuses;
         } catch (e) {
             results[row.business_id] = { scored: 0, booked: 0, errors: [(e as Error).message] };
         }
@@ -173,4 +175,40 @@ async function scoreBusiness(businessId: string, settings: TargetSettings) {
 function nextMonth(first: string) {
     const [y, m] = first.split("-").map(Number);
     return new Date(Date.UTC(y, m, 1)).toISOString().slice(0, 10);
+}
+
+/**
+ * The month's bonus (monthStanding in daily-targets.ts), booked once in the
+ * first three days of the next month for whoever earned it. Booked = a line
+ * in payroll for that month by "system: monthly target bonus"; never twice.
+ */
+const BONUS_BY = "system: monthly target bonus";
+async function bookMonthBonus(businessId: string, settings: TargetSettings): Promise<number> {
+    const amount = Number(settings.bonus_amount) || 0;
+    if (amount <= 0 || !settings.apply_to_payroll || !settings.members.length) return 0;
+    const today = cairoDate(new Date());
+    if (Number(today.slice(8, 10)) > 3) return 0;
+    const [y, m] = today.split("-").map(Number);
+    const month = new Date(Date.UTC(y, m - 2, 1)).toISOString().slice(0, 10);
+    if (settings.starts_on && settings.starts_on > month.slice(0, 8) + "31") return 0;
+
+    const standing = await loadMonthStanding(admin, businessId, month, settings);
+    const { data: people } = await admin.from("business_users").select("id, user_email").eq("business_id", businessId);
+    const memberId = new Map((people || []).map(p => [String(p.user_email).toLowerCase(), p.id as string]));
+    const { data: already } = await admin.from("payroll_adjustments").select("business_user_id")
+        .eq("business_id", businessId).eq("period", month).eq("created_by", BONUS_BY);
+    const booked = new Set((already || []).map(a => a.business_user_id));
+    let n = 0;
+    for (const s of standing.filter(x => x.eligible)) {
+        const buId = memberId.get(s.user_email);
+        if (!buId || booked.has(buId)) continue;
+        const { error } = await admin.from("payroll_adjustments").insert({
+            business_id: businessId, business_user_id: buId, period: month, kind: "bonus", amount,
+            reason: `مكافأة تارجت ${month.slice(0, 7)}: حقق كل التارجت في ${s.days_pct}% من الأيام، ونسبة التسليم ${s.delivery_rate}%`,
+            // The month's last day: payroll files a line under the month of its date.
+            entry_date: new Date(Date.UTC(y, m - 1, 0)).toISOString().slice(0, 10), created_by: BONUS_BY,
+        });
+        if (!error) n++;
+    }
+    return n;
 }

@@ -67,6 +67,11 @@ export function DailyTargetsSettings() {
             updated_at: new Date().toISOString(),
         });
         let failed = error;
+        if (error && /call_after_hours|deduct_whatsapp|bonus_/.test(error.message)) {
+            setSaving(false);
+            toast.error("شغّل supabase/migrations/20261202_targets_whatsapp_bonus.sql الأول.");
+            return;
+        }
         if (error && /grace_minutes|deduct_late|deduct_early|deduct_no_clock/.test(error.message)) {
             // 20261114_target_attendance.sql not run yet: save the rest.
             const { grace_minutes, deduct_late, deduct_early, deduct_no_clockout, deduct_no_clockin, ...rest } = s;
@@ -104,7 +109,8 @@ export function DailyTargetsSettings() {
             <CardHeader>
                 <CardTitle>تارجت المودريتورز اليومي</CardTitle>
                 <CardDescription>
-                    كل شيفت مطلوب منه اللي البيزنس محتاجه: الأوردرات تتشغل في وقتها، والشحنات المتعطلة تتتابع، وأوردرات من الرسايل، ونسبة تأكيد كويسة.
+                    كل شيفت مطلوب منه نصيبه من الشغل اللي محتاج بني آدم: الاتصال باللي مش عليهم واتساب أو مردوش، الرد على العملاء في الواتساب، أوردرات الرسايل وميتا، ومتابعة الشحنات المتعطلة.
+                    الأوردرات اللي بتتأكد أو بتتلغي لوحدها من الواتساب مش بتتحسب على حد.
                     بعد كل شيفت بنص ساعة السيستم بيعمل للمودريتور كشف، ولو فيه حاجة متحققتش وليها خصم، بيتسجل في المرتبات.
                 </CardDescription>
             </CardHeader>
@@ -154,9 +160,14 @@ export function DailyTargetsSettings() {
                     <h3 className="font-medium">البيزنس محتاج إيه من كل شيفت</h3>
                     <div className="grid gap-4 sm:grid-cols-2">
                         <div className="space-y-1">
-                            <Label htmlFor="dt-h" className="text-sm">كل أوردر يتشغل عليه خلال (ساعات)</Label>
+                            <Label htmlFor="dt-h" className="text-sm">اللي محتاج اتصال يتشغل عليه خلال (ساعات)</Label>
                             <Input id="dt-h" type="number" min={0} step="0.5" value={s.confirm_within_hours} onChange={num("confirm_within_hours")} />
-                            <p className="text-xs text-muted-foreground">يتأكد، أو يتلغى، أو تتسجل عليه محاولة اتصال.</p>
+                            <p className="text-xs text-muted-foreground">من ساعة ما بقى محتاج اتصال: يتأكد، أو يتلغى، أو تتسجل عليه محاولة.</p>
+                        </div>
+                        <div className="space-y-1">
+                            <Label htmlFor="dt-ca" className="text-sm">العميل يبقى محتاج اتصال لو مردش على التأكيد بعد (ساعات)</Label>
+                            <Input id="dt-ca" type="number" min={0.5} step="0.5" value={s.call_after_hours} onChange={num("call_after_hours")} />
+                            <p className="text-xs text-muted-foreground">واللي رقمه مش عليه واتساب محتاج اتصال على طول، واللي الرسالة ماوصلتلوش بعد نص ساعة.</p>
                         </div>
                         <div className="space-y-1">
                             <Label htmlFor="dt-b" className="text-sm">الـ Waiting القديم المحسوب على الشيفت (أيام)</Label>
@@ -164,7 +175,7 @@ export function DailyTargetsSettings() {
                             <p className="text-xs text-muted-foreground">الأقدم من كده شغل تنضيف، مش شغل يوم. بأرقام زُهى: يوم واحد يطلع حوالي 30 أوردر للشيفت، و7 أيام تطلع 90.</p>
                         </div>
                         <div className="space-y-1">
-                            <Label htmlFor="dt-m" className="text-sm">أقل عدد أوردرات من الرسايل في الشيفت</Label>
+                            <Label htmlFor="dt-m" className="text-sm">أقل عدد أوردرات من الرسايل وميتا في الشيفت</Label>
                             <Input id="dt-m" type="number" min={0} value={s.min_message_orders} onChange={num("min_message_orders")} />
                             <p className="text-xs text-muted-foreground">0 يعني مش مطلوب.</p>
                         </div>
@@ -214,8 +225,9 @@ export function DailyTargetsSettings() {
                         <p className="text-sm text-muted-foreground">قيمة الخصم لكل بند في الشيفت. لو سبتها 0، البند بيظهر في الكشف من غير خصم.</p>
                     </div>
                     <div className="grid gap-4 sm:grid-cols-2">
-                        {amount("deduct_confirm", "سرعة التأكيد", "اشتغل على أقل من نصيبه من الأوردرات.")}
-                        {amount("deduct_messages", "أوردرات الرسايل", "عمل أقل من الحد الأدنى.")}
+                        {amount("deduct_confirm", "الاتصال باللي محتاجين اتصال", "اشتغل على أقل من نصيبه من الأوردرات اللي محتاجة اتصال.")}
+                        {amount("deduct_whatsapp", "الرد على الواتساب", "رد على أقل من نصيبه من رسايل العملاء اللي محتاجة رد.")}
+                        {amount("deduct_messages", "أوردرات الرسايل وميتا", "عمل أقل من الحد الأدنى.")}
                         {amount("deduct_followups", "متابعة الشحن", "تابع أقل من نصيبه من الشحنات المتعطلة.")}
                         {amount("deduct_rate", "نسبة التأكيد", "نسبته أقل من المطلوب.")}
                     </div>
@@ -235,6 +247,28 @@ export function DailyTargetsSettings() {
                                 <p className="mt-1 text-xs text-muted-foreground">لو قفلته، الخصم بيظهر في الكشف بس. وأي خصم اتسجل تقدر تمسحه من المرتبات قبل ما تسوّي الشهر.</p>
                             </div>
                             <Switch id="dt-pay" checked={s.apply_to_payroll} onCheckedChange={v => set("apply_to_payroll", v)} />
+                        </div>
+                    </div>
+                </section>
+
+                {/* The monthly bonus */}
+                <section className="space-y-4">
+                    <div>
+                        <h3 className="font-medium">المكافأة الشهرية</h3>
+                        <p className="text-sm text-muted-foreground">
+                            بتتسجل في المرتبات أول الشهر اللي بعده لكل مودريتور حقق كل التارجت في نسبة من أيامه (10 أيام على الأقل)، ونسبة التسليم من الأوردرات اللي أكدها كويسة،
+                            عشان محدش يأكد أي حاجة والسلام. بتتحسب لو اتحسب 20 أوردر من تأكيداته ليهم نتيجة على الأقل. 0 يعني مفيش مكافأة.
+                        </p>
+                    </div>
+                    <div className="grid gap-4 sm:grid-cols-3">
+                        {amount("bonus_amount", "قيمة المكافأة", "لكل مودريتور يستحقها.")}
+                        <div className="space-y-1">
+                            <Label htmlFor="dt-bd" className="text-sm">حقق كل التارجت في (% من الأيام)</Label>
+                            <Input id="dt-bd" type="number" min={0} max={100} value={s.bonus_days_pct} onChange={num("bonus_days_pct")} />
+                        </div>
+                        <div className="space-y-1">
+                            <Label htmlFor="dt-br" className="text-sm">نسبة التسليم من تأكيداته (%)</Label>
+                            <Input id="dt-br" type="number" min={0} max={100} value={s.bonus_delivery_rate} onChange={num("bonus_delivery_rate")} />
                         </div>
                     </div>
                 </section>
