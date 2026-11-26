@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
-import { accountOf, admin, graph, memberOf, sendError, uploadImage, uploadImageBytes, waNumber } from "@/lib/whatsapp/server";
+import { accountOf, admin, graph, memberOf, sendError, waNumber } from "@/lib/whatsapp/server";
 import { ORDER_SELECT, orderImages, orderValues, type OrderRow } from "@/lib/whatsapp/order-messages";
-import { productCollage } from "@/lib/whatsapp/collage";
+import { cachedCollageId } from "@/lib/whatsapp/media-cache";
 import type { FieldKey } from "@/lib/whatsapp/template-fields";
 
 /**
@@ -70,8 +70,7 @@ export async function POST(request: Request) {
         if (withImage) {
             const images = orderImages(o);
             if (!images.length) { results.push({ id, outcome: "no_image" }); continue; }
-            const bytes = images.length > 1 ? await productCollage(images) : null;
-            const mediaId = (bytes && await uploadImageBytes(account, bytes)) || await uploadImage(account, images[0]);
+            const mediaId = await cachedCollageId(account, images);
             if (!mediaId) { results.push({ id, outcome: "no_image" }); continue; }
             header = images[0];
             components.push({ type: "header", parameters: [{ type: "image", image: { id: mediaId } }] });

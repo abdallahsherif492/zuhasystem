@@ -1,8 +1,8 @@
 import { arabicProductLabel } from "@/lib/orders/product-label";
 import { plainEnglish } from "@/lib/orders/arabic-names";
 import { translateToArabic } from "@/lib/translate-ar";
-import { accountOf, admin, graph, sendError, uploadImage, uploadImageBytes, waNumber } from "@/lib/whatsapp/server";
-import { productCollage } from "@/lib/whatsapp/collage";
+import { accountOf, admin, graph, sendError, uploadImage, waNumber } from "@/lib/whatsapp/server";
+import { cachedCollageId } from "@/lib/whatsapp/media-cache";
 import { imageLink, renderTemplate, templateDef } from "@/lib/whatsapp/templates";
 import { whatsappSettingsOf, type OrderEvent } from "@/lib/whatsapp/settings";
 import { BUILTIN_PARAMS, type FieldKey, type MessageCase } from "@/lib/whatsapp/template-fields";
@@ -131,8 +131,7 @@ export async function sendOrderMessage(businessId: string, orderId: string, kind
         const components: Record<string, unknown>[] = [];
         const all = t.image === image && images.length > 1;
         if (all && collageId === undefined) {
-            const bytes = await productCollage(images);
-            collageId = bytes ? await uploadImageBytes(account, bytes) : null;
+            collageId = await cachedCollageId(account, images);
         }
         if (t.image) {
             // Uploaded with its real type (the store's links say "image/jpg", which Meta refuses).

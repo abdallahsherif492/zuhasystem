@@ -6,6 +6,7 @@ import { runTimedFlows } from "@/lib/whatsapp/flows";
 import { answerMissedTaps } from "@/lib/whatsapp/upsell";
 import { cancelSilentLastChance } from "@/lib/whatsapp/silent-cancel";
 import { sendDueShiftStarts } from "@/lib/whatsapp/team-alerts";
+import { warmProductPictures } from "@/lib/whatsapp/media-cache";
 
 /**
  * Sends the queued WhatsApp messages (lib/whatsapp/outbox.ts).
@@ -32,7 +33,10 @@ export async function GET(request: Request) {
     // The day's «جاهز» message to the shipping team whose shift just started.
     let starts: string[] = [];
     try { starts = await sendDueShiftStarts(); } catch (e) { console.error("whatsapp team starts", e); }
-    return NextResponse.json({ ...r, taps, silent, starts }, { status: r.ok ? 200 : 500 });
+    // New products' pictures (and ones near Meta's 30 days) uploaded ahead, a few an hour.
+    let warmed = 0;
+    try { warmed = await warmProductPictures(8); } catch (e) { console.error("whatsapp media warm-up", e); }
+    return NextResponse.json({ ...r, taps, silent, starts, warmed }, { status: r.ok ? 200 : 500 });
 }
 
 export async function POST(request: Request) {

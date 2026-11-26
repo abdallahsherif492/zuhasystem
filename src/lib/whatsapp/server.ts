@@ -75,20 +75,10 @@ export function sendError(body: { error?: { code?: number; message?: string; err
  * cannot be fetched or is not a JPEG, PNG or WebP. Cached per photo for a day
  * (Meta keeps an upload for 30).
  */
-const uploaded = new Map<string, { id: string; at: number }>();
 export async function uploadImage(account: WaAccount, url: string): Promise<string | null> {
-    const key = `${account.phone_number_id}:${url}`;
-    const hit = uploaded.get(key);
-    if (hit && Date.now() - hit.at < 86_400_000) return hit.id;
-    try {
-        const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
-        if (!res.ok) return null;
-        const id = await uploadImageBytes(account, new Uint8Array(await res.arrayBuffer()));
-        if (id) uploaded.set(key, { id, at: Date.now() });
-        return id;
-    } catch {
-        return null;
-    }
+    // Remembered for 20 days (lib/whatsapp/media-cache.ts); imported here, not at the top, to keep the two files from importing each other.
+    const { cachedImageId } = await import("@/lib/whatsapp/media-cache");
+    return cachedImageId(account, url);
 }
 
 /** Picture bytes (JPEG, PNG or WebP) uploaded to Meta for a message: the media id. */
