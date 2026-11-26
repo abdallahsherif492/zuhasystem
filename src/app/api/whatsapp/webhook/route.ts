@@ -139,17 +139,18 @@ export async function POST(request: Request) {
                 catch (e) { console.error("whatsapp auto reply failed", e); }
             }
 
-            // Our messages: sent -> delivered -> read, or failed.
-            const rank: Record<string, number> = { sent: 1, delivered: 2, read: 3, failed: 4 };
-            for (const s of v.statuses || []) {
-                const { data: row } = await admin.from("whatsapp_messages").select("id, status").eq("wa_message_id", s.id).maybeSingle();
-                if (!row || (rank[row.status] || 0) >= (rank[s.status] || 0)) continue;
-                await admin.from("whatsapp_messages").update({
-                    status: s.status,
-                    status_at: new Date(Number(s.timestamp) * 1000).toISOString(),
-                    error: s.errors?.length ? s.errors : null,
-                }).eq("id", row.id);
-            }
+            // Our messages: sent -> delivered -> read, or failed. One update
+            // each, only from an earlier status (it was a read and a write), all
+            // at once: Meta calls this for every status of every message, and
+            // the function is paid by the second it runs.
+            const before: Record<string, string[]> = {
+                sent: ["pending"], delivered: ["pending", "sent"], read: ["pending", "sent", "delivered"], failed: ["pending", "sent", "delivered", "read"],
+            };
+            await Promise.all((v.statuses || []).filter(s => before[s.status]).map(s => admin.from("whatsapp_messages").update({
+                status: s.status,
+                status_at: new Date(Number(s.timestamp) * 1000).toISOString(),
+                error: s.errors?.length ? s.errors : null,
+            }).eq("wa_message_id", s.id).in("status", before[s.status])));
         }
     }
     return NextResponse.json({ ok: true });

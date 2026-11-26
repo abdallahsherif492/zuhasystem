@@ -7,7 +7,10 @@
  */
 
 export const SENTRY_DSN = process.env.NEXT_PUBLIC_SENTRY_DSN || "";
-export const sentryEnabled = SENTRY_DSN.length > 0;
+// Off (Nov 2026): every event went through the /monitoring tunnel, a Netlify
+// function call each, on a plan that pays per call. Set back to
+// `SENTRY_DSN.length > 0` to turn it on again.
+export const sentryEnabled = false;
 
 /** Errors that say nothing about our code and would drown the real signal. */
 const IGNORED = [

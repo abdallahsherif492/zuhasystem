@@ -1,6 +1,6 @@
-// Scores moderators' finished shifts every hour and books any deduction
-// (src/app/api/cron/moderator-targets/route.ts). Hourly because shifts end at
-// different times and some run past midnight.
+// Scores moderators' finished shifts every three hours and books any deduction
+// (src/app/api/cron/moderator-targets/route.ts). Every three hours: each run reads
+// days of orders and messages, and a shift is final half an hour after its day anyway.
 export default async () => {
     const res = await fetch(`${process.env.URL}/api/cron/moderator-targets`, {
         headers: { Authorization: `Bearer ${process.env.CRON_SECRET}` },
@@ -8,4 +8,4 @@ export default async () => {
     console.log(`moderator-targets: ${res.status} ${await res.text().catch(() => "")}`.slice(0, 500));
 };
 
-export const config = { schedule: "5 * * * *" };
+export const config = { schedule: "5 */3 * * *" };
