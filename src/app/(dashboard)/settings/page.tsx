@@ -656,7 +656,7 @@ export default function SettingsPage() {
                                                 <Label>{t("Auto Sync Interval (Minutes)")}</Label>
                                                 <Input 
                                                     type="number"
-                                                    min="1"
+                                                    min="30"
                                                     max="1440"
                                                     value={integrations.shipping.telegraph.autoSyncIntervalMinutes}
                                                     onChange={(e) => handleIntegrationChange('shipping', 'telegraph', 'autoSyncIntervalMinutes', parseInt(e.target.value) || 15)}
@@ -735,7 +735,7 @@ export default function SettingsPage() {
                                                 <Label>{t("Auto Sync Interval (Minutes)")}</Label>
                                                 <Input 
                                                     type="number"
-                                                    min="1"
+                                                    min="30"
                                                     max="1440"
                                                     value={integrations.shipping.bosta.autoSyncIntervalMinutes}
                                                     onChange={(e) => handleIntegrationChange('shipping', 'bosta', 'autoSyncIntervalMinutes', parseInt(e.target.value) || 15)}
@@ -924,7 +924,7 @@ export default function SettingsPage() {
                                                 <Label>{t("Auto Sync Interval (Minutes)")}</Label>
                                                 <Input 
                                                     type="number"
-                                                    min="1"
+                                                    min="30"
                                                     max="1440"
                                                     value={integrations.shipping.jt.autoSyncIntervalMinutes}
                                                     onChange={(e) => handleIntegrationChange('shipping', 'jt', 'autoSyncIntervalMinutes', parseInt(e.target.value) || 15)}
@@ -1050,7 +1050,7 @@ export default function SettingsPage() {
                                                 <Label>{t("Auto Sync Interval (Minutes)")}</Label>
                                                 <Input 
                                                     type="number"
-                                                    min="1"
+                                                    min="30"
                                                     max="1440"
                                                     value={integrations.shipping.aramex.autoSyncIntervalMinutes}
                                                     onChange={(e) => handleIntegrationChange('shipping', 'aramex', 'autoSyncIntervalMinutes', parseInt(e.target.value) || 15)}
@@ -1125,7 +1125,7 @@ export default function SettingsPage() {
                                                 <Label>{t("Auto Sync Interval (Minutes)")}</Label>
                                                 <Input 
                                                     type="number"
-                                                    min="1"
+                                                    min="30"
                                                     max="1440"
                                                     value={integrations.shipping.filtareeq.autoSyncIntervalMinutes}
                                                     onChange={(e) => handleIntegrationChange('shipping', 'filtareeq', 'autoSyncIntervalMinutes', parseInt(e.target.value) || 15)}
@@ -1484,7 +1484,7 @@ export default function SettingsPage() {
                                                 <Label>{t("Auto Sync Interval (Minutes)")}</Label>
                                                 <Input 
                                                     type="number"
-                                                    min="1"
+                                                    min="30"
                                                     max="1440"
                                                     value={integrations.tools.vrobo.autoSyncIntervalMinutes}
                                                     onChange={(e) => handleIntegrationChange('tools', 'vrobo', 'autoSyncIntervalMinutes', parseInt(e.target.value) || 60)}

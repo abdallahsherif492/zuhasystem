@@ -18,6 +18,15 @@ export const maxDuration = 300; // Allow Vercel functions to run up to 5 minutes
 // the plan and shorten the schedule. AutoSyncProvider still triggers it from
 // the browser while someone has the dashboard open.
 
+/**
+ * Minutes between two syncs of one integration: what the business set, but
+ * never under 30. A sync takes seconds of paid function time, and set to 1
+ * or 2 minutes every ping from an open dashboard ran a full one (about a
+ * quarter of the site's compute, Nov 2026); courier statuses move in hours.
+ */
+const MIN_SYNC_MINUTES = 30;
+const syncEvery = (set: unknown, fallback: number) => Math.max(MIN_SYNC_MINUTES, Number(set) || fallback);
+
 /** Businesses processed per run, kept low so the function cannot time out. */
 const MAX_BUSINESSES_PER_RUN = 2;
 
@@ -79,7 +88,7 @@ export async function GET(request: Request) {
             if (telegraphConfig?.enabled && telegraphConfig?.autoSync) {
                 const lastSyncStr = telegraphConfig.lastSyncAt;
                 const lastSync = lastSyncStr ? new Date(lastSyncStr) : new Date(0);
-                const intervalMinutes = telegraphConfig.autoSyncIntervalMinutes || 15;
+                const intervalMinutes = syncEvery(telegraphConfig.autoSyncIntervalMinutes, 15);
                 
                 const minutesSinceLastSync = (now.getTime() - lastSync.getTime()) / (1000 * 60);
 
@@ -109,7 +118,7 @@ export async function GET(request: Request) {
             if (bostaConfig?.enabled && bostaConfig?.autoSync) {
                 const lastSyncStr = bostaConfig.lastSyncAt;
                 const lastSync = lastSyncStr ? new Date(lastSyncStr) : new Date(0);
-                const intervalMinutes = bostaConfig.autoSyncIntervalMinutes || 15;
+                const intervalMinutes = syncEvery(bostaConfig.autoSyncIntervalMinutes, 15);
                 
                 const minutesSinceLastSync = (now.getTime() - lastSync.getTime()) / (1000 * 60);
 
@@ -139,7 +148,7 @@ export async function GET(request: Request) {
                 if (config?.enabled && config?.autoSync) {
                     const lastSyncStr = config.lastSyncAt;
                     const lastSync = lastSyncStr ? new Date(lastSyncStr) : new Date(0);
-                    const intervalMinutes = config.autoSyncIntervalMinutes || 15;
+                    const intervalMinutes = syncEvery(config.autoSyncIntervalMinutes, 15);
                     
                     const minutesSinceLastSync = (now.getTime() - lastSync.getTime()) / (1000 * 60);
 
@@ -173,7 +182,7 @@ export async function GET(request: Request) {
             const turboConfig = integrations.shipping?.turbo;
             if (turboConfig?.enabled && turboConfig?.autoSync) {
                 const lastSync = turboConfig.lastSyncAt ? new Date(turboConfig.lastSyncAt) : new Date(0);
-                if ((now.getTime() - lastSync.getTime()) / 60000 >= (turboConfig.autoSyncIntervalMinutes || 15)) {
+                if ((now.getTime() - lastSync.getTime()) / 60000 >= syncEvery(turboConfig.autoSyncIntervalMinutes, 15)) {
                     try {
                         const { updates, error: syncError } = await previewTurboShippingSyncAction(business.id);
                         if (!syncError && updates && updates.length > 0) {
@@ -197,7 +206,7 @@ export async function GET(request: Request) {
             if (vroboConfig?.enabled && vroboConfig?.autoSync) {
                 const lastSyncStr = vroboConfig.lastSyncAt;
                 const lastSync = lastSyncStr ? new Date(lastSyncStr) : new Date(0);
-                const intervalMinutes = vroboConfig.autoSyncIntervalMinutes || 60;
+                const intervalMinutes = syncEvery(vroboConfig.autoSyncIntervalMinutes, 60);
                 
                 const minutesSinceLastSync = (now.getTime() - lastSync.getTime()) / (1000 * 60);
 
